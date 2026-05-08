@@ -41,6 +41,10 @@ export function completeLocation(
   state: RunState,
   completion: CompletionInput,
 ): RunState {
+  if (hasCompletedLocation(state, completion.locationId)) {
+    return state;
+  }
+
   return {
     ...state,
     completedLocationIds: addUnique(state.completedLocationIds, completion.locationId),

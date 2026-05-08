@@ -46,6 +46,21 @@ describe('runState', () => {
     expect(next.collectedKeepsakeIds).toEqual(['pressed-flower']);
   });
 
+  it('does not grant a new keepsake when replaying a completed location', () => {
+    const state = completeLocation(createInitialRunState('entry'), {
+      locationId: 'friend-a',
+      keepsakeId: 'pressed-flower',
+    });
+    const next = completeLocation(state, {
+      locationId: 'friend-a',
+      keepsakeId: 'paper-star',
+    });
+
+    expect(next.completedLocationIds).toEqual(['friend-a']);
+    expect(next.collectedKeepsakeIds).toEqual(['pressed-flower']);
+    expect(isFinalSpotUnlocked(next)).toBe(false);
+  });
+
   it('unlocks the final spot only after all required keepsakes are collected', () => {
     let state = createInitialRunState('entry');
     state = completeLocation(state, {

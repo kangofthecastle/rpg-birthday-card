@@ -67,6 +67,13 @@ export class LocationScene extends Phaser.Scene {
 
   update(): void {
     this.controller.update(this.canMove);
+
+    if (!this.canMove) {
+      this.activeObject = undefined;
+      this.promptText?.setText('');
+      return;
+    }
+
     this.activeObject = this.findActiveObject();
     this.promptText?.setText(this.activeObject ? `E - ${this.getObjectLabel(this.activeObject)}` : '');
 

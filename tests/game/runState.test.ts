@@ -29,6 +29,7 @@ describe('runState', () => {
     expect(next.collectedKeepsakeIds).toEqual(['pressed-flower']);
     expect(hasKeepsake(next, 'pressed-flower')).toBe(true);
     expect(state.completedLocationIds).toEqual([]);
+    expect(state.collectedKeepsakeIds).toEqual([]);
   });
 
   it('does not duplicate completed locations or keepsakes', () => {

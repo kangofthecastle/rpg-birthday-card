@@ -25,6 +25,27 @@ export function projectToIso(x: number, y: number, origin: IsoOrigin): IsoPoint 
   };
 }
 
+export function projectScreenDirectionToIsoVelocity(
+  direction: IsoPoint,
+  origin: IsoOrigin,
+  speed: number,
+): IsoPoint {
+  const length = Math.hypot(direction.x, direction.y);
+
+  if (length === 0) {
+    return { x: 0, y: 0 };
+  }
+
+  const verticalScale = origin.verticalScale ?? 0.5;
+  const screenX = (direction.x / length) * speed;
+  const screenY = (direction.y / length) * speed;
+
+  return {
+    x: screenX + screenY / verticalScale,
+    y: screenY / verticalScale - screenX,
+  };
+}
+
 export function getIsoTileCorners(
   tileX: number,
   tileY: number,

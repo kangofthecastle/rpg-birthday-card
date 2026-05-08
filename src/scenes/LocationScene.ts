@@ -191,7 +191,9 @@ export class LocationScene extends Phaser.Scene {
       this.physics.add.collider(this.player, this.walls);
     }
 
-    this.controller = new PlayerController(this, this.player);
+    this.controller = new PlayerController(this, this.player, {
+      movementProjection: this.getIsoOrigin(),
+    });
     this.cameras.main.startFollow(this.playerVisual, true, 0.12, 0.12);
     this.cameras.main.setDeadzone(240, 180);
   }

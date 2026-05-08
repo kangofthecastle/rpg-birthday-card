@@ -1,12 +1,27 @@
 import Phaser from 'phaser';
+import {
+  projectScreenDirectionToIsoVelocity,
+  type IsoOrigin,
+} from './isometricProjection';
 
 type Direction = 'up' | 'down' | 'left' | 'right';
+
+interface PlayerControllerOptions {
+  readonly movementProjection?: IsoOrigin;
+  readonly speed?: number;
+}
+
+const DEFAULT_PLAYER_SPEED = 220;
 
 export class PlayerController {
   private readonly cursors: Phaser.Types.Input.Keyboard.CursorKeys;
   private readonly wasd: Record<Direction, Phaser.Input.Keyboard.Key>;
 
-  constructor(scene: Phaser.Scene, private readonly sprite: Phaser.Physics.Arcade.Sprite) {
+  constructor(
+    scene: Phaser.Scene,
+    private readonly sprite: Phaser.Physics.Arcade.Sprite,
+    private readonly options: PlayerControllerOptions = {},
+  ) {
     const keyboard = scene.input.keyboard;
 
     if (!keyboard) {
@@ -31,11 +46,24 @@ export class PlayerController {
     const x = Number(this.isDown('right')) - Number(this.isDown('left'));
     const y = Number(this.isDown('down')) - Number(this.isDown('up'));
     const velocity = new Phaser.Math.Vector2(x, y);
+    const speed = this.options.speed ?? DEFAULT_PLAYER_SPEED;
 
-    if (velocity.lengthSq() > 0) {
-      velocity.normalize().scale(220);
+    if (velocity.lengthSq() === 0) {
+      this.sprite.setVelocity(0, 0);
+      return;
     }
 
+    if (this.options.movementProjection) {
+      const projectedVelocity = projectScreenDirectionToIsoVelocity(
+        velocity,
+        this.options.movementProjection,
+        speed,
+      );
+      this.sprite.setVelocity(projectedVelocity.x, projectedVelocity.y);
+      return;
+    }
+
+    velocity.normalize().scale(speed);
     this.sprite.setVelocity(velocity.x, velocity.y);
   }
 

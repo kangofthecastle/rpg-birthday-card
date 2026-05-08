@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { getIsoBounds, getIsoTileCorners, projectToIso } from '../../src/game/isometricProjection';
+import {
+  getIsoBounds,
+  getIsoTileCorners,
+  projectScreenDirectionToIsoVelocity,
+  projectToIso,
+} from '../../src/game/isometricProjection';
 
 describe('isometric projection', () => {
   const origin = { x: 512, y: 80, verticalScale: 0.5 };
@@ -26,5 +31,34 @@ describe('isometric projection', () => {
       maxX: 576,
       maxY: 128,
     });
+  });
+
+  it('converts screen-space player controls into map velocity for cardinal visual movement', () => {
+    expect(projectScreenDirectionToIsoVelocity({ x: 1, y: 0 }, origin, 220)).toEqual({
+      x: 220,
+      y: -220,
+    });
+    expect(projectScreenDirectionToIsoVelocity({ x: -1, y: 0 }, origin, 220)).toEqual({
+      x: -220,
+      y: 220,
+    });
+    expect(projectScreenDirectionToIsoVelocity({ x: 0, y: -1 }, origin, 220)).toEqual({
+      x: -440,
+      y: -440,
+    });
+    expect(projectScreenDirectionToIsoVelocity({ x: 0, y: 1 }, origin, 220)).toEqual({
+      x: 440,
+      y: 440,
+    });
+  });
+
+  it('keeps diagonal screen-space controls at a consistent visual speed', () => {
+    const mapVelocity = projectScreenDirectionToIsoVelocity({ x: 1, y: -1 }, origin, 220);
+    const screenVelocity = {
+      x: (mapVelocity.x - mapVelocity.y) / 2,
+      y: ((mapVelocity.x + mapVelocity.y) * origin.verticalScale) / 2,
+    };
+
+    expect(Math.hypot(screenVelocity.x, screenVelocity.y)).toBeCloseTo(220);
   });
 });

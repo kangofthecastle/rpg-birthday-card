@@ -117,6 +117,11 @@ export class LocationScene extends Phaser.Scene {
     getUiRoot().insertAdjacentHTML('beforeend', renderCollectionPanel(this.state));
   }
 
+  private refreshCollectionPanel(): void {
+    getUiRoot().querySelector('.collection-panel')?.remove();
+    this.createHud();
+  }
+
   private getMapJson(): TiledMapJson {
     return this.cache.tilemap.get(this.location.mapKey).data as TiledMapJson;
   }
@@ -205,7 +210,7 @@ export class LocationScene extends Phaser.Scene {
         activityMount.remove();
         this.canMove = true;
       },
-      onComplete: (completion) => {
+      onComplete: async (completion) => {
         activityMount.remove();
         this.state = completeLocation(this.state, completion);
 
@@ -213,13 +218,13 @@ export class LocationScene extends Phaser.Scene {
           this.state = markEndingCompleted(this.state);
         }
 
+        this.registry.set('runState', this.state);
+        this.refreshCollectionPanel();
+
         if (this.location.rewardMessage) {
-          void this.pauseForDialogue(this.location.rewardMessage);
+          await this.pauseForDialogue(this.location.rewardMessage);
         }
 
-        clearUiRoot();
-        this.createHud();
-        this.registry.set('runState', this.state);
         this.canMove = true;
       },
     });

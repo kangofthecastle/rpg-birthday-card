@@ -60,6 +60,16 @@ export const ASSET_MANIFEST: readonly GameAsset[] = [
     qaChecks: ['recognizable stylization', 'palette lock'],
   },
   {
+    id: 'character-friendone-walk-4dir',
+    kind: 'spritesheet',
+    label: '____ 4-direction walk spritesheet',
+    status: 'review',
+    locationIds: ['global'],
+    notes:
+      'Saved at public/assets/sprites/characters/friendone-walk-4dir-v1-alpha.png. Raw generated copy is friendone-walk-4dir-v1.png.',
+    qaChecks: ['4x6 layout', 'transparent background', 'identity consistency', 'anchor consistency'],
+  },
+  {
     id: 'friend-b-reference-board',
     kind: 'reference-board',
     label: 'Friend B reference board',

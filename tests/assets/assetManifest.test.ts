@@ -32,6 +32,25 @@ describe('assetManifest', () => {
     expect(referencedAssetIds.filter((assetId) => !manifestIds.has(assetId))).toEqual([]);
   });
 
+  it('tracks reference boards before planned friend portraits', () => {
+    const manifestIds = new Set(ASSET_MANIFEST.map((asset) => asset.id));
+    const plannedFriendPortraits = ASSET_MANIFEST.filter(
+      (asset) =>
+        asset.kind === 'portrait' &&
+        asset.status === 'planned' &&
+        asset.locationIds.some((locationId) => locationId.startsWith('friend-')),
+    );
+    const missingReferenceBoardIds = plannedFriendPortraits.flatMap((asset) =>
+      asset.locationIds
+        .filter((locationId) => locationId.startsWith('friend-'))
+        .map((locationId) => `${locationId}-reference-board`)
+        .filter((referenceBoardId) => !manifestIds.has(referenceBoardId)),
+    );
+
+    expect(plannedFriendPortraits).not.toEqual([]);
+    expect(missingReferenceBoardIds).toEqual([]);
+  });
+
   it('does not mark temporary art as final', () => {
     const shippedFinalAssets = ASSET_MANIFEST.filter(
       (asset) => asset.status === 'final',

@@ -18,27 +18,39 @@ describe('activityRegistry', () => {
   it('runs an activity lifecycle and calls complete', async () => {
     const activity = getActivity('friend-a-memory-bloom');
     const onComplete = vi.fn();
+    const fixture = document.createElement('div');
     const mount = document.createElement('div');
 
-    await activity.start({
-      state: createInitialRunState('friend-a'),
-      mount,
-      onComplete,
-      onCancel: vi.fn(),
-    });
+    document.body.appendChild(fixture);
+    fixture.appendChild(mount);
 
-    const button = mount.querySelector<HTMLButtonElement>('[data-activity-complete]');
-    expect(button).not.toBeNull();
+    try {
+      await activity.start({
+        state: createInitialRunState('friend-a'),
+        mount,
+        onComplete: (completion) => {
+          onComplete(completion);
+          mount.remove();
+        },
+        onCancel: vi.fn(),
+      });
 
-    button?.click();
-    button?.click();
+      const button = mount.querySelector<HTMLButtonElement>('[data-activity-complete]');
+      expect(button).not.toBeNull();
+      expect(mount.isConnected).toBe(true);
 
-    expect(mount.isConnected).toBe(false);
-    expect(onComplete).toHaveBeenCalledWith({
-      locationId: 'friend-a',
-      keepsakeId: 'pressed-flower',
-    });
-    expect(onComplete).toHaveBeenCalledTimes(1);
+      button?.click();
+      button?.click();
+
+      expect(mount.isConnected).toBe(false);
+      expect(onComplete).toHaveBeenCalledWith({
+        locationId: 'friend-a',
+        keepsakeId: 'pressed-flower',
+      });
+      expect(onComplete).toHaveBeenCalledTimes(1);
+    } finally {
+      fixture.remove();
+    }
   });
 
   it('throws for unknown activities', () => {

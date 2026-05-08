@@ -12,6 +12,8 @@ interface TiledTileset {
 }
 
 interface DevMap {
+  readonly width: number;
+  readonly height: number;
   readonly tilesets: readonly TiledTileset[];
 }
 
@@ -50,6 +52,17 @@ describe('dev maps', () => {
           }),
         ]),
       );
+    }
+  });
+
+  it('give the temporary prototype enough room to visibly move around', () => {
+    for (const mapFile of mapFiles) {
+      const map = JSON.parse(
+        readFileSync(join(process.cwd(), 'public', 'maps', mapFile), 'utf8'),
+      ) as DevMap;
+
+      expect(map.width).toBeGreaterThanOrEqual(20);
+      expect(map.height).toBeGreaterThanOrEqual(14);
     }
   });
 });

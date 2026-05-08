@@ -52,6 +52,7 @@ export class LocationScene extends Phaser.Scene {
     this.createMap();
     this.createPlayer();
     this.createHud();
+    this.createLocationLabel();
 
     this.interactKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.E);
     this.promptText = this.add
@@ -91,8 +92,11 @@ export class LocationScene extends Phaser.Scene {
       throw new Error(`Missing tileset for ${this.location.id}`);
     }
 
-    tilemap.createLayer('Ground', [floorTileset, wallTileset], 0, 0);
+    this.createDevBackdrop(tilemap);
+
+    tilemap.createLayer('Ground', [floorTileset, wallTileset], 0, 0)?.setDepth(-10);
     const walls = tilemap.createLayer('Collision', [floorTileset, wallTileset], 0, 0);
+    walls?.setDepth(-9);
     walls?.setCollisionByExclusion([-1, 0]);
     this.walls = walls ?? undefined;
 
@@ -100,6 +104,31 @@ export class LocationScene extends Phaser.Scene {
     this.exits = getRectObjects(mapJson, 'Exits');
     this.interactions = getRectObjects(mapJson, 'Interactables');
     this.physics.world.setBounds(0, 0, tilemap.widthInPixels, tilemap.heightInPixels);
+    this.cameras.main.setBounds(0, 0, tilemap.widthInPixels, tilemap.heightInPixels);
+    this.createWorldMarkers();
+  }
+
+  private createDevBackdrop(tilemap: Phaser.Tilemaps.Tilemap): void {
+    const width = tilemap.widthInPixels;
+    const height = tilemap.heightInPixels;
+    const graphics = this.add.graphics().setDepth(-20);
+
+    graphics.fillStyle(0x7fa46b, 1);
+    graphics.fillRect(0, 0, width, height);
+
+    graphics.lineStyle(1, 0x5f8050, 0.45);
+    for (let x = 0; x <= width; x += tilemap.tileWidth) {
+      graphics.lineBetween(x, 0, x, height);
+    }
+    for (let y = 0; y <= height; y += tilemap.tileHeight) {
+      graphics.lineBetween(0, y, width, y);
+    }
+
+    graphics.fillStyle(0x8a6a4f, 1);
+    graphics.fillRect(0, 0, width, tilemap.tileHeight);
+    graphics.fillRect(0, height - tilemap.tileHeight, width, tilemap.tileHeight);
+    graphics.fillRect(0, 0, tilemap.tileWidth, height);
+    graphics.fillRect(width - tilemap.tileWidth, 0, tilemap.tileWidth, height);
   }
 
   private createPlayer(): void {
@@ -118,10 +147,53 @@ export class LocationScene extends Phaser.Scene {
 
     this.controller = new PlayerController(this, this.player);
     this.cameras.main.startFollow(this.player, true, 0.12, 0.12);
+    this.cameras.main.setDeadzone(240, 180);
   }
 
   private createHud(): void {
     getUiRoot().insertAdjacentHTML('beforeend', renderCollectionPanel(this.state));
+  }
+
+  private createLocationLabel(): void {
+    this.add
+      .text(24, 24, this.location.title, {
+        color: '#fff7e8',
+        backgroundColor: '#1b1f1f',
+        padding: { x: 14, y: 10 },
+        fontSize: '20px',
+        fontStyle: '700',
+      })
+      .setScrollFactor(0)
+      .setDepth(1000);
+  }
+
+  private createWorldMarkers(): void {
+    for (const exit of this.exits) {
+      this.createWorldMarker(exit, 0x74c7ec, this.getObjectLabel(exit));
+    }
+
+    for (const interaction of this.interactions) {
+      this.createWorldMarker(interaction, 0xf1d79a, this.getObjectLabel(interaction));
+    }
+  }
+
+  private createWorldMarker(object: RectObject, color: number, label: string): void {
+    this.add
+      .rectangle(object.x, object.y, object.width, object.height, color, 0.22)
+      .setOrigin(0, 0)
+      .setStrokeStyle(3, color, 0.85)
+      .setDepth(4);
+
+    this.add
+      .text(object.x + 8, object.y + 8, label, {
+        color: '#1b1f1f',
+        backgroundColor: '#fff7e8',
+        padding: { x: 8, y: 5 },
+        fontSize: '14px',
+        fontStyle: '700',
+        wordWrap: { width: Math.max(96, object.width - 16) },
+      })
+      .setDepth(5);
   }
 
   private refreshCollectionPanel(): void {

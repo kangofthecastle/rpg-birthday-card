@@ -9,10 +9,11 @@ export function renderCollectionPanel(state: RunState): string {
   const items = keepsakes
     .map((keepsake) => {
       const collected = state.collectedKeepsakeIds.includes(keepsake.id);
+      const label = collected ? keepsake.label : 'Hidden keepsake';
       return `
         <li class="collection-item ${collected ? 'collection-item--collected' : ''}">
           <span class="collection-item__icon">${collected ? '*' : '?'}</span>
-          <span>${collected ? keepsake.label : 'Hidden keepsake'}</span>
+          <span>${escapeHtml(label)}</span>
         </li>
       `;
     })
@@ -24,4 +25,13 @@ export function renderCollectionPanel(state: RunState): string {
       <ul>${items}</ul>
     </aside>
   `;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
 }

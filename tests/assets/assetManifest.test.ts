@@ -12,6 +12,21 @@ describe('assetManifest', () => {
     expect(ids).toContain('props-garden-house');
   });
 
+  it('names ____ as the main character and tracks her review spritesheet', () => {
+    const mainCharacterAssets = ASSET_MANIFEST.filter((asset) =>
+      asset.id.startsWith('character-main'),
+    );
+    const generatedRecipientSheet = ASSET_MANIFEST.find(
+      (asset) => asset.id === 'character-recipient-walk-4dir',
+    );
+
+    expect(mainCharacterAssets.map((asset) => asset.label).join(' ')).toContain('____');
+    expect(generatedRecipientSheet?.status).toBe('review');
+    expect(generatedRecipientSheet?.notes).toContain(
+      'public/assets/sprites/characters/recipient-walk-4dir-v1-alpha.png',
+    );
+  });
+
   it('can list assets for one location', () => {
     const gardenAssets = getAssetsForLocation('friend-a').map((asset) => asset.id);
 

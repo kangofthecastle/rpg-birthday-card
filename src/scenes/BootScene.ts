@@ -9,6 +9,15 @@ export class BootScene extends Phaser.Scene {
   }
 
   preload(): void {
+    this.load.spritesheet(
+      'recipient-walk-4dir',
+      '/assets/sprites/characters/recipient-walk-4dir-v1-alpha.png',
+      {
+        frameWidth: 256,
+        frameHeight: 256,
+      },
+    );
+
     for (const location of LOCATIONS) {
       this.load.tilemapTiledJSON(location.mapKey, location.mapUrl);
     }

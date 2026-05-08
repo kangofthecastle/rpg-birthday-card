@@ -31,11 +31,28 @@ interface LocationSceneData {
   readonly state?: RunState;
 }
 
+type PlayerFacing = 'down' | 'left' | 'right' | 'up';
+
+const RECIPIENT_SPRITESHEET_KEY = 'recipient-walk-4dir';
+const RECIPIENT_ANIMATIONS: Record<PlayerFacing, string> = {
+  down: 'recipient-walk-down',
+  left: 'recipient-walk-left',
+  right: 'recipient-walk-right',
+  up: 'recipient-walk-up',
+};
+const RECIPIENT_ROW_START_FRAME: Record<PlayerFacing, number> = {
+  down: 0,
+  left: 6,
+  right: 12,
+  up: 18,
+};
+
 export class LocationScene extends Phaser.Scene {
   private location!: LocationDefinition;
   private state: RunState = createInitialRunState('entry');
   private player!: Phaser.Physics.Arcade.Sprite;
-  private playerVisual?: Phaser.GameObjects.Image;
+  private playerVisual?: Phaser.GameObjects.Sprite;
+  private playerFacing: PlayerFacing = 'down';
   private controller!: PlayerController;
   private canMove = true;
   private exits: RectObject[] = [];
@@ -178,13 +195,18 @@ export class LocationScene extends Phaser.Scene {
     const mapJson = this.getMapJson();
     const spawn = getPointObject(mapJson, 'Spawns', this.registry.get('spawnId') as string);
 
+    this.createRecipientAnimations();
     this.player = this.physics.add.sprite(spawn.x, spawn.y, 'player-temp');
     this.player.setVisible(false);
     this.player.setDepth(10);
     this.player.setCollideWorldBounds(true);
     this.player.body?.setSize(36, 32);
     this.player.body?.setOffset(30, 86);
-    this.playerVisual = this.add.image(0, 0, 'player-temp').setOrigin(0.5, 1).setDepth(10);
+    this.playerVisual = this.add
+      .sprite(0, 0, RECIPIENT_SPRITESHEET_KEY, RECIPIENT_ROW_START_FRAME.down)
+      .setOrigin(0.5, 0.9)
+      .setScale(0.55)
+      .setDepth(10);
     this.syncPlayerVisual();
 
     if (this.walls) {
@@ -285,6 +307,63 @@ export class LocationScene extends Phaser.Scene {
     const position = projectToIso(this.player.x, this.player.y, this.getIsoOrigin());
     this.playerVisual.setPosition(position.x, position.y);
     this.playerVisual.setDepth(position.y + 10);
+    this.updatePlayerVisualAnimation();
+  }
+
+  private createRecipientAnimations(): void {
+    for (const [facing, key] of Object.entries(RECIPIENT_ANIMATIONS) as [PlayerFacing, string][]) {
+      if (this.anims.exists(key)) {
+        continue;
+      }
+
+      const start = RECIPIENT_ROW_START_FRAME[facing];
+      this.anims.create({
+        key,
+        frames: this.anims.generateFrameNumbers(RECIPIENT_SPRITESHEET_KEY, {
+          start,
+          end: start + 5,
+        }),
+        frameRate: 8,
+        repeat: -1,
+      });
+    }
+  }
+
+  private updatePlayerVisualAnimation(): void {
+    const visual = this.playerVisual;
+
+    if (!visual) {
+      return;
+    }
+
+    const velocity = this.player.body?.velocity;
+
+    if (!velocity || velocity.lengthSq() < 1) {
+      visual.stop();
+      visual.setFrame(RECIPIENT_ROW_START_FRAME[this.playerFacing]);
+      return;
+    }
+
+    const screenVelocity = this.projectMapVelocityToScreen(velocity.x, velocity.y);
+    this.playerFacing =
+      Math.abs(screenVelocity.x) > Math.abs(screenVelocity.y)
+        ? screenVelocity.x > 0
+          ? 'right'
+          : 'left'
+        : screenVelocity.y > 0
+          ? 'down'
+          : 'up';
+
+    visual.play(RECIPIENT_ANIMATIONS[this.playerFacing], true);
+  }
+
+  private projectMapVelocityToScreen(x: number, y: number): IsoPoint {
+    const verticalScale = this.getIsoOrigin().verticalScale ?? 0.5;
+
+    return {
+      x: (x - y) / 2,
+      y: ((x + y) * verticalScale) / 2,
+    };
   }
 
   private getIsoOrigin(): IsoOrigin {

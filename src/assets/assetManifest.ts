@@ -24,17 +24,17 @@ export const ASSET_MANIFEST: readonly GameAsset[] = [
   {
     id: 'character-main-reference-board',
     kind: 'reference-board',
-    label: 'Main character reference board',
-    status: 'planned',
+    label: '____ main character reference board',
+    status: 'review',
     locationIds: ['global'],
     notes:
-      'Built from user-provided reference images with outfit, palette, silhouette, and personality notes.',
+      'Built from ____ reference images with warm skin tone, long dark wavy hair, cozy beige sweater, cream tote strap, and cheerful personality cues.',
     qaChecks: ['recognizable stylization', 'palette lock', 'silhouette notes'],
   },
   {
     id: 'character-main-walk-8dir',
     kind: 'spritesheet',
-    label: 'Main character 8-direction walk',
+    label: '____ main character 8-direction walk',
     status: 'planned',
     locationIds: ['global'],
     notes:
@@ -44,7 +44,7 @@ export const ASSET_MANIFEST: readonly GameAsset[] = [
   {
     id: 'character-main-idle',
     kind: 'spritesheet',
-    label: 'Main character subtle idle',
+    label: '____ main character subtle idle',
     status: 'planned',
     locationIds: ['global'],
     notes: 'Subtle breathing, blink, or weight-shift loop at 96x128.',
@@ -58,6 +58,16 @@ export const ASSET_MANIFEST: readonly GameAsset[] = [
     locationIds: ['friend-a'],
     notes: 'Built from user-provided reference images and friend-specific personality notes.',
     qaChecks: ['recognizable stylization', 'palette lock'],
+  },
+  {
+    id: 'character-recipient-walk-4dir',
+    kind: 'spritesheet',
+    label: '____ 4-direction walk spritesheet',
+    status: 'review',
+    locationIds: ['global'],
+    notes:
+      'Saved at public/assets/sprites/characters/recipient-walk-4dir-v1-alpha.png. Raw generated copy is recipient-walk-4dir-v1.png. This is a review/prototype 4-direction pass; final main character target remains 8-direction.',
+    qaChecks: ['4x6 layout', 'transparent background', 'identity consistency', 'anchor consistency'],
   },
   {
     id: 'character-friendone-walk-4dir',

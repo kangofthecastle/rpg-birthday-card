@@ -4,7 +4,7 @@ export const PLAYER_FACINGS: readonly PlayerFacing[] = ['down', 'left', 'right',
 
 export const RECIPIENT_SPRITE = {
   key: 'recipient-walk-4dir',
-  url: '/assets/sprites/characters/recipient-walk-4dir-v2-alpha.png',
+  url: '/assets/sprites/characters/recipient-walk-4dir-v3-alpha.png',
   frameWidth: 256,
   frameHeight: 256,
   framesPerDirection: 8,

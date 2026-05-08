@@ -11,6 +11,7 @@ describe('recipientSpriteConfig', () => {
     expect(RECIPIENT_SPRITE.frameWidth).toBe(256);
     expect(RECIPIENT_SPRITE.frameHeight).toBe(256);
     expect(RECIPIENT_SPRITE.framesPerDirection).toBe(8);
+    expect(RECIPIENT_SPRITE.url).toBe('/assets/sprites/characters/recipient-walk-4dir-v3-alpha.png');
     expect(RECIPIENT_SPRITE.origin).toEqual({ x: 0.5, y: 1 });
   });
 

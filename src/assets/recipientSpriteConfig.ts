@@ -4,21 +4,22 @@ export const PLAYER_FACINGS: readonly PlayerFacing[] = ['down', 'left', 'right',
 
 export const RECIPIENT_SPRITE = {
   key: 'recipient-walk-4dir',
-  url: '/assets/sprites/characters/recipient-walk-4dir-v1-alpha.png',
+  url: '/assets/sprites/characters/recipient-walk-4dir-v2-alpha.png',
   frameWidth: 256,
   frameHeight: 256,
+  framesPerDirection: 8,
   scale: 0.45,
   origin: { x: 0.5, y: 1 },
-  walkFrameRate: 8,
+  walkFrameRate: 10,
   idleBobPixels: 1.25,
   idleBobDurationMs: 900,
 } as const;
 
 export const RECIPIENT_ROW_START_FRAME: Record<PlayerFacing, number> = {
   down: 0,
-  left: 6,
-  right: 12,
-  up: 18,
+  right: 8,
+  left: 16,
+  up: 24,
 };
 
 export const RECIPIENT_WALK_ANIMATIONS: Record<PlayerFacing, string> = {

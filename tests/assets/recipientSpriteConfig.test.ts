@@ -10,6 +10,7 @@ describe('recipientSpriteConfig', () => {
   it('anchors ____ at her feet inside normalized sprite cells', () => {
     expect(RECIPIENT_SPRITE.frameWidth).toBe(256);
     expect(RECIPIENT_SPRITE.frameHeight).toBe(256);
+    expect(RECIPIENT_SPRITE.framesPerDirection).toBe(8);
     expect(RECIPIENT_SPRITE.origin).toEqual({ x: 0.5, y: 1 });
   });
 

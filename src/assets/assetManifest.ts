@@ -66,8 +66,8 @@ export const ASSET_MANIFEST: readonly GameAsset[] = [
     status: 'review',
     locationIds: ['global'],
     notes:
-      'Saved at public/assets/sprites/characters/recipient-walk-4dir-v1-alpha.png. Raw generated copy is recipient-walk-4dir-v1.png. This is a review/prototype 4-direction pass; final main character target remains 8-direction.',
-    qaChecks: ['4x6 layout', 'transparent background', 'identity consistency', 'anchor consistency'],
+      'Saved at public/assets/sprites/characters/recipient-walk-4dir-v2-alpha.png. Raw generated copy is recipient-walk-4dir-v2.png. This is a review/prototype 4-direction pass with eight walk frames per direction; final main character target remains 8-direction movement.',
+    qaChecks: ['4x8 layout', 'transparent background', 'identity consistency', 'anchor consistency'],
   },
   {
     id: 'character-friendone-walk-4dir',

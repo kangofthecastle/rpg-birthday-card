@@ -312,10 +312,10 @@ export class LocationScene extends Phaser.Scene {
       if (!this.anims.exists(walkKey)) {
         this.anims.create({
           key: walkKey,
-          frames: this.anims.generateFrameNumbers(RECIPIENT_SPRITE.key, {
-            start,
-            end: start + 5,
-          }),
+        frames: this.anims.generateFrameNumbers(RECIPIENT_SPRITE.key, {
+          start,
+          end: start + RECIPIENT_SPRITE.framesPerDirection - 1,
+        }),
           frameRate: RECIPIENT_SPRITE.walkFrameRate,
           repeat: -1,
         });

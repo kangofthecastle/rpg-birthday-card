@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ASSET_MANIFEST, getAssetsForLocation } from '../../src/assets/assetManifest';
+import { LOCATIONS } from '../../src/content/locations';
 
 describe('assetManifest', () => {
   it('tracks the vertical-slice character and world asset needs', () => {
@@ -16,6 +17,19 @@ describe('assetManifest', () => {
 
     expect(gardenAssets).toContain('tileset-garden-house-foundation');
     expect(gardenAssets).toContain('portrait-friend-a');
+  });
+
+  it('tracks every asset referenced by location content', () => {
+    const manifestIds = new Set(ASSET_MANIFEST.map((asset) => asset.id));
+    const referencedAssetIds = LOCATIONS.flatMap((location) => [
+      ...(location.rewardMessage ?? []).flatMap((message) =>
+        message.portraitId ? [message.portraitId] : [],
+      ),
+      ...(location.keepsake ? [location.keepsake.iconAssetId] : []),
+    ]);
+
+    expect(referencedAssetIds).not.toEqual([]);
+    expect(referencedAssetIds.filter((assetId) => !manifestIds.has(assetId))).toEqual([]);
   });
 
   it('does not mark temporary art as final', () => {

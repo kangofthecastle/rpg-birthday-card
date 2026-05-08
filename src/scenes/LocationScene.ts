@@ -10,6 +10,14 @@ import {
   setCurrentLocation,
   type RunState,
 } from '../game/runState';
+import {
+  getIsoBounds,
+  getIsoRectCorners,
+  getIsoTileCorners,
+  projectToIso,
+  type IsoOrigin,
+  type IsoPoint,
+} from '../game/isometricProjection';
 import { getPointObject, getRectObjects, type RectObject, type TiledMapJson } from '../game/mapHelpers';
 import { PlayerController } from '../game/playerController';
 import { renderCollectionPanel } from '../ui/collectionPanel';
@@ -27,6 +35,7 @@ export class LocationScene extends Phaser.Scene {
   private location!: LocationDefinition;
   private state: RunState = createInitialRunState('entry');
   private player!: Phaser.Physics.Arcade.Sprite;
+  private playerVisual?: Phaser.GameObjects.Image;
   private controller!: PlayerController;
   private canMove = true;
   private exits: RectObject[] = [];
@@ -35,6 +44,7 @@ export class LocationScene extends Phaser.Scene {
   private promptText?: Phaser.GameObjects.Text;
   private activeObject?: RectObject;
   private walls?: Phaser.Tilemaps.TilemapLayer;
+  private isoOrigin?: IsoOrigin;
 
   constructor() {
     super(SceneKeys.Location);
@@ -68,6 +78,7 @@ export class LocationScene extends Phaser.Scene {
 
   update(): void {
     this.controller.update(this.canMove);
+    this.syncPlayerVisual();
 
     if (!this.canMove) {
       this.activeObject = undefined;
@@ -92,11 +103,17 @@ export class LocationScene extends Phaser.Scene {
       throw new Error(`Missing tileset for ${this.location.id}`);
     }
 
+    this.isoOrigin = this.createIsoOrigin(tilemap);
+    this.cameras.main.setBackgroundColor('#17211b');
     this.createDevBackdrop(tilemap);
 
-    tilemap.createLayer('Ground', [floorTileset, wallTileset], 0, 0)?.setDepth(-10);
+    const ground = tilemap.createLayer('Ground', [floorTileset, wallTileset], 0, 0);
+    ground?.setDepth(-10);
+    ground?.setVisible(false);
+
     const walls = tilemap.createLayer('Collision', [floorTileset, wallTileset], 0, 0);
     walls?.setDepth(-9);
+    walls?.setVisible(false);
     walls?.setCollisionByExclusion([-1, 0]);
     this.walls = walls ?? undefined;
 
@@ -104,31 +121,57 @@ export class LocationScene extends Phaser.Scene {
     this.exits = getRectObjects(mapJson, 'Exits');
     this.interactions = getRectObjects(mapJson, 'Interactables');
     this.physics.world.setBounds(0, 0, tilemap.widthInPixels, tilemap.heightInPixels);
-    this.cameras.main.setBounds(0, 0, tilemap.widthInPixels, tilemap.heightInPixels);
+
+    const isoBounds = getIsoBounds(tilemap.widthInPixels, tilemap.heightInPixels, this.isoOrigin);
+    this.cameras.main.setBounds(0, 0, isoBounds.maxX + 192, isoBounds.maxY + 224);
     this.createWorldMarkers();
   }
 
   private createDevBackdrop(tilemap: Phaser.Tilemaps.Tilemap): void {
+    const origin = this.getIsoOrigin();
     const width = tilemap.widthInPixels;
     const height = tilemap.heightInPixels;
+    const isoBounds = getIsoBounds(width, height, origin);
     const graphics = this.add.graphics().setDepth(-20);
 
-    graphics.fillStyle(0x7fa46b, 1);
-    graphics.fillRect(0, 0, width, height);
+    graphics.fillStyle(0x17211b, 1);
+    graphics.fillRect(0, 0, isoBounds.maxX + 192, isoBounds.maxY + 224);
 
-    graphics.lineStyle(1, 0x5f8050, 0.45);
-    for (let x = 0; x <= width; x += tilemap.tileWidth) {
-      graphics.lineBetween(x, 0, x, height);
-    }
-    for (let y = 0; y <= height; y += tilemap.tileHeight) {
-      graphics.lineBetween(0, y, width, y);
-    }
+    this.drawIsoSideFace(
+      graphics,
+      [projectToIso(0, height, origin), projectToIso(width, height, origin)],
+      48,
+      0x5d4a36,
+    );
+    this.drawIsoSideFace(
+      graphics,
+      [projectToIso(width, 0, origin), projectToIso(width, height, origin)],
+      48,
+      0x6b523c,
+    );
 
-    graphics.fillStyle(0x8a6a4f, 1);
-    graphics.fillRect(0, 0, width, tilemap.tileHeight);
-    graphics.fillRect(0, height - tilemap.tileHeight, width, tilemap.tileHeight);
-    graphics.fillRect(0, 0, tilemap.tileWidth, height);
-    graphics.fillRect(width - tilemap.tileWidth, 0, tilemap.tileWidth, height);
+    for (let row = 0; row < tilemap.height; row += 1) {
+      for (let column = 0; column < tilemap.width; column += 1) {
+        const isBorder =
+          row === 0 || column === 0 || row === tilemap.height - 1 || column === tilemap.width - 1;
+        const isAlternate = (row + column) % 2 === 0;
+        const color = isBorder ? 0x8a6a4f : isAlternate ? 0x88ad70 : 0x7fa46b;
+        const strokeColor = isBorder ? 0x5d4334 : 0x5f8050;
+        const polygon = this.toPhaserPoints(
+          getIsoTileCorners(
+            column * tilemap.tileWidth,
+            row * tilemap.tileHeight,
+            tilemap.tileWidth,
+            origin,
+          ),
+        );
+
+        graphics.fillStyle(color, 1);
+        graphics.fillPoints(polygon, true);
+        graphics.lineStyle(1, strokeColor, isBorder ? 0.85 : 0.45);
+        graphics.strokePoints(polygon, true);
+      }
+    }
   }
 
   private createPlayer(): void {
@@ -136,17 +179,20 @@ export class LocationScene extends Phaser.Scene {
     const spawn = getPointObject(mapJson, 'Spawns', this.registry.get('spawnId') as string);
 
     this.player = this.physics.add.sprite(spawn.x, spawn.y, 'player-temp');
+    this.player.setVisible(false);
     this.player.setDepth(10);
     this.player.setCollideWorldBounds(true);
     this.player.body?.setSize(36, 32);
     this.player.body?.setOffset(30, 86);
+    this.playerVisual = this.add.image(0, 0, 'player-temp').setOrigin(0.5, 1).setDepth(10);
+    this.syncPlayerVisual();
 
     if (this.walls) {
       this.physics.add.collider(this.player, this.walls);
     }
 
     this.controller = new PlayerController(this, this.player);
-    this.cameras.main.startFollow(this.player, true, 0.12, 0.12);
+    this.cameras.main.startFollow(this.playerVisual, true, 0.12, 0.12);
     this.cameras.main.setDeadzone(240, 180);
   }
 
@@ -178,22 +224,77 @@ export class LocationScene extends Phaser.Scene {
   }
 
   private createWorldMarker(object: RectObject, color: number, label: string): void {
-    this.add
-      .rectangle(object.x, object.y, object.width, object.height, color, 0.22)
-      .setOrigin(0, 0)
-      .setStrokeStyle(3, color, 0.85)
-      .setDepth(4);
+    const origin = this.getIsoOrigin();
+    const center = projectToIso(object.x + object.width / 2, object.y + object.height / 2, origin);
+    const marker = this.add.graphics().setDepth(4);
+    const polygon = this.toPhaserPoints(
+      getIsoRectCorners(object.x, object.y, object.width, object.height, origin),
+    );
+
+    marker.fillStyle(color, 0.28);
+    marker.fillPoints(polygon, true);
+    marker.lineStyle(3, color, 0.9);
+    marker.strokePoints(polygon, true);
 
     this.add
-      .text(object.x + 8, object.y + 8, label, {
+      .text(center.x, center.y - 10, label, {
         color: '#1b1f1f',
         backgroundColor: '#fff7e8',
         padding: { x: 8, y: 5 },
         fontSize: '14px',
         fontStyle: '700',
-        wordWrap: { width: Math.max(96, object.width - 16) },
+        wordWrap: { width: Math.max(112, Math.min(192, object.width + 72)) },
       })
+      .setOrigin(0.5, 1)
       .setDepth(5);
+  }
+
+  private createIsoOrigin(tilemap: Phaser.Tilemaps.Tilemap): IsoOrigin {
+    return {
+      x: tilemap.heightInPixels / 2 + tilemap.tileWidth * 2,
+      y: tilemap.tileHeight * 1.5,
+      verticalScale: 0.5,
+    };
+  }
+
+  private drawIsoSideFace(
+    graphics: Phaser.GameObjects.Graphics,
+    edge: readonly [IsoPoint, IsoPoint],
+    depth: number,
+    color: number,
+  ): void {
+    graphics.fillStyle(color, 1);
+    graphics.fillPoints(
+      this.toPhaserPoints([
+        edge[0],
+        edge[1],
+        { x: edge[1].x, y: edge[1].y + depth },
+        { x: edge[0].x, y: edge[0].y + depth },
+      ]),
+      true,
+    );
+  }
+
+  private syncPlayerVisual(): void {
+    if (!this.playerVisual) {
+      return;
+    }
+
+    const position = projectToIso(this.player.x, this.player.y, this.getIsoOrigin());
+    this.playerVisual.setPosition(position.x, position.y);
+    this.playerVisual.setDepth(position.y + 10);
+  }
+
+  private getIsoOrigin(): IsoOrigin {
+    if (!this.isoOrigin) {
+      throw new Error('Isometric origin is unavailable before map creation');
+    }
+
+    return this.isoOrigin;
+  }
+
+  private toPhaserPoints(points: readonly IsoPoint[]): Phaser.Geom.Point[] {
+    return points.map((point) => new Phaser.Geom.Point(point.x, point.y));
   }
 
   private refreshCollectionPanel(): void {

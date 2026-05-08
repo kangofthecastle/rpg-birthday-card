@@ -4,10 +4,6 @@ export const friendBActivity: ActivityModule = {
   id: 'friend-b-paper-stars',
   title: 'Paper Stars',
   start({ mount, onComplete }) {
-    if (!mount.isConnected) {
-      document.body.appendChild(mount);
-    }
-
     mount.innerHTML = `
       <section class="activity-panel" role="dialog" aria-label="Paper Stars">
         <h2>Paper Stars</h2>
@@ -22,6 +18,7 @@ export const friendBActivity: ActivityModule = {
       .querySelector('[data-activity-complete]')
       ?.addEventListener('click', () =>
         onComplete({ locationId: 'friend-b', keepsakeId: 'paper-star' }),
+        { once: true },
       );
   },
 };

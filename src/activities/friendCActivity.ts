@@ -4,10 +4,6 @@ export const friendCActivity: ActivityModule = {
   id: 'friend-c-song-line',
   title: 'Missing Melody',
   start({ mount, onComplete }) {
-    if (!mount.isConnected) {
-      document.body.appendChild(mount);
-    }
-
     mount.innerHTML = `
       <section class="activity-panel" role="dialog" aria-label="Missing Melody">
         <h2>Missing Melody</h2>
@@ -22,6 +18,7 @@ export const friendCActivity: ActivityModule = {
       .querySelector('[data-activity-complete]')
       ?.addEventListener('click', () =>
         onComplete({ locationId: 'friend-c', keepsakeId: 'tiny-key' }),
+        { once: true },
       );
   },
 };

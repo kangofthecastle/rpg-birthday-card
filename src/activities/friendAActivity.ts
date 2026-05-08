@@ -4,10 +4,6 @@ export const friendAActivity: ActivityModule = {
   id: 'friend-a-memory-bloom',
   title: 'Memory Bloom',
   start({ mount, onComplete }) {
-    if (!mount.isConnected) {
-      document.body.appendChild(mount);
-    }
-
     mount.innerHTML = `
       <section class="activity-panel" role="dialog" aria-label="Memory Bloom">
         <h2>Memory Bloom</h2>
@@ -22,6 +18,7 @@ export const friendAActivity: ActivityModule = {
       .querySelector('[data-activity-complete]')
       ?.addEventListener('click', () =>
         onComplete({ locationId: 'friend-a', keepsakeId: 'pressed-flower' }),
+        { once: true },
       );
   },
 };

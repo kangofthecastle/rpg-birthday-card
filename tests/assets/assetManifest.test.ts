@@ -25,6 +25,11 @@ describe('assetManifest', () => {
       ...(location.rewardMessage ?? []).flatMap((message) =>
         message.portraitId ? [message.portraitId] : [],
       ),
+      ...location.interactions.flatMap((interaction) =>
+        (interaction.dialogue ?? []).flatMap((message) =>
+          message.portraitId ? [message.portraitId] : [],
+        ),
+      ),
       ...(location.keepsake ? [location.keepsake.iconAssetId] : []),
     ]);
 

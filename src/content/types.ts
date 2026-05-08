@@ -22,13 +22,24 @@ export interface LocationExit {
   readonly requiresFinalUnlock?: boolean;
 }
 
-export interface LocationInteraction {
+interface BaseLocationInteraction {
   readonly id: string;
-  readonly kind: InteractionKind;
   readonly label: string;
-  readonly dialogue?: readonly DialogueLine[];
-  readonly activityId?: string;
 }
+
+export interface ActivityLocationInteraction extends BaseLocationInteraction {
+  readonly kind: 'activity';
+  readonly activityId: string;
+  readonly dialogue?: readonly DialogueLine[];
+}
+
+export interface DialogueLocationInteraction extends BaseLocationInteraction {
+  readonly kind: Exclude<InteractionKind, 'activity'>;
+  readonly dialogue: readonly DialogueLine[];
+  readonly activityId?: never;
+}
+
+export type LocationInteraction = ActivityLocationInteraction | DialogueLocationInteraction;
 
 export interface LocationDefinition {
   readonly id: string;

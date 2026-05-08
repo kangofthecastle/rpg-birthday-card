@@ -54,3 +54,100 @@ body {
   color: #f6efe3;
   font-size: 18px;
 }
+
+.dialogue-box,
+.activity-panel,
+.collection-panel {
+  pointer-events: auto;
+  border: 2px solid #f1d79a;
+  background: rgba(27, 31, 31, 0.94);
+  color: #fff7e8;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.32);
+}
+
+.dialogue-box {
+  position: absolute;
+  right: 32px;
+  bottom: 32px;
+  left: 32px;
+  min-height: 132px;
+  padding: 20px 22px;
+}
+
+.dialogue-box p {
+  margin: 8px 0 18px;
+  font-size: 18px;
+  line-height: 1.45;
+}
+
+.dialogue-box__speaker {
+  color: #f1d79a;
+}
+
+.dialogue-box__next,
+.activity-actions button {
+  min-height: 40px;
+  border: 0;
+  background: #f1d79a;
+  color: #1b1f1f;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.activity-panel {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(560px, calc(100vw - 48px));
+  padding: 24px;
+  transform: translate(-50%, -50%);
+}
+
+.activity-panel h2 {
+  margin: 0 0 12px;
+  font-size: 28px;
+}
+
+.activity-panel p {
+  margin: 0 0 20px;
+  font-size: 17px;
+  line-height: 1.45;
+}
+
+.activity-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.collection-panel {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: 220px;
+  padding: 14px;
+}
+
+.collection-panel h2 {
+  margin: 0 0 10px;
+  font-size: 16px;
+}
+
+.collection-panel ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.collection-item {
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  gap: 8px;
+  align-items: center;
+  color: #b9c0b8;
+}
+
+.collection-item--collected {
+  color: #fff7e8;
+}

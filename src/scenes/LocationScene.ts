@@ -1,5 +1,13 @@
 import Phaser from 'phaser';
 import { getActivity } from '../activities/activityRegistry';
+import {
+  RECIPIENT_IDLE_ANIMATIONS,
+  RECIPIENT_ROW_START_FRAME,
+  RECIPIENT_SPRITE,
+  RECIPIENT_WALK_ANIMATIONS,
+  PLAYER_FACINGS,
+  type PlayerFacing,
+} from '../assets/recipientSpriteConfig';
 import { getLocation } from '../content/locations';
 import type { DialogueLine, LocationDefinition, LocationInteraction } from '../content/types';
 import {
@@ -30,22 +38,6 @@ interface LocationSceneData {
   readonly spawnId?: string;
   readonly state?: RunState;
 }
-
-type PlayerFacing = 'down' | 'left' | 'right' | 'up';
-
-const RECIPIENT_SPRITESHEET_KEY = 'recipient-walk-4dir';
-const RECIPIENT_ANIMATIONS: Record<PlayerFacing, string> = {
-  down: 'recipient-walk-down',
-  left: 'recipient-walk-left',
-  right: 'recipient-walk-right',
-  up: 'recipient-walk-up',
-};
-const RECIPIENT_ROW_START_FRAME: Record<PlayerFacing, number> = {
-  down: 0,
-  left: 6,
-  right: 12,
-  up: 18,
-};
 
 export class LocationScene extends Phaser.Scene {
   private location!: LocationDefinition;
@@ -203,9 +195,9 @@ export class LocationScene extends Phaser.Scene {
     this.player.body?.setSize(36, 32);
     this.player.body?.setOffset(30, 86);
     this.playerVisual = this.add
-      .sprite(0, 0, RECIPIENT_SPRITESHEET_KEY, RECIPIENT_ROW_START_FRAME.down)
-      .setOrigin(0.5, 0.9)
-      .setScale(0.55)
+      .sprite(0, 0, RECIPIENT_SPRITE.key, RECIPIENT_ROW_START_FRAME.down)
+      .setOrigin(RECIPIENT_SPRITE.origin.x, RECIPIENT_SPRITE.origin.y)
+      .setScale(RECIPIENT_SPRITE.scale)
       .setDepth(10);
     this.syncPlayerVisual();
 
@@ -305,27 +297,38 @@ export class LocationScene extends Phaser.Scene {
     }
 
     const position = projectToIso(this.player.x, this.player.y, this.getIsoOrigin());
-    this.playerVisual.setPosition(position.x, position.y);
+    const idleOffset = this.getIdleOffset();
+    this.playerVisual.setPosition(position.x, position.y + idleOffset);
     this.playerVisual.setDepth(position.y + 10);
     this.updatePlayerVisualAnimation();
   }
 
   private createRecipientAnimations(): void {
-    for (const [facing, key] of Object.entries(RECIPIENT_ANIMATIONS) as [PlayerFacing, string][]) {
-      if (this.anims.exists(key)) {
-        continue;
+    for (const facing of PLAYER_FACINGS) {
+      const walkKey = RECIPIENT_WALK_ANIMATIONS[facing];
+      const idleKey = RECIPIENT_IDLE_ANIMATIONS[facing];
+      const start = RECIPIENT_ROW_START_FRAME[facing];
+
+      if (!this.anims.exists(walkKey)) {
+        this.anims.create({
+          key: walkKey,
+          frames: this.anims.generateFrameNumbers(RECIPIENT_SPRITE.key, {
+            start,
+            end: start + 5,
+          }),
+          frameRate: RECIPIENT_SPRITE.walkFrameRate,
+          repeat: -1,
+        });
       }
 
-      const start = RECIPIENT_ROW_START_FRAME[facing];
-      this.anims.create({
-        key,
-        frames: this.anims.generateFrameNumbers(RECIPIENT_SPRITESHEET_KEY, {
-          start,
-          end: start + 5,
-        }),
-        frameRate: 8,
-        repeat: -1,
-      });
+      if (!this.anims.exists(idleKey)) {
+        this.anims.create({
+          key: idleKey,
+          frames: [{ key: RECIPIENT_SPRITE.key, frame: start }],
+          frameRate: 1,
+          repeat: -1,
+        });
+      }
     }
   }
 
@@ -339,8 +342,7 @@ export class LocationScene extends Phaser.Scene {
     const velocity = this.player.body?.velocity;
 
     if (!velocity || velocity.lengthSq() < 1) {
-      visual.stop();
-      visual.setFrame(RECIPIENT_ROW_START_FRAME[this.playerFacing]);
+      visual.play(RECIPIENT_IDLE_ANIMATIONS[this.playerFacing], true);
       return;
     }
 
@@ -354,7 +356,20 @@ export class LocationScene extends Phaser.Scene {
           ? 'down'
           : 'up';
 
-    visual.play(RECIPIENT_ANIMATIONS[this.playerFacing], true);
+    visual.play(RECIPIENT_WALK_ANIMATIONS[this.playerFacing], true);
+  }
+
+  private getIdleOffset(): number {
+    const velocity = this.player.body?.velocity;
+
+    if (velocity && velocity.lengthSq() >= 1) {
+      return 0;
+    }
+
+    return (
+      Math.sin((this.time.now / RECIPIENT_SPRITE.idleBobDurationMs) * Math.PI * 2) *
+      RECIPIENT_SPRITE.idleBobPixels
+    );
   }
 
   private projectMapVelocityToScreen(x: number, y: number): IsoPoint {

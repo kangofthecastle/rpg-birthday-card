@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { RECIPIENT_SPRITE } from '../assets/recipientSpriteConfig';
 import { LOCATIONS } from '../content/locations';
 import { createTempTextures } from '../game/createTempTextures';
 import { SceneKeys } from './sceneKeys';
@@ -10,11 +11,11 @@ export class BootScene extends Phaser.Scene {
 
   preload(): void {
     this.load.spritesheet(
-      'recipient-walk-4dir',
-      '/assets/sprites/characters/recipient-walk-4dir-v1-alpha.png',
+      RECIPIENT_SPRITE.key,
+      RECIPIENT_SPRITE.url,
       {
-        frameWidth: 256,
-        frameHeight: 256,
+        frameWidth: RECIPIENT_SPRITE.frameWidth,
+        frameHeight: RECIPIENT_SPRITE.frameHeight,
       },
     );
 

@@ -8,7 +8,7 @@ interface ActiveDialogue {
 }
 
 const PORTRAIT_URL_BY_ID: Readonly<Record<string, string>> = {
-  'character-recipient-walk-4dir': '/assets/sprites/characters/recipient-walk-4dir-v13-alpha.png',
+  'character-recipient-walk-8dir': '/assets/sprites/characters/recipient-idle-walk-8dir-v1-alpha.png',
   'character-friendthree-walk-4dir': '/assets/sprites/characters/friendthree-walk-4dir-v1-alpha.png',
   'character-friendone-walk-4dir': '/assets/sprites/characters/friendone-walk-4dir-v2-alpha.png',
   'portrait-friendthree': '/assets/sprites/characters/friendthree-walk-4dir-v1-alpha.png',

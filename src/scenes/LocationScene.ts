@@ -1,14 +1,17 @@
 import Phaser from 'phaser';
 import { getActivity } from '../activities/activityRegistry';
 import {
+  RECIPIENT_ANIMATION_SOURCE_FACING,
+  RECIPIENT_FLIP_X_BY_FACING,
   RECIPIENT_IDLE_ANIMATIONS,
-  RECIPIENT_IDLE_FRAME_OFFSETS,
-  RECIPIENT_ROW_START_FRAME,
+  RECIPIENT_IDLE_FRAME_COUNTS,
+  RECIPIENT_IDLE_ROW_START_FRAME,
   RECIPIENT_SPRITE,
   RECIPIENT_TAP_STEP_FRAME_OFFSETS,
   RECIPIENT_TAP_STEP_HOLD_MS,
   RECIPIENT_WALK_DUST,
   RECIPIENT_WALK_FRAME_COUNTS,
+  RECIPIENT_WALK_ROW_START_FRAME,
   RECIPIENT_WALK_ANIMATIONS,
   PLAYER_FACINGS,
   type PlayerFacing,
@@ -208,7 +211,7 @@ export class LocationScene extends Phaser.Scene {
     this.player.body?.setSize(36, 32);
     this.player.body?.setOffset(30, 86);
     this.playerVisual = this.add
-      .sprite(0, 0, RECIPIENT_SPRITE.key, RECIPIENT_ROW_START_FRAME.down)
+      .sprite(0, 0, RECIPIENT_SPRITE.key, RECIPIENT_IDLE_ROW_START_FRAME.down)
       .setOrigin(RECIPIENT_SPRITE.origin.x, RECIPIENT_SPRITE.origin.y)
       .setScale(RECIPIENT_SPRITE.scale)
       .setDepth(10);
@@ -323,16 +326,18 @@ export class LocationScene extends Phaser.Scene {
     for (const facing of PLAYER_FACINGS) {
       const walkKey = RECIPIENT_WALK_ANIMATIONS[facing];
       const idleKey = RECIPIENT_IDLE_ANIMATIONS[facing];
-      const start = RECIPIENT_ROW_START_FRAME[facing];
-      const frameCount = RECIPIENT_WALK_FRAME_COUNTS[facing];
-      const idleFrame = start + RECIPIENT_IDLE_FRAME_OFFSETS[facing];
+      const sourceFacing = RECIPIENT_ANIMATION_SOURCE_FACING[facing];
+      const walkStart = RECIPIENT_WALK_ROW_START_FRAME[sourceFacing];
+      const walkFrameCount = RECIPIENT_WALK_FRAME_COUNTS[facing];
+      const idleStart = RECIPIENT_IDLE_ROW_START_FRAME[sourceFacing];
+      const idleFrameCount = RECIPIENT_IDLE_FRAME_COUNTS[facing];
 
       if (!this.anims.exists(walkKey)) {
         this.anims.create({
           key: walkKey,
           frames: this.anims.generateFrameNumbers(RECIPIENT_SPRITE.key, {
-            start,
-            end: start + frameCount - 1,
+            start: walkStart,
+            end: walkStart + walkFrameCount - 1,
           }),
           frameRate: RECIPIENT_SPRITE.walkFrameRate,
           repeat: -1,
@@ -342,8 +347,11 @@ export class LocationScene extends Phaser.Scene {
       if (!this.anims.exists(idleKey)) {
         this.anims.create({
           key: idleKey,
-          frames: [{ key: RECIPIENT_SPRITE.key, frame: idleFrame }],
-          frameRate: 1,
+          frames: this.anims.generateFrameNumbers(RECIPIENT_SPRITE.key, {
+            start: idleStart,
+            end: idleStart + idleFrameCount - 1,
+          }),
+          frameRate: RECIPIENT_SPRITE.idleFrameRate,
           repeat: -1,
         });
       }
@@ -373,6 +381,8 @@ export class LocationScene extends Phaser.Scene {
     const velocity = this.player.body?.velocity;
 
     if (!velocity || velocity.lengthSq() < 1) {
+      this.syncPlayerVisualFlip();
+
       if (this.time.now < this.tapStepHoldUntil) {
         visual.stop();
         visual.setFrame(this.getCurrentTapStepFrame());
@@ -388,6 +398,7 @@ export class LocationScene extends Phaser.Scene {
     const previousFacing = this.playerFacing;
     const screenVelocity = this.projectMapVelocityToScreen(velocity.x, velocity.y);
     this.playerFacing = getPlayerFacingFromScreenMovement(screenVelocity, this.playerFacing);
+    this.syncPlayerVisualFlip();
 
     visual.play(RECIPIENT_WALK_ANIMATIONS[this.playerFacing], true);
 
@@ -445,17 +456,23 @@ export class LocationScene extends Phaser.Scene {
   private advanceTapStepFrame(facing: PlayerFacing): number {
     const offsets = RECIPIENT_TAP_STEP_FRAME_OFFSETS[facing];
     const index = this.tapStepFrameByFacing[facing] % offsets.length;
+    const sourceFacing = RECIPIENT_ANIMATION_SOURCE_FACING[facing];
 
     this.tapStepFrameByFacing[facing] = index + 1;
-    return RECIPIENT_ROW_START_FRAME[facing] + offsets[index];
+    return RECIPIENT_WALK_ROW_START_FRAME[sourceFacing] + offsets[index];
   }
 
   private getCurrentTapStepFrame(): number {
     const offsets = RECIPIENT_TAP_STEP_FRAME_OFFSETS[this.playerFacing];
     const nextIndex = this.tapStepFrameByFacing[this.playerFacing] % offsets.length;
     const currentIndex = (nextIndex - 1 + offsets.length) % offsets.length;
+    const sourceFacing = RECIPIENT_ANIMATION_SOURCE_FACING[this.playerFacing];
 
-    return RECIPIENT_ROW_START_FRAME[this.playerFacing] + offsets[currentIndex];
+    return RECIPIENT_WALK_ROW_START_FRAME[sourceFacing] + offsets[currentIndex];
+  }
+
+  private syncPlayerVisualFlip(): void {
+    this.playerVisual?.setFlipX(RECIPIENT_FLIP_X_BY_FACING[this.playerFacing]);
   }
 
   private getIdleOffset(): number {

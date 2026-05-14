@@ -1,21 +1,39 @@
 import type { ActivityModule } from './activityTypes';
+import { createInitialMatchState } from './friendthreeStrategy/board';
+import { renderFriendThreeStrategyView } from './friendthreeStrategy/view';
 
 export const friendthreeStrategyActivity: ActivityModule = {
   id: 'friendthree-strategy-table',
   title: '____ Island',
-  start({ mount, onCancel }) {
-    mount.innerHTML = `
-      <section class="activity-panel" role="dialog" aria-label="____ Island">
-        <h2>____ Island</h2>
-        <p>____ Island is being set up on the table.</p>
-        <div class="activity-actions">
-          <button type="button" data-activity-cancel>Return</button>
-        </div>
-      </section>
-    `;
+  start({ mount, onCancel, onComplete }) {
+    let completed = false;
+    let cleanup = () => {
+      mount.innerHTML = '';
+    };
 
-    mount
-      .querySelector('[data-activity-cancel]')
-      ?.addEventListener('click', onCancel, { once: true });
+    cleanup = renderFriendThreeStrategyView(mount, createInitialMatchState(), {
+      onStateChange: () => undefined,
+      onComplete: (won) => {
+        if (completed) {
+          return;
+        }
+
+        completed = true;
+        onComplete({
+          activityId: 'friendthree-strategy-table',
+          locationId: 'friend-c',
+          won,
+        });
+      },
+      onCancel: () => {
+        if (completed) {
+          return;
+        }
+
+        completed = true;
+        cleanup();
+        onCancel();
+      },
+    });
   },
 };

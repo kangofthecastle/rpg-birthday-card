@@ -2,7 +2,47 @@ import { describe, expect, it } from 'vitest';
 import { ASSET_MANIFEST, getAssetsForLocation } from '../../src/assets/assetManifest';
 import { LOCATIONS } from '../../src/content/locations';
 
+type ManifestAsset = (typeof ASSET_MANIFEST)[number];
+
+function findDuplicateAssetIds(assets: readonly Pick<ManifestAsset, 'id'>[]): string[] {
+  const seenIds = new Set<string>();
+  const duplicateIds = new Set<string>();
+
+  assets.forEach((asset) => {
+    if (seenIds.has(asset.id)) {
+      duplicateIds.add(asset.id);
+      return;
+    }
+
+    seenIds.add(asset.id);
+  });
+
+  return [...duplicateIds];
+}
+
+function getManifestAsset(assetId: string): ManifestAsset {
+  const matches = ASSET_MANIFEST.filter((asset) => asset.id === assetId);
+
+  expect(matches).toHaveLength(1);
+
+  return matches[0];
+}
+
 describe('assetManifest', () => {
+  it('detects duplicate asset IDs before building lookup helpers', () => {
+    const duplicateId = ASSET_MANIFEST[0].id;
+    const assetsWithDuplicate = [
+      ASSET_MANIFEST[0],
+      { ...ASSET_MANIFEST[1], id: duplicateId },
+    ];
+
+    expect(findDuplicateAssetIds(assetsWithDuplicate)).toEqual([duplicateId]);
+  });
+
+  it('uses unique asset IDs across the manifest', () => {
+    expect(findDuplicateAssetIds(ASSET_MANIFEST)).toEqual([]);
+  });
+
   it('tracks the vertical-slice character and world asset needs', () => {
     const ids = ASSET_MANIFEST.map((asset) => asset.id);
 
@@ -28,26 +68,47 @@ describe('assetManifest', () => {
   });
 
   it('tracks refreshed companion idle/walk spritesheets', () => {
-    const generatedSheets = new Map(ASSET_MANIFEST.map((asset) => [asset.id, asset]));
-
-    expect(generatedSheets.get('character-friendtwo-walk-4dir')?.notes).toContain(
+    expect(getManifestAsset('character-friendtwo-walk-4dir').notes).toContain(
       'public/assets/sprites/characters/friendtwo-idle-walk-4dir-v1-alpha.png',
     );
-    expect(generatedSheets.get('character-friendthree-walk-4dir')?.notes).toContain(
+    expect(getManifestAsset('character-friendthree-walk-4dir').notes).toContain(
       'public/assets/sprites/characters/friendthree-idle-walk-4dir-v1-alpha.png',
     );
-    expect(generatedSheets.get('character-friendone-walk-4dir')?.notes).toContain(
+    expect(getManifestAsset('character-friendone-walk-4dir').notes).toContain(
       'public/assets/sprites/characters/friendone-idle-walk-4dir-v1-alpha.png',
     );
   });
 
   it('tracks ____ fishing activity art and reward assets', () => {
-    const ids = ASSET_MANIFEST.map((asset) => asset.id);
+    const friendonePondArt = getManifestAsset('activity-art-friendone-pc-pond');
+    const glowingKoiArt = getManifestAsset('activity-art-glowing-koi');
 
-    expect(ids).toContain('portrait-friendone');
-    expect(ids).toContain('keepsake-glowing-koi-scale');
-    expect(ids).toContain('activity-art-friendone-pc-pond');
-    expect(ids).toContain('activity-art-glowing-koi');
+    expect(getManifestAsset('portrait-friendone').locationIds).toContain('friend-a');
+    expect(getManifestAsset('keepsake-glowing-koi-scale').locationIds).toContain('friend-a');
+    expect(friendonePondArt).toMatchObject({
+      kind: 'activity-art',
+      status: 'temporary',
+      locationIds: ['friend-a'],
+    });
+    expect(friendonePondArt.qaChecks).toEqual(
+      expect.arrayContaining([
+        'cozy readability',
+        'player and ____ composition',
+        'meter contrast',
+      ]),
+    );
+    expect(glowingKoiArt).toMatchObject({
+      kind: 'activity-art',
+      status: 'temporary',
+      locationIds: ['friend-a'],
+    });
+    expect(glowingKoiArt.qaChecks).toEqual(
+      expect.arrayContaining([
+        'special-fish readability',
+        'warm glow effect',
+        'motion readability',
+      ]),
+    );
   });
 
   it('can list assets for one location', () => {

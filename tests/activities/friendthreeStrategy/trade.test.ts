@@ -1,8 +1,31 @@
 import { describe, expect, it } from 'vitest';
 import { createInitialMatchState } from '../../../src/activities/friendthreeStrategy/board';
-import { applyBankTrade } from '../../../src/activities/friendthreeStrategy/trade';
+import { applyBankTrade, canBankTrade } from '../../../src/activities/friendthreeStrategy/trade';
 
 describe('friendthree strategy bank trading', () => {
+  it('reports valid bank trades when the player has the required source resources', () => {
+    const state = createInitialMatchState();
+
+    expect(canBankTrade(state, 'recipient', 'wood', 'grain')).toBe(true);
+    expect(canBankTrade(state, 'recipient', 'stone', 'wood')).toBe(true);
+    expect(canBankTrade({
+      ...state,
+      resources: {
+        recipient: { wood: 0, stone: 0, grain: 2 },
+        friendthree: state.resources.friendthree,
+      },
+    }, 'recipient', 'grain', 'wood')).toBe(true);
+  });
+
+  it('rejects bank trades with invalid pairs or insufficient source resources', () => {
+    const state = createInitialMatchState();
+
+    expect(canBankTrade(state, 'recipient', 'wood', 'wood')).toBe(false);
+    expect(canBankTrade(state, 'recipient', 'grain', 'grain')).toBe(false);
+    expect(canBankTrade(state, 'recipient', 'grain', 'wood')).toBe(false);
+    expect(canBankTrade(state, 'friendthree', 'wood', 'grain')).toBe(false);
+  });
+
   it('trades three wood for one chosen resource', () => {
     const state = createInitialMatchState();
 

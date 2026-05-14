@@ -1,5 +1,19 @@
 import type { FriendThreeStrategyState, PlayerId, ResourceCounts, ResourceType } from './types';
 
+export function canBankTrade(
+  state: FriendThreeStrategyState,
+  player: PlayerId,
+  source: ResourceType,
+  target: ResourceType,
+): boolean {
+  if (source === target) {
+    return false;
+  }
+
+  const cost = getTradeCostOrUndefined(source, target);
+  return cost !== undefined && state.resources[player][source] >= cost;
+}
+
 export function applyBankTrade(
   state: FriendThreeStrategyState,
   player: PlayerId,
@@ -40,9 +54,18 @@ export function applyBankTrade(
 }
 
 function getTradeCost(source: ResourceType, target: ResourceType): number {
+  const cost = getTradeCostOrUndefined(source, target);
+  if (cost === undefined) {
+    throw new Error(`Cannot trade ${source} for ${target}`);
+  }
+
+  return cost;
+}
+
+function getTradeCostOrUndefined(source: ResourceType, target: ResourceType): number | undefined {
   if (source === 'grain') {
     if (target !== 'wood' && target !== 'stone') {
-      throw new Error(`Cannot trade ${source} for ${target}`);
+      return undefined;
     }
 
     return 2;

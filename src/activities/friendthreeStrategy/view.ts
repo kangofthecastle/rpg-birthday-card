@@ -1,11 +1,17 @@
 import { BOARD_EDGES, BOARD_HEXES, BOARD_NODES, getNode } from './board';
+import { chooseFriendThreeAction } from './ai';
+import { createSeededRandom } from './rng';
 import {
   buildRoad,
   buildSettlement,
+  endTurn,
   getBuildableEdges,
   getBuildableNodes,
+  getScriptedRoll,
+  rollProduction,
 } from './rules';
 import { scorePlayer } from './scoring';
+import { applyBankTrade, canBankTrade } from './trade';
 import type {
   BoardEdge,
   FriendThreeStrategyState,
@@ -13,6 +19,7 @@ import type {
   NodeId,
   PlayerId,
   ResourceCounts,
+  ResourceType,
 } from './types';
 
 interface FriendThreeStrategyViewCallbacks {
@@ -25,6 +32,14 @@ const PLAYER_LABELS: Record<PlayerId, string> = {
   recipient: '____',
   friendthree: '____',
 };
+const RESOURCE_TYPES = ['wood', 'stone', 'grain'] as const;
+
+type ParsedFriendThreeAction =
+  | { readonly type: 'roll' }
+  | { readonly type: 'end-turn' }
+  | { readonly type: 'build-road'; readonly edgeId: EdgeId }
+  | { readonly type: 'build-settlement'; readonly nodeId: NodeId }
+  | { readonly type: 'trade'; readonly source: ResourceType; readonly target: ResourceType };
 
 export function renderFriendThreeStrategyView(
   mount: HTMLElement,
@@ -65,6 +80,7 @@ function render(
 
   const buildableEdges = new Set(getBuildableEdges(state, 'recipient'));
   const buildableNodes = new Set(getBuildableNodes(state, 'recipient'));
+  const alreadyRolled = hasRolledThisTurn(state);
   const lastAction = state.log.at(-1)?.message ?? '____ studies the opening road from the coast.';
 
   mount.innerHTML = `
@@ -74,7 +90,7 @@ function render(
           <p class="friendthree-tabletop__eyebrow">Tabletop match</p>
           <h2>____ Island</h2>
         </div>
-        <div class="friendthree-tabletop__turn">Turn ${state.turnNumber}</div>
+        <div class="friendthree-tabletop__turn">Turn ${state.turnNumber} · ${PLAYER_LABELS[state.currentPlayer]}</div>
       </header>
 
       <div class="friendthree-tabletop__opponent" aria-label="Opponent">
@@ -132,9 +148,16 @@ function render(
           <div class="friendthree-resource-row" aria-label="____ resources">
             ${renderResourceBadges(state.resources.recipient)}
           </div>
+          <div class="friendthree-resource-compact">____: ${formatCompactResources(state.resources.recipient)}</div>
           <div class="friendthree-log" aria-live="polite">${lastAction}</div>
           <div class="friendthree-actions">
-            <button type="button" data-friendthree-cancel>Return</button>
+            <button type="button" data-friendthree-action="roll" ${state.winner || alreadyRolled ? 'disabled' : ''}>Roll</button>
+            <button type="button" data-friendthree-action="end-turn" ${state.winner ? 'disabled' : ''}>End Turn</button>
+            ${renderTradeButton(state, 'wood', 'grain', 'Wood to grain')}
+            ${renderTradeButton(state, 'stone', 'grain', 'Stone to grain')}
+            ${renderTradeButton(state, 'grain', 'wood', 'Grain to wood')}
+            ${renderTradeButton(state, 'grain', 'stone', 'Grain to stone')}
+            <button type="button" class="friendthree-actions__return" data-friendthree-cancel>Return</button>
           </div>
         </aside>
       </div>
@@ -143,7 +166,7 @@ function render(
 
   for (const button of mount.querySelectorAll<HTMLButtonElement>('[data-friendthree-action]')) {
     button.addEventListener('click', () => {
-      const action = button.dataset.friendthreeAction;
+      const action = parseFriendThreeAction(button.dataset.friendthreeAction);
       if (!action || state.winner || lifecycle.isFinished()) {
         return;
       }
@@ -225,18 +248,126 @@ function renderResourceBadges(resources: ResourceCounts): string {
     .join('');
 }
 
-function applyAction(state: FriendThreeStrategyState, action: string): FriendThreeStrategyState {
-  const [kind, id] = action.split(':') as ['build-road' | 'build-settlement', EdgeId | NodeId];
+function renderTradeButton(
+  state: FriendThreeStrategyState,
+  source: ResourceType,
+  target: ResourceType,
+  label: string,
+): string {
+  return `
+    <button
+      type="button"
+      data-friendthree-action="trade:${source}:${target}"
+      ${canBankTrade(state, 'recipient', source, target) && !state.winner ? '' : 'disabled'}
+    >
+      ${label}
+    </button>
+  `;
+}
 
-  if (kind === 'build-road') {
-    return buildRoad(state, 'recipient', id as EdgeId);
+function applyAction(state: FriendThreeStrategyState, action: ParsedFriendThreeAction): FriendThreeStrategyState {
+  if (action.type === 'roll') {
+    if (hasRolledThisTurn(state)) {
+      return state;
+    }
+
+    return rollProduction(state, getScriptedRoll(state.turnNumber));
   }
 
-  return buildSettlement(state, 'recipient', id as NodeId);
+  if (action.type === 'end-turn') {
+    const afterRecipient = endTurn(state);
+    return resolveFriendThreeTurn(afterRecipient);
+  }
+
+  if (action.type === 'trade') {
+    if (!canBankTrade(state, 'recipient', action.source, action.target)) {
+      return state;
+    }
+
+    return applyBankTrade(state, 'recipient', action.source, action.target);
+  }
+
+  if (action.type === 'build-road') {
+    return buildRoad(state, 'recipient', action.edgeId);
+  }
+
+  return buildSettlement(state, 'recipient', action.nodeId);
+}
+
+function parseFriendThreeAction(action: string | undefined): ParsedFriendThreeAction | undefined {
+  if (action === 'roll') {
+    return { type: 'roll' };
+  }
+
+  if (action === 'end-turn') {
+    return { type: 'end-turn' };
+  }
+
+  const [kind, first, second, extra] = action?.split(':') ?? [];
+  if (extra !== undefined || first === undefined) {
+    return undefined;
+  }
+
+  if (kind === 'build-road' && second === undefined && isEdgeId(first)) {
+    return { type: 'build-road', edgeId: first };
+  }
+
+  if (kind === 'build-settlement' && second === undefined && isNodeId(first)) {
+    return { type: 'build-settlement', nodeId: first };
+  }
+
+  if (kind === 'trade' && second !== undefined && isResourceType(first) && isResourceType(second)) {
+    if (first === second) {
+      return undefined;
+    }
+
+    return { type: 'trade', source: first, target: second };
+  }
+
+  return undefined;
+}
+
+function resolveFriendThreeTurn(state: FriendThreeStrategyState): FriendThreeStrategyState {
+  let nextState = rollProduction(state, getScriptedRoll(state.turnNumber));
+  const action = chooseFriendThreeAction(nextState, createSeededRandom(nextState.turnNumber));
+
+  if (action.type === 'build-road' && getBuildableEdges(nextState, 'friendthree').includes(action.edgeId)) {
+    nextState = buildRoad(nextState, 'friendthree', action.edgeId);
+  }
+
+  if (action.type === 'build-settlement' && getBuildableNodes(nextState, 'friendthree').includes(action.nodeId)) {
+    nextState = buildSettlement(nextState, 'friendthree', action.nodeId);
+  }
+
+  if (action.type === 'trade' && canBankTrade(nextState, 'friendthree', action.from, action.to)) {
+    nextState = applyBankTrade(nextState, 'friendthree', action.from, action.to);
+  }
+
+  return endTurn(nextState);
+}
+
+function hasRolledThisTurn(state: FriendThreeStrategyState): boolean {
+  return state.lastRoll === getScriptedRoll(state.turnNumber);
+}
+
+function isEdgeId(value: string): value is EdgeId {
+  return BOARD_EDGES.some((edge) => edge.id === value);
+}
+
+function isNodeId(value: string): value is NodeId {
+  return BOARD_NODES.some((node) => node.id === value);
+}
+
+function isResourceType(value: string): value is ResourceType {
+  return RESOURCE_TYPES.includes(value as ResourceType);
 }
 
 function formatResources(resources: ResourceCounts): string {
   return `W ${resources.wood} / S ${resources.stone} / G ${resources.grain}`;
+}
+
+function formatCompactResources(resources: ResourceCounts): string {
+  return `W${resources.wood} S${resources.stone} G${resources.grain}`;
 }
 
 function toBoardXPct(value: number): string {

@@ -770,23 +770,44 @@ body {
 }
 
 .friendthree-actions {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
   margin-top: auto;
-  justify-content: flex-end;
 }
 
 .friendthree-actions button {
   min-height: 40px;
-  padding: 0 14px;
-  border: 0;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 240, 197, 0.24);
   background: var(--friendthree-brass);
   color: var(--friendthree-ink);
+  font-size: 12px;
   font-weight: 900;
+  line-height: 1.1;
   cursor: pointer;
 }
 
-.friendthree-actions button:hover {
+.friendthree-actions button:not(:disabled):hover {
   background: #e6c676;
+}
+
+.friendthree-actions button:disabled {
+  background: rgba(255, 240, 197, 0.16);
+  color: rgba(255, 240, 197, 0.46);
+  cursor: default;
+}
+
+.friendthree-actions__return {
+  grid-column: 1 / -1;
+}
+
+.friendthree-resource-compact {
+  margin-top: -6px;
+  color: rgba(255, 240, 197, 0.82);
+  font-size: 13px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
 }
 
 .collection-panel {

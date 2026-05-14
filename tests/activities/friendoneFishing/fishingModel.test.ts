@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CATCH_BAR_HEIGHT,
   FISHING_METER_HEIGHT,
+  FISH_TARGET_HEIGHT,
   FRIEND_ONE_FISH_SEQUENCE,
   createFishingRound,
   getFishingCompletion,
@@ -73,6 +74,22 @@ describe('fishingModel', () => {
     expect(next.progress).toBeGreaterThan(0);
   });
 
+  it('drains progress when an initial overlap separates during the update', () => {
+    const fish = FRIEND_ONE_FISH_SEQUENCE[0];
+    const initial = createFishingRound(fish, {
+      fishY: 200,
+      catchBarY: 226,
+      progress: 0.4,
+    });
+
+    expect(isFishInCatchBar(initial, fish)).toBe(true);
+
+    const next = updateFishingRound(initial, fish, { holdActive: false }, 500);
+
+    expect(isFishInCatchBar(next, fish)).toBe(false);
+    expect(next.progress).toBeLessThan(initial.progress);
+  });
+
   it('reports completion only after progress reaches one', () => {
     const fish = FRIEND_ONE_FISH_SEQUENCE[2];
     const incomplete = createFishingRound(fish, {
@@ -87,5 +104,32 @@ describe('fishingModel', () => {
 
     expect(complete.progress).toBe(1);
     expect(getFishingCompletion(complete)).toBe(true);
+  });
+
+  it('updates large deltas like repeated small steps for direction, burst, and progress timing', () => {
+    const fish = FRIEND_ONE_FISH_SEQUENCE[2];
+    const initial = createFishingRound(fish, {
+      fishY: 160,
+      catchBarY: 134,
+      progress: 0.5,
+    });
+
+    const largeStep = updateFishingRound(initial, fish, { holdActive: false }, 2500);
+    let smallSteps = initial;
+
+    for (let elapsedMs = 0; elapsedMs < 2500; elapsedMs += 50) {
+      smallSteps = updateFishingRound(smallSteps, fish, { holdActive: false }, 50);
+    }
+
+    expect(largeStep.fishY).toBeCloseTo(smallSteps.fishY);
+    expect(largeStep.catchBarY).toBeCloseTo(smallSteps.catchBarY);
+    expect(largeStep.progress).toBeCloseTo(smallSteps.progress);
+    expect(largeStep.fishY).toBeGreaterThan(0);
+    expect(largeStep.fishY).toBeLessThan(FISHING_METER_HEIGHT - FISH_TARGET_HEIGHT);
+    expect(largeStep.fishDirection).toBe(smallSteps.fishDirection);
+    expect(largeStep.elapsedMs).toBe(smallSteps.elapsedMs);
+    expect(largeStep.nextDirectionChangeAtMs).toBe(smallSteps.nextDirectionChangeAtMs);
+    expect(largeStep.nextBurstAtMs).toBe(smallSteps.nextBurstAtMs);
+    expect(largeStep.burstUntilMs).toBe(smallSteps.burstUntilMs);
   });
 });

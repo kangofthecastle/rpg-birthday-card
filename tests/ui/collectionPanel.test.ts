@@ -7,11 +7,11 @@ vi.mock('../../src/content/locations', () => ({
     keepsake: {
       id:
         locationId === 'friend-a'
-          ? 'pressed-flower'
+          ? 'glowing-koi-scale'
           : `${locationId}-keepsake`,
       label:
         locationId === 'friend-a'
-          ? 'Pressed <img src=x onerror=alert(1)> Flower'
+          ? 'Glowing <img src=x onerror=alert(1)> Koi Scale'
           : `${locationId} label`,
       description: '',
       iconAssetId: '',
@@ -24,7 +24,7 @@ describe('renderCollectionPanel', () => {
     const state: RunState = {
       currentLocationId: 'entry',
       completedLocationIds: [],
-      collectedKeepsakeIds: ['pressed-flower'],
+      collectedKeepsakeIds: ['glowing-koi-scale'],
       completedActivityIds: [],
       wonActivityIds: [],
       endingCompleted: false,
@@ -32,7 +32,9 @@ describe('renderCollectionPanel', () => {
 
     const markup = renderCollectionPanel(state);
 
-    expect(markup).toContain('Pressed &lt;img src=x onerror=alert(1)&gt; Flower');
+    expect(markup).toContain(
+      'Glowing &lt;img src=x onerror=alert(1)&gt; Koi Scale',
+    );
     expect(markup).not.toContain('<img src=x');
     expect(markup).toContain('Hidden keepsake');
   });

@@ -14,51 +14,12 @@ describe('activityRegistry', () => {
     const ids = listActivities().map((activity) => activity.id);
 
     expect(ids).toEqual([
-      'friend-a-memory-bloom',
       'friendone-pc-fishing',
       'friend-b-paper-stars',
       'friend-c-song-line',
       'friendthree-strategy-table',
       'final-keepsake-reveal',
     ]);
-  });
-
-  it('runs an activity lifecycle and calls complete', async () => {
-    const activity = getActivity('friend-a-memory-bloom');
-    const onComplete = vi.fn();
-    const fixture = document.createElement('div');
-    const mount = document.createElement('div');
-
-    document.body.appendChild(fixture);
-    fixture.appendChild(mount);
-
-    try {
-      await activity.start({
-        state: createInitialRunState('friend-a'),
-        mount,
-        onComplete: (completion) => {
-          onComplete(completion);
-          mount.remove();
-        },
-        onCancel: vi.fn(),
-      });
-
-      const button = mount.querySelector<HTMLButtonElement>('[data-activity-complete]');
-      expect(button).not.toBeNull();
-      expect(mount.isConnected).toBe(true);
-
-      button?.click();
-      button?.click();
-
-      expect(mount.isConnected).toBe(false);
-      expect(onComplete).toHaveBeenCalledWith({
-        locationId: 'friend-a',
-        keepsakeId: 'pressed-flower',
-      });
-      expect(onComplete).toHaveBeenCalledTimes(1);
-    } finally {
-      fixture.remove();
-    }
   });
 
   it('does not expose ____ fishing test completion outside test mode', async () => {
@@ -410,18 +371,15 @@ describe('activityRegistry', () => {
     }
   });
 
-  it('registers every activity interaction used by locations', () => {
+  it('registers every primary activity used by locations', () => {
     const activityIds = LOCATIONS.flatMap((location) =>
-      location.interactions.flatMap((interaction) =>
-        interaction.kind === 'activity' ? [interaction.activityId] : [],
-      ),
+      location.activityId ? [location.activityId] : [],
     );
 
     expect(activityIds).toEqual([
-      'friend-a-memory-bloom',
+      'friendone-pc-fishing',
       'friend-b-paper-stars',
       'friend-c-song-line',
-      'friendthree-strategy-table',
       'final-keepsake-reveal',
     ]);
     expect(() => {

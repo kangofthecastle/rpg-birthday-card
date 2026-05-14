@@ -772,6 +772,14 @@
           "x": 704,
           "y": 768,
           "point": true
+        },
+        {
+          "id": 5,
+          "name": "near-friendone-pc",
+          "type": "spawn",
+          "x": 800,
+          "y": 416,
+          "point": true
         }
       ]
     },
@@ -798,18 +806,18 @@
       "objects": [
         {
           "id": 3,
-          "name": "friend-a-host",
-          "type": "activity",
-          "x": 640,
+          "name": "friendone-host",
+          "type": "dialogue",
+          "x": 512,
           "y": 384,
           "width": 128,
           "height": 96
         },
         {
           "id": 4,
-          "name": "friend-a-easter-egg",
-          "type": "easterEgg",
-          "x": 960,
+          "name": "friendone-pc",
+          "type": "activity",
+          "x": 768,
           "y": 384,
           "width": 128,
           "height": 96

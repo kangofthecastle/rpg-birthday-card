@@ -32,12 +32,12 @@ describe('runState', () => {
     const state = createInitialRunState('entry');
     const next = completeLocation(state, {
       locationId: 'friend-a',
-      keepsakeId: 'pressed-flower',
+      keepsakeId: 'glowing-koi-scale',
     });
 
     expect(next.completedLocationIds).toEqual(['friend-a']);
-    expect(next.collectedKeepsakeIds).toEqual(['pressed-flower']);
-    expect(hasKeepsake(next, 'pressed-flower')).toBe(true);
+    expect(next.collectedKeepsakeIds).toEqual(['glowing-koi-scale']);
+    expect(hasKeepsake(next, 'glowing-koi-scale')).toBe(true);
     expect(state.completedLocationIds).toEqual([]);
     expect(state.collectedKeepsakeIds).toEqual([]);
   });
@@ -45,21 +45,21 @@ describe('runState', () => {
   it('does not duplicate completed locations or keepsakes', () => {
     const state = completeLocation(createInitialRunState('entry'), {
       locationId: 'friend-a',
-      keepsakeId: 'pressed-flower',
+      keepsakeId: 'glowing-koi-scale',
     });
     const next = completeLocation(state, {
       locationId: 'friend-a',
-      keepsakeId: 'pressed-flower',
+      keepsakeId: 'glowing-koi-scale',
     });
 
     expect(next.completedLocationIds).toEqual(['friend-a']);
-    expect(next.collectedKeepsakeIds).toEqual(['pressed-flower']);
+    expect(next.collectedKeepsakeIds).toEqual(['glowing-koi-scale']);
   });
 
   it('does not grant a new keepsake when replaying a completed location', () => {
     const state = completeLocation(createInitialRunState('entry'), {
       locationId: 'friend-a',
-      keepsakeId: 'pressed-flower',
+      keepsakeId: 'glowing-koi-scale',
     });
     const next = completeLocation(state, {
       locationId: 'friend-a',
@@ -67,7 +67,7 @@ describe('runState', () => {
     });
 
     expect(next.completedLocationIds).toEqual(['friend-a']);
-    expect(next.collectedKeepsakeIds).toEqual(['pressed-flower']);
+    expect(next.collectedKeepsakeIds).toEqual(['glowing-koi-scale']);
     expect(isFinalSpotUnlocked(next)).toBe(false);
   });
 
@@ -117,19 +117,19 @@ describe('runState', () => {
     const state = createInitialRunState('entry');
     const next = applyActivityCompletion(state, {
       locationId: 'friend-a',
-      keepsakeId: 'pressed-flower',
+      keepsakeId: 'glowing-koi-scale',
     });
 
     expect(next.completedLocationIds).toEqual(['friend-a']);
-    expect(next.collectedKeepsakeIds).toEqual(['pressed-flower']);
-    expect(hasKeepsake(next, 'pressed-flower')).toBe(true);
+    expect(next.collectedKeepsakeIds).toEqual(['glowing-koi-scale']);
+    expect(hasKeepsake(next, 'glowing-koi-scale')).toBe(true);
   });
 
   it('unlocks the final spot only after all required keepsakes are collected', () => {
     let state = createInitialRunState('entry');
     state = completeLocation(state, {
       locationId: 'friend-a',
-      keepsakeId: 'pressed-flower',
+      keepsakeId: 'glowing-koi-scale',
     });
     state = completeLocation(state, {
       locationId: 'friend-b',

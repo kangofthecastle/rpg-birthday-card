@@ -1,5 +1,6 @@
 export type LocationKind = 'entry' | 'friend' | 'final';
 export type InteractionKind = 'dialogue' | 'activity' | 'easterEgg' | 'lockedExit';
+export type RewardPresentation = 'dialogue' | 'letter';
 
 export interface DialogueLine {
   readonly speaker?: string;
@@ -49,6 +50,7 @@ export interface LocationDefinition {
   readonly mapUrl: string;
   readonly defaultSpawnId: string;
   readonly activityId?: string;
+  readonly rewardPresentation?: RewardPresentation;
   readonly rewardMessage?: readonly DialogueLine[];
   readonly keepsake?: KeepsakeDefinition;
   readonly exits: readonly LocationExit[];

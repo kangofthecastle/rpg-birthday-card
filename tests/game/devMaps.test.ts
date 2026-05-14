@@ -20,6 +20,7 @@ interface DevMap {
 
 interface TiledObject {
   readonly name: string;
+  readonly type: string;
 }
 
 interface TiledLayer {
@@ -88,6 +89,30 @@ describe('dev maps', () => {
     expect(interactables?.objects).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ name: 'friendthree-strategy-table' }),
+      ]),
+    );
+  });
+
+  it('includes ____ host and PC fishing markers in ____ house', () => {
+    const map = JSON.parse(
+      readFileSync(join(process.cwd(), 'public', 'maps', 'friend-a.tmj'), 'utf8'),
+    ) as DevMap;
+    const spawns = map.layers.find(
+      (layer) => layer.type === 'objectgroup' && layer.name === 'Spawns',
+    );
+    const interactables = map.layers.find(
+      (layer) => layer.type === 'objectgroup' && layer.name === 'Interactables',
+    );
+
+    expect(spawns?.objects).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'near-friendone-pc', type: 'spawn' }),
+      ]),
+    );
+    expect(interactables?.objects).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'friendone-host', type: 'dialogue' }),
+        expect.objectContaining({ name: 'friendone-pc', type: 'activity' }),
       ]),
     );
   });

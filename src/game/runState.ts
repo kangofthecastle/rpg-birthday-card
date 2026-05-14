@@ -1,5 +1,5 @@
 export const REQUIRED_FINAL_KEEPSAKE_IDS = [
-  'pressed-flower',
+  'glowing-koi-scale',
   'paper-star',
   'tiny-key',
 ] as const;

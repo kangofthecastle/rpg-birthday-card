@@ -17,14 +17,37 @@ describe('assetManifest', () => {
       asset.id.startsWith('character-main'),
     );
     const generatedRecipientSheet = ASSET_MANIFEST.find(
-      (asset) => asset.id === 'character-recipient-walk-4dir',
+      (asset) => asset.id === 'character-recipient-walk-8dir',
     );
 
     expect(mainCharacterAssets.map((asset) => asset.label).join(' ')).toContain('____');
     expect(generatedRecipientSheet?.status).toBe('review');
     expect(generatedRecipientSheet?.notes).toContain(
-      'public/assets/sprites/characters/recipient-walk-8dir-v1-alpha.png',
+      'public/assets/sprites/characters/recipient-idle-walk-8dir-v1-alpha.png',
     );
+  });
+
+  it('tracks refreshed companion idle/walk spritesheets', () => {
+    const generatedSheets = new Map(ASSET_MANIFEST.map((asset) => [asset.id, asset]));
+
+    expect(generatedSheets.get('character-friendtwo-walk-4dir')?.notes).toContain(
+      'public/assets/sprites/characters/friendtwo-idle-walk-4dir-v1-alpha.png',
+    );
+    expect(generatedSheets.get('character-friendthree-walk-4dir')?.notes).toContain(
+      'public/assets/sprites/characters/friendthree-idle-walk-4dir-v1-alpha.png',
+    );
+    expect(generatedSheets.get('character-friendone-walk-4dir')?.notes).toContain(
+      'public/assets/sprites/characters/friendone-idle-walk-4dir-v1-alpha.png',
+    );
+  });
+
+  it('tracks ____ fishing activity art and reward assets', () => {
+    const ids = ASSET_MANIFEST.map((asset) => asset.id);
+
+    expect(ids).toContain('portrait-friendone');
+    expect(ids).toContain('keepsake-glowing-koi-scale');
+    expect(ids).toContain('activity-art-friendone-pc-pond');
+    expect(ids).toContain('activity-art-glowing-koi');
   });
 
   it('can list assets for one location', () => {

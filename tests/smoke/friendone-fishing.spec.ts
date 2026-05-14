@@ -18,6 +18,7 @@ test('completes ____ PC fishing activity through test mode', async ({ page }) =>
 
   await expect(page.getByText('____')).toBeVisible();
   await expect(page.getByText('')).toBeVisible();
+  await expect(page.locator('.collection-panel')).not.toContainText('Glowing Koi Scale');
   await page.getByRole('button', { name: 'Continue' }).click();
 
   await expect(page.locator('.collection-panel')).toContainText('Glowing Koi Scale');

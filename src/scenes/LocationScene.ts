@@ -598,7 +598,6 @@ export class LocationScene extends Phaser.Scene {
         }
 
         this.registry.set('runState', this.state);
-        this.refreshCollectionPanel();
 
         if (this.location.rewardMessage && this.location.rewardPresentation === 'letter') {
           await showLetterModal(this.location.rewardMessage);
@@ -606,6 +605,7 @@ export class LocationScene extends Phaser.Scene {
           await this.pauseForDialogue(this.location.rewardMessage);
         }
 
+        this.refreshCollectionPanel();
         this.canMove = true;
       },
     });

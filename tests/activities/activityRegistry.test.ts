@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { getActivity, listActivities } from '../../src/activities/activityRegistry';
 import { createFriendOneFishingActivity } from '../../src/activities/friendoneFishing/friendoneFishingActivity';
+import type { FriendOneFishingSceneCallbacks } from '../../src/activities/friendoneFishing/FriendOneFishingScene';
 import { LOCATIONS } from '../../src/content/locations';
 import { createInitialRunState } from '../../src/game/runState';
 
@@ -143,6 +144,157 @@ describe('activityRegistry', () => {
       expect(destroy).toHaveBeenCalledTimes(1);
     } finally {
       setSearch('');
+      fixture.remove();
+    }
+  });
+
+  it('bridges ____ fishing scene completion exactly once', async () => {
+    let sceneCallbacks: FriendOneFishingSceneCallbacks | undefined;
+    const destroy = vi.fn();
+    const activity = createFriendOneFishingActivity((_parent, callbacks) => {
+      sceneCallbacks = callbacks;
+
+      return {
+        destroy,
+      };
+    });
+    const onComplete = vi.fn();
+    const onCancel = vi.fn();
+    const fixture = document.createElement('div');
+    const mount = document.createElement('div');
+
+    document.body.appendChild(fixture);
+    fixture.appendChild(mount);
+
+    try {
+      await activity.start({
+        state: createInitialRunState('friend-a'),
+        mount,
+        onComplete,
+        onCancel,
+      });
+
+      sceneCallbacks?.onComplete();
+      sceneCallbacks?.onComplete();
+      sceneCallbacks?.onCancel();
+
+      expect(onComplete).toHaveBeenCalledWith({
+        locationId: 'friend-a',
+        keepsakeId: 'glowing-koi-scale',
+      });
+      expect(onComplete).toHaveBeenCalledTimes(1);
+      expect(onCancel).not.toHaveBeenCalled();
+      expect(destroy).toHaveBeenCalledTimes(1);
+    } finally {
+      fixture.remove();
+    }
+  });
+
+  it('ignores late ____ fishing scene callbacks after cancellation', async () => {
+    let sceneCallbacks: FriendOneFishingSceneCallbacks | undefined;
+    const destroy = vi.fn();
+    const activity = createFriendOneFishingActivity((_parent, callbacks) => {
+      sceneCallbacks = callbacks;
+
+      return {
+        destroy,
+      };
+    });
+    const onComplete = vi.fn();
+    const onCancel = vi.fn();
+    const fixture = document.createElement('div');
+    const mount = document.createElement('div');
+
+    document.body.appendChild(fixture);
+    fixture.appendChild(mount);
+
+    try {
+      await activity.start({
+        state: createInitialRunState('friend-a'),
+        mount,
+        onComplete,
+        onCancel,
+      });
+
+      mount
+        .querySelector<HTMLButtonElement>('[data-friendone-fishing-cancel]')
+        ?.click();
+      sceneCallbacks?.onComplete();
+      sceneCallbacks?.onCancel();
+
+      expect(onCancel).toHaveBeenCalledTimes(1);
+      expect(onComplete).not.toHaveBeenCalled();
+      expect(destroy).toHaveBeenCalledTimes(1);
+    } finally {
+      fixture.remove();
+    }
+  });
+
+  it('keeps ____ fishing DOM actions keyboard-accessible', async () => {
+    const destroy = vi.fn();
+    const activity = createFriendOneFishingActivity(() => ({
+      destroy,
+    }));
+    const onCancel = vi.fn();
+    const fixture = document.createElement('div');
+    const mount = document.createElement('div');
+
+    document.body.appendChild(fixture);
+    fixture.appendChild(mount);
+
+    try {
+      await activity.start({
+        state: createInitialRunState('friend-a'),
+        mount,
+        onComplete: vi.fn(),
+        onCancel,
+      });
+
+      const cancelButton = mount.querySelector<HTMLButtonElement>(
+        '[data-friendone-fishing-cancel]',
+      );
+      cancelButton?.focus();
+      cancelButton?.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          bubbles: true,
+          cancelable: true,
+          key: 'Enter',
+        }),
+      );
+
+      expect(onCancel).toHaveBeenCalledTimes(1);
+      expect(destroy).toHaveBeenCalledTimes(1);
+    } finally {
+      fixture.remove();
+    }
+  });
+
+  it('renders ____ fishing with a responsive activity shell', async () => {
+    const activity = createFriendOneFishingActivity(() => ({
+      destroy: vi.fn(),
+    }));
+    const fixture = document.createElement('div');
+    const mount = document.createElement('div');
+
+    document.body.appendChild(fixture);
+    fixture.appendChild(mount);
+
+    try {
+      await activity.start({
+        state: createInitialRunState('friend-a'),
+        mount,
+        onComplete: vi.fn(),
+        onCancel: vi.fn(),
+      });
+
+      const panel = mount.querySelector<HTMLElement>('.activity-panel--friendone-fishing');
+      const gameShell = mount.querySelector<HTMLElement>('.friendone-fishing-game');
+      const host = mount.querySelector<HTMLElement>('[data-friendone-fishing-host]');
+
+      expect(panel).not.toBeNull();
+      expect(gameShell).not.toBeNull();
+      expect(host?.parentElement).toBe(gameShell);
+    } finally {
       fixture.remove();
     }
   });

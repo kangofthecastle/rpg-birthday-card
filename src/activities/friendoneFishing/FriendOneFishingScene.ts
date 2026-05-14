@@ -182,9 +182,13 @@ export class FriendOneFishingScene extends Phaser.Scene {
   }
 
   private createInput(): void {
-    this.spaceKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
-    this.enterKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER);
+    this.spaceKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE, false);
+    this.enterKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER, false);
     this.escapeKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
+    this.input.keyboard?.removeCapture([
+      Phaser.Input.Keyboard.KeyCodes.SPACE,
+      Phaser.Input.Keyboard.KeyCodes.ENTER,
+    ]);
 
     this.input.on('pointerdown', () => {
       this.pointerHeld = true;

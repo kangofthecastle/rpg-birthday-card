@@ -41,6 +41,25 @@ function isTestMode(): boolean {
   return new URL(window.location.href).searchParams.get('testMode') === '1';
 }
 
+function addKeyboardActivation(
+  button: HTMLButtonElement,
+  activate: () => void,
+): void {
+  button.addEventListener(
+    'keydown',
+    (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ' && event.code !== 'Space') {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      activate();
+    },
+    { capture: true },
+  );
+}
+
 export function createFriendOneFishingActivity(
   createFishingGame: CreateFishingGame = createDefaultFishingGame,
 ): ActivityModule {
@@ -51,9 +70,11 @@ export function createFriendOneFishingActivity(
       const testMode = isTestMode();
 
       mount.innerHTML = `
-        <section class="activity-panel" role="dialog" aria-label="____ Fishing">
+        <section class="activity-panel activity-panel--friendone-fishing" role="dialog" aria-label="____ Fishing">
           <h2>____ Fishing</h2>
-          <div data-friendone-fishing-host></div>
+          <div class="friendone-fishing-game">
+            <div class="friendone-fishing-game__host" data-friendone-fishing-host></div>
+          </div>
           <div class="activity-actions">
             <button type="button" data-friendone-fishing-cancel>Cancel</button>
             ${testMode ? '<button type="button" data-friendone-fishing-test-complete>Complete fishing</button>' : ''}
@@ -104,6 +125,7 @@ export function createFriendOneFishingActivity(
       cancelButton.addEventListener('click', cancelFishing, {
         once: true,
       });
+      addKeyboardActivation(cancelButton, cancelFishing);
 
       if (testMode) {
         const completeButton = mount.querySelector<HTMLButtonElement>(
@@ -115,6 +137,7 @@ export function createFriendOneFishingActivity(
         }
 
         completeButton.addEventListener('click', completeFishing);
+        addKeyboardActivation(completeButton, completeFishing);
       }
 
       try {

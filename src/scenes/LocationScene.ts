@@ -36,6 +36,7 @@ import { getPlayerFacingFromScreenMovement, PlayerController } from '../game/pla
 import { renderCollectionPanel } from '../ui/collectionPanel';
 import { showDialogue } from '../ui/dialogueBox';
 import { clearUiRoot, getUiRoot } from '../ui/domRoot';
+import { showLetterModal } from '../ui/letterModal';
 import { SceneKeys } from './sceneKeys';
 
 interface LocationSceneData {
@@ -599,7 +600,9 @@ export class LocationScene extends Phaser.Scene {
         this.registry.set('runState', this.state);
         this.refreshCollectionPanel();
 
-        if (this.location.rewardMessage) {
+        if (this.location.rewardMessage && this.location.rewardPresentation === 'letter') {
+          await showLetterModal(this.location.rewardMessage);
+        } else if (this.location.rewardMessage) {
           await this.pauseForDialogue(this.location.rewardMessage);
         }
 

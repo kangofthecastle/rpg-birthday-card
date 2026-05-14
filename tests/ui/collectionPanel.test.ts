@@ -25,6 +25,8 @@ describe('renderCollectionPanel', () => {
       currentLocationId: 'entry',
       completedLocationIds: [],
       collectedKeepsakeIds: ['pressed-flower'],
+      completedActivityIds: [],
+      wonActivityIds: [],
       endingCompleted: false,
     };
 

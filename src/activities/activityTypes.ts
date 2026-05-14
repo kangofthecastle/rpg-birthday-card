@@ -1,9 +1,9 @@
-import type { CompletionInput, RunState } from '../game/runState';
+import type { ActivityCompletionInput, RunState } from '../game/runState';
 
 export interface ActivityContext {
   readonly state: RunState;
   readonly mount: HTMLElement;
-  readonly onComplete: (completion: CompletionInput) => void;
+  readonly onComplete: (completion: ActivityCompletionInput) => void;
   readonly onCancel: () => void;
 }
 

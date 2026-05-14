@@ -2,10 +2,18 @@ import { describe, expect, it } from 'vitest';
 import {
   createInitialRunState,
   completeLocation,
+  applyActivityCompletion,
+  hasActivityCompleted,
+  hasActivityWon,
   hasKeepsake,
   isFinalSpotUnlocked,
   markEndingCompleted,
 } from '../../src/game/runState';
+import type { ActivityCompletionInput } from '../../src/game/runState';
+
+// @ts-expect-error Activity completions must include either a keepsakeId or activityId.
+const missingCompletionKind = { locationId: 'friend-a' } satisfies ActivityCompletionInput;
+void missingCompletionKind;
 
 describe('runState', () => {
   it('starts with no completed locations or keepsakes', () => {
@@ -14,6 +22,8 @@ describe('runState', () => {
     expect(state.currentLocationId).toBe('entry');
     expect(state.completedLocationIds).toEqual([]);
     expect(state.collectedKeepsakeIds).toEqual([]);
+    expect(state.completedActivityIds).toEqual([]);
+    expect(state.wonActivityIds).toEqual([]);
     expect(isFinalSpotUnlocked(state)).toBe(false);
     expect(state.endingCompleted).toBe(false);
   });
@@ -59,6 +69,60 @@ describe('runState', () => {
     expect(next.completedLocationIds).toEqual(['friend-a']);
     expect(next.collectedKeepsakeIds).toEqual(['pressed-flower']);
     expect(isFinalSpotUnlocked(next)).toBe(false);
+  });
+
+  it('tracks optional activity completion without granting a keepsake', () => {
+    const state = createInitialRunState('entry');
+    const next = applyActivityCompletion(state, {
+      locationId: 'friend-a',
+      activityId: 'tea-service',
+    });
+
+    expect(next.completedActivityIds).toEqual(['tea-service']);
+    expect(hasActivityCompleted(next, 'tea-service')).toBe(true);
+    expect(next.completedLocationIds).toEqual([]);
+    expect(next.collectedKeepsakeIds).toEqual([]);
+  });
+
+  it('tracks optional activity wins separately from keepsake completion', () => {
+    const state = createInitialRunState('entry');
+    const next = applyActivityCompletion(state, {
+      locationId: 'friend-a',
+      activityId: 'tea-service',
+      won: true,
+    });
+
+    expect(next.completedActivityIds).toEqual(['tea-service']);
+    expect(next.wonActivityIds).toEqual(['tea-service']);
+    expect(hasActivityWon(next, 'tea-service')).toBe(true);
+    expect(next.completedLocationIds).toEqual([]);
+    expect(next.collectedKeepsakeIds).toEqual([]);
+  });
+
+  it('tracks activity-only wins passed through completeLocation without granting a keepsake', () => {
+    const state = createInitialRunState('entry');
+    const next = completeLocation(state, {
+      locationId: 'friend-c',
+      activityId: 'friendthree-strategy-table',
+      won: true,
+    });
+
+    expect(next.completedActivityIds).toEqual(['friendthree-strategy-table']);
+    expect(next.wonActivityIds).toEqual(['friendthree-strategy-table']);
+    expect(next.completedLocationIds).toEqual([]);
+    expect(next.collectedKeepsakeIds).toEqual([]);
+  });
+
+  it('still grants a keepsake for existing location completions through the activity completion path', () => {
+    const state = createInitialRunState('entry');
+    const next = applyActivityCompletion(state, {
+      locationId: 'friend-a',
+      keepsakeId: 'pressed-flower',
+    });
+
+    expect(next.completedLocationIds).toEqual(['friend-a']);
+    expect(next.collectedKeepsakeIds).toEqual(['pressed-flower']);
+    expect(hasKeepsake(next, 'pressed-flower')).toBe(true);
   });
 
   it('unlocks the final spot only after all required keepsakes are collected', () => {

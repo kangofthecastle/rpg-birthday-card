@@ -117,6 +117,15 @@ export const ASSET_MANIFEST: readonly GameAsset[] = [
     qaChecks: ['identity consistency', 'dialogue scale readability'],
   },
   {
+    id: 'portrait-friendone',
+    kind: 'portrait',
+    label: '____ dialogue portrait',
+    status: 'planned',
+    locationIds: ['friend-a'],
+    notes: 'Portrait used by ____ house dialogue and reward message.',
+    qaChecks: ['identity consistency', 'dialogue scale readability'],
+  },
+  {
     id: 'portrait-friend-b',
     kind: 'portrait',
     label: 'Friend B portrait',
@@ -169,6 +178,15 @@ export const ASSET_MANIFEST: readonly GameAsset[] = [
     status: 'planned',
     locationIds: ['friend-a', 'final-spot'],
     notes: 'Small keepsake icon used in collection UI and final reveal.',
+    qaChecks: ['small-size readability', 'palette consistency'],
+  },
+  {
+    id: 'keepsake-glowing-koi-scale',
+    kind: 'keepsake',
+    label: 'Glowing koi scale keepsake icon',
+    status: 'planned',
+    locationIds: ['friend-a', 'final-spot'],
+    notes: 'Small keepsake icon used in collection UI and final reveal for ____ PC fishing.',
     qaChecks: ['small-size readability', 'palette consistency'],
   },
   {

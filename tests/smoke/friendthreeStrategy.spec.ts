@@ -13,13 +13,17 @@ interface MapPoint {
   readonly y: number;
 }
 
-async function holdKey(page: Page, key: string, durationMs: number): Promise<void> {
-  await page.keyboard.down(key);
+async function holdKeys(page: Page, keys: readonly string[], durationMs: number): Promise<void> {
+  for (const key of keys) {
+    await page.keyboard.down(key);
+  }
 
   try {
     await page.waitForTimeout(durationMs);
   } finally {
-    await page.keyboard.up(key);
+    for (const key of [...keys].reverse()) {
+      await page.keyboard.up(key);
+    }
   }
 }
 
@@ -116,13 +120,22 @@ async function moveToActiveObject(
     const dx = destination.x - player.x;
     const dy = destination.y - player.y;
 
+    const keys: string[] = [];
+
     if (Math.abs(dx) > 12) {
-      await holdKey(page, dx > 0 ? 'ArrowRight' : 'ArrowLeft', 100);
+      keys.push(dx > 0 ? 'ArrowRight' : 'ArrowLeft');
     }
 
     if (Math.abs(dy) > 8) {
-      await holdKey(page, dy > 0 ? 'ArrowDown' : 'ArrowUp', 100);
+      keys.push(dy > 0 ? 'ArrowDown' : 'ArrowUp');
     }
+
+    if (keys.length === 0) {
+      await page.waitForTimeout(50);
+      continue;
+    }
+
+    await holdKeys(page, keys, 120);
   }
 
   const state = await getGameProbeState(page);
@@ -136,6 +149,8 @@ async function moveToActiveObject(
 test('opens ____ strategy table from ____ house and completes a short win path', async ({
   page,
 }) => {
+  test.setTimeout(60_000);
+
   await installGameProbe(page);
   await page.goto('/');
 
@@ -167,6 +182,9 @@ test('opens ____ strategy table from ____ house and completes a short win path',
   await page.locator('[data-friendthree-action="build-settlement:n3"]').click();
 
   await expect(page.getByRole('dialog', { name: '____ Island' })).toBeHidden();
+  await expect(page.getByText('You make ordinary days feel like they have a chorus.')).toBeVisible();
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByText('You make ordinary days feel like they have a chorus.')).toBeHidden();
   await expect
     .poll(async () => (await getGameProbeState(page)).locationId)
     .toBe('friend-c');

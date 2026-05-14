@@ -417,9 +417,9 @@ body {
 .activity-panel--friendone-fishing {
   display: flex;
   flex-direction: column;
-  width: min(920px, calc(100vw - 12px));
-  max-height: calc(100vh - 12px);
-  padding: clamp(10px, 2vw, 24px);
+  width: min(1120px, calc(100vw - 4px));
+  max-height: calc(100vh - 4px);
+  padding: clamp(8px, 1.4vw, 20px);
   overflow: auto;
 }
 
@@ -437,7 +437,7 @@ body {
   flex: 1 1 auto;
   width: 100%;
   min-height: 180px;
-  max-height: min(520px, calc(100vh - 132px));
+  max-height: min(640px, calc(100vh - 112px));
   aspect-ratio: 16 / 9;
   place-items: stretch;
   overflow: hidden;

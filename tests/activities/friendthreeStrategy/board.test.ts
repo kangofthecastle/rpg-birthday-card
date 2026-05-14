@@ -25,6 +25,119 @@ describe('friendthree strategy board', () => {
     expect(() => validateBoard()).not.toThrow();
   });
 
+  it('rejects duplicate hex ids', () => {
+    expect(() =>
+      validateBoard({
+        hexes: [{ ...BOARD_HEXES[0] }, { ...BOARD_HEXES[0] }],
+        nodes: BOARD_NODES,
+        edges: BOARD_EDGES,
+      }),
+    ).toThrow('Duplicate hex id h0');
+  });
+
+  it('rejects duplicate node ids', () => {
+    expect(() =>
+      validateBoard({
+        hexes: BOARD_HEXES,
+        nodes: [{ ...BOARD_NODES[0] }, { ...BOARD_NODES[0] }],
+        edges: BOARD_EDGES,
+      }),
+    ).toThrow('Duplicate node id n0');
+  });
+
+  it('rejects duplicate edge ids', () => {
+    expect(() =>
+      validateBoard({
+        hexes: BOARD_HEXES,
+        nodes: BOARD_NODES,
+        edges: [{ ...BOARD_EDGES[0] }, { ...BOARD_EDGES[0] }],
+      }),
+    ).toThrow('Duplicate edge id e0');
+  });
+
+  it('rejects hexes that reference missing nodes', () => {
+    expect(() =>
+      validateBoard({
+        hexes: [{ ...BOARD_HEXES[0], nodeIds: ['n999'] }],
+        nodes: BOARD_NODES,
+        edges: BOARD_EDGES,
+      }),
+    ).toThrow('Hex h0 references missing node n999');
+  });
+
+  it('rejects duplicate node ids within a hex', () => {
+    expect(() =>
+      validateBoard({
+        hexes: [{ ...BOARD_HEXES[0], nodeIds: ['n0', 'n0'] }],
+        nodes: [{ ...BOARD_NODES[0], hexIds: ['h0'] }],
+        edges: [],
+      }),
+    ).toThrow('Hex h0 lists node n0 more than once');
+  });
+
+  it('rejects nodes that reference missing hexes', () => {
+    expect(() =>
+      validateBoard({
+        hexes: [],
+        nodes: [{ ...BOARD_NODES[0], hexIds: ['h999'] }],
+        edges: [],
+      }),
+    ).toThrow('Node n0 references missing hex h999');
+  });
+
+  it('rejects duplicate hex ids within a node', () => {
+    expect(() =>
+      validateBoard({
+        hexes: [{ ...BOARD_HEXES[0], nodeIds: ['n0'] }],
+        nodes: [{ ...BOARD_NODES[0], hexIds: ['h0', 'h0'] }],
+        edges: [],
+      }),
+    ).toThrow('Node n0 lists hex h0 more than once');
+  });
+
+  it('rejects hex membership that is not mirrored by the node', () => {
+    expect(() =>
+      validateBoard({
+        hexes: [{ ...BOARD_HEXES[0], nodeIds: ['n1'] }],
+        nodes: [{ ...BOARD_NODES[1], hexIds: [] }],
+        edges: [],
+      }),
+    ).toThrow('Node n1 does not reference hex h0');
+  });
+
+  it('rejects node membership that is not mirrored by the hex', () => {
+    expect(() =>
+      validateBoard({
+        hexes: [{ ...BOARD_HEXES[1], nodeIds: ['n1', 'n2'] }],
+        nodes: [{ ...BOARD_NODES[0], hexIds: ['h1'] }, BOARD_NODES[1], BOARD_NODES[2]],
+        edges: [],
+      }),
+    ).toThrow('Hex h1 does not reference node n0');
+  });
+
+  it('rejects edge self-loops', () => {
+    expect(() =>
+      validateBoard({
+        hexes: BOARD_HEXES,
+        nodes: BOARD_NODES,
+        edges: [{ ...BOARD_EDGES[0], nodeIds: ['n0', 'n0'] }],
+      }),
+    ).toThrow('Edge e0 cannot connect node n0 to itself');
+  });
+
+  it('rejects duplicate physical node-pair edges', () => {
+    expect(() =>
+      validateBoard({
+        hexes: BOARD_HEXES,
+        nodes: BOARD_NODES,
+        edges: [
+          { ...BOARD_EDGES[0], id: 'e0', nodeIds: ['n0', 'n1'] },
+          { ...BOARD_EDGES[1], id: 'e1', nodeIds: ['n1', 'n0'] },
+        ],
+      }),
+    ).toThrow('Duplicate edge between n0 and n1');
+  });
+
   it('starts ____ and ____ on opposite sides with ____ slightly advantaged', () => {
     const state = createInitialMatchState();
 

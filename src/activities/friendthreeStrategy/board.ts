@@ -59,6 +59,12 @@ export const BOARD_EDGES: readonly BoardEdge[] = [
   edge('e20', 'n10', 'n11'),
 ];
 
+interface BoardDefinition {
+  readonly hexes: readonly BoardHex[];
+  readonly nodes: readonly BoardNode[];
+  readonly edges: readonly BoardEdge[];
+}
+
 export function createInitialMatchState(): FriendThreeStrategyState {
   return {
     turnNumber: 1,
@@ -76,32 +82,79 @@ export function createInitialMatchState(): FriendThreeStrategyState {
   };
 }
 
-export function validateBoard(): void {
-  const nodeIds = new Set<NodeId>(BOARD_NODES.map((node) => node.id));
-  const hexIds = new Set<HexId>(BOARD_HEXES.map((hex) => hex.id));
+export function validateBoard(
+  board: BoardDefinition = {
+    hexes: BOARD_HEXES,
+    nodes: BOARD_NODES,
+    edges: BOARD_EDGES,
+  },
+): void {
+  const hexIds = collectUniqueIds(board.hexes, 'hex');
+  const nodeIds = collectUniqueIds(board.nodes, 'node');
+  collectUniqueIds(board.edges, 'edge');
 
-  for (const hex of BOARD_HEXES) {
+  const hexesById = new Map<HexId, BoardHex>(board.hexes.map((hex) => [hex.id, hex]));
+  const nodesById = new Map<NodeId, BoardNode>(board.nodes.map((node) => [node.id, node]));
+
+  for (const hex of board.hexes) {
+    const listedNodeIds = new Set<NodeId>();
+
     for (const nodeId of hex.nodeIds) {
+      if (listedNodeIds.has(nodeId)) {
+        throw new Error(`Hex ${hex.id} lists node ${nodeId} more than once`);
+      }
+      listedNodeIds.add(nodeId);
+
       if (!nodeIds.has(nodeId)) {
         throw new Error(`Hex ${hex.id} references missing node ${nodeId}`);
       }
-    }
-  }
 
-  for (const node of BOARD_NODES) {
-    for (const hexId of node.hexIds) {
-      if (!hexIds.has(hexId)) {
-        throw new Error(`Node ${node.id} references missing hex ${hexId}`);
+      const node = nodesById.get(nodeId);
+      if (!node?.hexIds.includes(hex.id)) {
+        throw new Error(`Node ${nodeId} does not reference hex ${hex.id}`);
       }
     }
   }
 
-  for (const boardEdge of BOARD_EDGES) {
+  for (const node of board.nodes) {
+    const listedHexIds = new Set<HexId>();
+
+    for (const hexId of node.hexIds) {
+      if (listedHexIds.has(hexId)) {
+        throw new Error(`Node ${node.id} lists hex ${hexId} more than once`);
+      }
+      listedHexIds.add(hexId);
+
+      if (!hexIds.has(hexId)) {
+        throw new Error(`Node ${node.id} references missing hex ${hexId}`);
+      }
+
+      const hex = hexesById.get(hexId);
+      if (!hex?.nodeIds.includes(node.id)) {
+        throw new Error(`Hex ${hexId} does not reference node ${node.id}`);
+      }
+    }
+  }
+
+  const edgePairs = new Set<string>();
+  for (const boardEdge of board.edges) {
+    const [a, b] = boardEdge.nodeIds;
+
+    if (a === b) {
+      throw new Error(`Edge ${boardEdge.id} cannot connect node ${a} to itself`);
+    }
+
     for (const nodeId of boardEdge.nodeIds) {
       if (!nodeIds.has(nodeId)) {
         throw new Error(`Edge ${boardEdge.id} references missing node ${nodeId}`);
       }
     }
+
+    const edgePair = [a, b].sort().join(':');
+    if (edgePairs.has(edgePair)) {
+      throw new Error(`Duplicate edge between ${edgePair.replace(':', ' and ')}`);
+    }
+    edgePairs.add(edgePair);
   }
 }
 
@@ -123,4 +176,20 @@ export function getNode(nodeId: NodeId): BoardNode {
 
 function edge(id: EdgeId, a: NodeId, b: NodeId): BoardEdge {
   return { id, nodeIds: [a, b] };
+}
+
+function collectUniqueIds<T extends { readonly id: string }>(
+  items: readonly T[],
+  label: string,
+): Set<T['id']> {
+  const ids = new Set<T['id']>();
+
+  for (const item of items) {
+    if (ids.has(item.id)) {
+      throw new Error(`Duplicate ${label} id ${item.id}`);
+    }
+    ids.add(item.id);
+  }
+
+  return ids;
 }

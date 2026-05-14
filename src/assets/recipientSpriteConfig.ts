@@ -20,8 +20,8 @@ export const PLAYER_FACINGS: readonly PlayerFacing[] = [
 ];
 
 export const RECIPIENT_SPRITE = {
-  key: 'recipient-walk-4dir',
-  url: '/assets/sprites/characters/recipient-walk-4dir-v13-alpha.png',
+  key: 'recipient-walk-8dir',
+  url: '/assets/sprites/characters/recipient-walk-8dir-v1-alpha.png',
   frameWidth: 256,
   frameHeight: 256,
   scale: 0.45,
@@ -31,17 +31,15 @@ export const RECIPIENT_SPRITE = {
   idleBobDurationMs: 900,
 } as const;
 
-// Logical 8-way facing order. The current ____ sheet has four rows, so diagonal
-// facings intentionally reuse the nearest side row until an 8-row sheet replaces it.
 export const RECIPIENT_ROW_START_FRAME: Record<PlayerFacing, number> = {
   down: 0,
   'down-left': 8,
-  left: 8,
-  'up-left': 8,
-  up: 24,
-  'up-right': 16,
-  right: 16,
-  'down-right': 16,
+  left: 16,
+  'up-left': 24,
+  up: 32,
+  'up-right': 40,
+  right: 48,
+  'down-right': 56,
 };
 
 export const RECIPIENT_WALK_FRAME_COUNTS: Record<PlayerFacing, number> = {

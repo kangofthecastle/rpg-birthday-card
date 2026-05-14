@@ -66,8 +66,8 @@ export const ASSET_MANIFEST: readonly GameAsset[] = [
     status: 'review',
     locationIds: ['global'],
     notes:
-      'Saved at public/assets/sprites/characters/recipient-walk-4dir-v13-alpha.png. This is the single active review/prototype 4-direction pass with eight vertical walk frames, an eight-frame side-walk cycle, neutral feet-together idle frames, and a small muted olive backpack instead of a tote; final main character target remains 8-direction movement.',
-    qaChecks: ['4x8 layout', 'transparent background', 'identity consistency', 'anchor consistency'],
+      'Saved at public/assets/sprites/characters/recipient-walk-8dir-v1-alpha.png. This is the single active review/prototype 8-direction pass with eight frames per direction, calmer walk cycles, separate diagonal rows, neutral feet-together idle frames, and a small muted olive backpack instead of a tote.',
+    qaChecks: ['8x8 layout', 'transparent background', 'identity consistency', 'anchor consistency'],
   },
   {
     id: 'character-friendone-walk-4dir',

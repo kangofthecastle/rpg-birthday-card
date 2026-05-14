@@ -16,7 +16,7 @@ describe('recipientSpriteConfig', () => {
   it('anchors ____ at her feet inside normalized sprite cells', () => {
     expect(RECIPIENT_SPRITE.frameWidth).toBe(256);
     expect(RECIPIENT_SPRITE.frameHeight).toBe(256);
-    expect(RECIPIENT_SPRITE.url).toBe('/assets/sprites/characters/recipient-walk-4dir-v13-alpha.png');
+    expect(RECIPIENT_SPRITE.url).toBe('/assets/sprites/characters/recipient-walk-8dir-v1-alpha.png');
     expect(RECIPIENT_SPRITE.origin).toEqual({ x: 0.5, y: 1 });
   });
 
@@ -34,12 +34,12 @@ describe('recipientSpriteConfig', () => {
     expect(RECIPIENT_ROW_START_FRAME).toEqual({
       down: 0,
       'down-left': 8,
-      left: 8,
-      'up-left': 8,
-      up: 24,
-      'up-right': 16,
-      right: 16,
-      'down-right': 16,
+      left: 16,
+      'up-left': 24,
+      up: 32,
+      'up-right': 40,
+      right: 48,
+      'down-right': 56,
     });
   });
 

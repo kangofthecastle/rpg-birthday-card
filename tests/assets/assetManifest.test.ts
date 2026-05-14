@@ -23,7 +23,7 @@ describe('assetManifest', () => {
     expect(mainCharacterAssets.map((asset) => asset.label).join(' ')).toContain('____');
     expect(generatedRecipientSheet?.status).toBe('review');
     expect(generatedRecipientSheet?.notes).toContain(
-      'public/assets/sprites/characters/recipient-walk-4dir-v13-alpha.png',
+      'public/assets/sprites/characters/recipient-walk-8dir-v1-alpha.png',
     );
   });
 

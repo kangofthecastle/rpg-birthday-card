@@ -4,12 +4,15 @@ import {
   BOARD_HEXES,
   BOARD_NODES,
   createInitialMatchState,
+  getEdge,
+  getNode,
   validateBoard,
 } from '../../../src/activities/friendthreeStrategy/board';
 
 describe('friendthree strategy board', () => {
   it('defines a compact board with three resources', () => {
     expect(BOARD_HEXES).toHaveLength(7);
+    expect(BOARD_HEXES.map((hex) => hex.id)).toEqual(['h0', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']);
     expect(new Set(BOARD_HEXES.map((hex) => hex.resource))).toEqual(
       new Set(['wood', 'stone', 'grain']),
     );
@@ -39,5 +42,49 @@ describe('friendthree strategy board', () => {
   it('defines nodes and edges for road placement', () => {
     expect(BOARD_NODES.length).toBeGreaterThanOrEqual(12);
     expect(BOARD_EDGES.length).toBeGreaterThanOrEqual(18);
+    expect(BOARD_NODES.map((node) => node.id)).toEqual([
+      'n0',
+      'n1',
+      'n2',
+      'n3',
+      'n4',
+      'n5',
+      'n6',
+      'n7',
+      'n8',
+      'n9',
+      'n10',
+      'n11',
+    ]);
+    expect(BOARD_EDGES.map((edge) => edge.id)).toEqual([
+      'e0',
+      'e1',
+      'e2',
+      'e3',
+      'e4',
+      'e5',
+      'e6',
+      'e7',
+      'e8',
+      'e9',
+      'e10',
+      'e11',
+      'e12',
+      'e13',
+      'e14',
+      'e15',
+      'e16',
+      'e17',
+      'e18',
+      'e19',
+      'e20',
+    ]);
+  });
+
+  it('looks up board nodes and edges by id', () => {
+    expect(getEdge('e0').nodeIds).toEqual(['n0', 'n1']);
+    expect(getNode('n0').hexIds).toEqual(['h0']);
+    expect(() => getEdge('e999' as any)).toThrow('Unknown edge e999');
+    expect(() => getNode('n999' as any)).toThrow('Unknown node n999');
   });
 });

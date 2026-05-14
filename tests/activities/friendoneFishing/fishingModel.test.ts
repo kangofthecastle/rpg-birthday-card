@@ -132,4 +132,18 @@ describe('fishingModel', () => {
     expect(largeStep.nextBurstAtMs).toBe(smallSteps.nextBurstAtMs);
     expect(largeStep.burstUntilMs).toBe(smallSteps.burstUntilMs);
   });
+
+  it('uses burst movement for the glowing koi', () => {
+    const koi = FRIEND_ONE_FISH_SEQUENCE[2];
+    const initial = createFishingRound(koi, {
+      fishY: 160,
+      catchBarY: 160,
+      fishDirection: 1,
+    });
+
+    const beforeBurst = updateFishingRound(initial, koi, { holdActive: false }, koi.burstEveryMs - 50);
+    const duringBurst = updateFishingRound(beforeBurst, koi, { holdActive: false }, 100);
+
+    expect(duringBurst.burstUntilMs).toBeGreaterThan(duringBurst.elapsedMs);
+  });
 });

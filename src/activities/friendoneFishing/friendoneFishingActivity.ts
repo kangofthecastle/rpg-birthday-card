@@ -1,4 +1,5 @@
 import type { ActivityModule } from '../activityTypes';
+import type { FriendOneFishingSceneCallbacks } from './FriendOneFishingScene';
 
 interface FishingGameHandle {
   destroy(): void;
@@ -6,10 +7,12 @@ interface FishingGameHandle {
 
 type CreateFishingGame = (
   parent: HTMLElement,
+  callbacks: FriendOneFishingSceneCallbacks,
 ) => FishingGameHandle | Promise<FishingGameHandle>;
 
 async function createDefaultFishingGame(
   parent: HTMLElement,
+  callbacks: FriendOneFishingSceneCallbacks,
 ): Promise<FishingGameHandle> {
   const [Phaser, { FriendOneFishingScene }] = await Promise.all([
     import('phaser'),
@@ -24,7 +27,7 @@ async function createDefaultFishingGame(
       autoCenter: Phaser.Scale.CENTER_BOTH,
       mode: Phaser.Scale.FIT,
     },
-    scene: FriendOneFishingScene,
+    scene: new FriendOneFishingScene(callbacks),
     type: Phaser.AUTO,
     width: 640,
   });
@@ -85,7 +88,20 @@ export function createFriendOneFishingActivity(
         callback();
       };
 
-      cancelButton.addEventListener('click', () => finish(onCancel), {
+      const completeFishing = (): void =>
+        finish(() =>
+          onComplete({
+            locationId: 'friend-a',
+            keepsakeId: 'glowing-koi-scale',
+          }),
+        );
+      const cancelFishing = (): void => finish(onCancel);
+      const sceneCallbacks: FriendOneFishingSceneCallbacks = {
+        onComplete: completeFishing,
+        onCancel: cancelFishing,
+      };
+
+      cancelButton.addEventListener('click', cancelFishing, {
         once: true,
       });
 
@@ -98,18 +114,11 @@ export function createFriendOneFishingActivity(
           throw new Error('Unable to mount ____ Fishing activity.');
         }
 
-        completeButton.addEventListener('click', () =>
-          finish(() =>
-            onComplete({
-              locationId: 'friend-a',
-              keepsakeId: 'glowing-koi-scale',
-            }),
-          ),
-        );
+        completeButton.addEventListener('click', completeFishing);
       }
 
       try {
-        const createdGame = await createFishingGame(host);
+        const createdGame = await createFishingGame(host, sceneCallbacks);
 
         if (finished) {
           createdGame.destroy();
@@ -118,7 +127,7 @@ export function createFriendOneFishingActivity(
 
         game = createdGame;
       } catch {
-        finish(onCancel);
+        cancelFishing();
       }
     },
   };

@@ -26,9 +26,15 @@ export class BootScene extends Phaser.Scene {
 
   create(): void {
     createTempTextures(this);
+
+    const params = new URLSearchParams(window.location.search);
+    const testMode = params.get('testMode') === '1';
+    const locationId = testMode ? params.get('locationId') ?? 'entry' : 'entry';
+    const spawnId = testMode ? params.get('spawnId') ?? 'start' : 'start';
+
     this.scene.start(SceneKeys.Location, {
-      locationId: 'entry',
-      spawnId: 'start',
+      locationId,
+      spawnId,
     });
   }
 }

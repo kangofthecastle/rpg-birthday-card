@@ -30,6 +30,8 @@ const PROGRESS_X = 586;
 const PROGRESS_WIDTH = 16;
 const COMPLETION_DELAY_MS = 900;
 const NEXT_FISH_DELAY_MS = 850;
+const POND_BACKGROUND_KEY = 'friendone-fishing-pond-dock';
+const POND_BACKGROUND_URL = '/assets/activities/friendone-fishing/pond-dock-v2.png';
 
 export class FriendOneFishingScene extends Phaser.Scene {
   private readonly callbacks: FriendOneFishingSceneCallbacks;
@@ -43,7 +45,6 @@ export class FriendOneFishingScene extends Phaser.Scene {
   private spaceKey?: Phaser.Input.Keyboard.Key;
   private enterKey?: Phaser.Input.Keyboard.Key;
   private escapeKey?: Phaser.Input.Keyboard.Key;
-  private staticGraphics!: Phaser.GameObjects.Graphics;
   private motionGraphics!: Phaser.GameObjects.Graphics;
   private meterGraphics!: Phaser.GameObjects.Graphics;
   private fishNameText!: Phaser.GameObjects.Text;
@@ -56,13 +57,16 @@ export class FriendOneFishingScene extends Phaser.Scene {
     this.callbacks = callbacks;
   }
 
+  preload(): void {
+    this.load.image(POND_BACKGROUND_KEY, POND_BACKGROUND_URL);
+  }
+
   create(): void {
     this.cameras.main.setBackgroundColor('#18333b');
-    this.staticGraphics = this.add.graphics();
+    this.createPondScene();
     this.motionGraphics = this.add.graphics();
     this.meterGraphics = this.add.graphics();
 
-    this.createPondScene();
     this.createHud();
     this.createInput();
     this.updateHudText();
@@ -103,53 +107,11 @@ export class FriendOneFishingScene extends Phaser.Scene {
   }
 
   private createPondScene(): void {
-    const graphics = this.staticGraphics;
-
-    graphics.fillStyle(0x203f3a, 1);
-    graphics.fillRect(0, 0, 640, 360);
-
-    graphics.fillStyle(0x34533f, 1);
-    graphics.fillEllipse(214, 268, 520, 180);
-    graphics.fillStyle(0x224f5a, 1);
-    graphics.fillEllipse(270, 216, 430, 188);
-    graphics.fillStyle(0x2f7581, 0.72);
-    graphics.fillEllipse(276, 206, 364, 132);
-    graphics.fillStyle(0x8fd1ba, 0.18);
-    graphics.fillEllipse(228, 184, 150, 38);
-    graphics.fillEllipse(344, 222, 122, 30);
-
-    graphics.fillStyle(0x7b5b3a, 1);
-    graphics.fillRoundedRect(104, 230, 240, 34, 6);
-    graphics.fillStyle(0x9a7248, 1);
-    for (let x = 112; x <= 320; x += 44) {
-      graphics.fillRoundedRect(x, 226, 34, 42, 4);
-    }
-    graphics.lineStyle(2, 0x5d422b, 0.9);
-    graphics.lineBetween(112, 244, 336, 244);
-
-    this.drawReeds(graphics, 50, 216);
-    this.drawReeds(graphics, 430, 214);
-    this.drawLilyPad(graphics, 316, 184, 0.92);
-    this.drawLilyPad(graphics, 386, 230, 0.72);
-    this.drawLilyPad(graphics, 196, 214, 0.62);
-
-    this.drawCharacter(graphics, 158, 214, 0x6b4535, 0xf1b36d, 'You');
-    this.drawCharacter(graphics, 248, 214, 0x39353f, 0xf0d06a, '____');
-
+    this.textures.get(POND_BACKGROUND_KEY).setFilter(Phaser.Textures.FilterMode.NEAREST);
     this.add
-      .text(158, 276, 'You', {
-        color: '#f8eed8',
-        fontFamily: 'Arial, sans-serif',
-        fontSize: '13px',
-      })
-      .setOrigin(0.5);
-    this.add
-      .text(248, 276, '____', {
-        color: '#f8eed8',
-        fontFamily: 'Arial, sans-serif',
-        fontSize: '13px',
-      })
-      .setOrigin(0.5);
+      .image(0, 0, POND_BACKGROUND_KEY)
+      .setOrigin(0)
+      .setDisplaySize(640, 360);
   }
 
   private createHud(): void {
@@ -157,16 +119,22 @@ export class FriendOneFishingScene extends Phaser.Scene {
       color: '#fff4d7',
       fontFamily: 'Arial, sans-serif',
       fontSize: '20px',
+      stroke: '#14262a',
+      strokeThickness: 4,
     });
     this.counterText = this.add.text(500, 18, '', {
       color: '#fff4d7',
       fontFamily: 'Arial, sans-serif',
       fontSize: '16px',
+      stroke: '#14262a',
+      strokeThickness: 4,
     });
     this.helperText = this.add.text(24, 318, '', {
       color: '#eef8e9',
       fontFamily: 'Arial, sans-serif',
       fontSize: '15px',
+      stroke: '#14262a',
+      strokeThickness: 4,
       wordWrap: { width: 440 },
     });
     this.transitionText = this.add
@@ -239,38 +207,84 @@ export class FriendOneFishingScene extends Phaser.Scene {
 
   private drawDynamicElements(time: number, holdActive: boolean): void {
     this.motionGraphics.clear();
+    this.drawWaterShimmer(time);
     this.drawFishingLines(time, holdActive);
     this.drawPondFish(time);
     this.drawMeter(time);
   }
 
+  private drawWaterShimmer(time: number): void {
+    const shimmerPhase = (time / 42) % 34;
+
+    this.motionGraphics.lineStyle(2, 0x9fe9ff, 0.12);
+    for (let index = 0; index < 9; index += 1) {
+      const x = 286 + index * 34 - shimmerPhase;
+      const y = 196 + Math.sin(time / 520 + index) * 18 + index * 13;
+      this.motionGraphics.lineBetween(x, y, x + 18, y - 3);
+    }
+  }
+
   private drawFishingLines(time: number, holdActive: boolean): void {
     const bob = Math.sin(time / 340) * 4;
-    const playerBobberY = 168 + bob;
-    const friendoneBobberY = 192 - bob * 0.5;
+    const playerBobber = {
+      x: 202,
+      y: 246 + bob,
+    };
+    const friendoneBobber = {
+      x: 265,
+      y: 248 - bob * 0.5,
+    };
     const lineColor = holdActive ? 0xfff2b0 : 0xe7d7a8;
 
-    this.motionGraphics.lineStyle(2, 0x5b3d27, 1);
-    this.motionGraphics.lineBetween(174, 218, 304, playerBobberY);
-    this.motionGraphics.lineBetween(264, 218, 372, friendoneBobberY);
-    this.motionGraphics.lineStyle(1, lineColor, 0.9);
-    this.motionGraphics.lineBetween(304, playerBobberY, 314, playerBobberY + 28);
-    this.motionGraphics.lineBetween(372, friendoneBobberY, 378, friendoneBobberY + 24);
-    this.motionGraphics.fillStyle(0xfff0a7, 1);
-    this.motionGraphics.fillCircle(304, playerBobberY, 4);
-    this.motionGraphics.fillStyle(0xf1a6a6, 1);
-    this.motionGraphics.fillCircle(372, friendoneBobberY, 4);
+    this.drawBobberRipple(playerBobber.x, playerBobber.y, time);
+    this.drawBobberRipple(friendoneBobber.x, friendoneBobber.y, time + 220);
+
+    this.motionGraphics.lineStyle(2, 0x4a2b18, 0.86);
+    this.motionGraphics.lineBetween(180, 142, playerBobber.x, playerBobber.y);
+    this.motionGraphics.lineBetween(264, 135, friendoneBobber.x, friendoneBobber.y);
+    this.motionGraphics.lineStyle(1, lineColor, 0.96);
+    this.motionGraphics.lineBetween(180, 141, playerBobber.x, playerBobber.y);
+    this.motionGraphics.lineBetween(264, 134, friendoneBobber.x, friendoneBobber.y);
+
+    this.drawLiveBobber(playerBobber.x, playerBobber.y, holdActive, 0xc94c32);
+    this.drawLiveBobber(friendoneBobber.x, friendoneBobber.y, false, 0xf2d0d0);
+  }
+
+  private drawBobberRipple(x: number, y: number, time: number): void {
+    const pulse = (time / 260) % 1;
+    const radius = 8 + pulse * 13;
+
+    this.motionGraphics.lineStyle(2, 0xdffbff, 0.45 * (1 - pulse));
+    this.motionGraphics.strokeEllipse(x, y + 2, radius * 1.5, radius * 0.64);
+    this.motionGraphics.lineStyle(1, 0x7bd8ef, 0.28 * (1 - pulse));
+    this.motionGraphics.strokeEllipse(x, y + 2, radius * 2.1, radius * 0.9);
+  }
+
+  private drawLiveBobber(
+    x: number,
+    y: number,
+    holdActive: boolean,
+    capColor: number,
+  ): void {
+    this.motionGraphics.fillStyle(0xf8f3df, 1);
+    this.motionGraphics.fillCircle(x, y, holdActive ? 5 : 4);
+    this.motionGraphics.fillStyle(capColor, 1);
+    this.motionGraphics.fillCircle(x, y - 2, holdActive ? 4 : 3);
+    this.motionGraphics.lineStyle(1, 0x2d2c2b, 0.8);
+    this.motionGraphics.strokeCircle(x, y, holdActive ? 5 : 4);
   }
 
   private drawPondFish(time: number): void {
     const fish = this.currentFish;
-    const x = fish.isSpecial ? 330 + Math.sin(time / 480) * 18 : 286;
-    const y = fish.isSpecial ? 206 + Math.cos(time / 520) * 10 : 204;
+    const swim = Math.sin(time / 480);
+    const x = fish.isSpecial ? 298 + swim * 34 : 330 + swim * 26;
+    const y = fish.isSpecial ? 286 + Math.cos(time / 520) * 12 : 252 + Math.cos(time / 430) * 9;
+    const tailFlick = Math.sin(time / 90) * 4;
 
     if (fish.isSpecial) {
       const pulse = 0.55 + Math.sin(time / 160) * 0.2;
-      this.motionGraphics.fillStyle(0xffc85a, 0.18 + pulse * 0.18);
-      this.motionGraphics.fillCircle(x, y, 34 + pulse * 10);
+      this.motionGraphics.fillStyle(0xffc85a, 0.22 + pulse * 0.22);
+      this.motionGraphics.fillCircle(x, y, 28 + pulse * 14);
       this.motionGraphics.fillStyle(0xfff0a3, 0.75);
       this.motionGraphics.fillCircle(x + 18, y - 16, 2.5);
       this.motionGraphics.fillCircle(x - 22, y + 12, 2);
@@ -278,7 +292,9 @@ export class FriendOneFishingScene extends Phaser.Scene {
 
     this.motionGraphics.fillStyle(fish.isSpecial ? 0xffa13d : 0x7fd6d0, 0.86);
     this.motionGraphics.fillEllipse(x, y, 28, 12);
-    this.motionGraphics.fillTriangle(x - 18, y, x - 30, y - 8, x - 30, y + 8);
+    this.motionGraphics.fillTriangle(x - 18, y, x - 30, y - 8 + tailFlick, x - 30, y + 8 + tailFlick);
+    this.motionGraphics.fillStyle(0xfff8cf, fish.isSpecial ? 0.7 : 0.42);
+    this.motionGraphics.fillCircle(x + 6, y - 2, 2);
   }
 
   private drawMeter(time: number): void {
@@ -408,57 +424,4 @@ export class FriendOneFishingScene extends Phaser.Scene {
     this.callbacks.onCancel();
   }
 
-  private drawCharacter(
-    graphics: Phaser.GameObjects.Graphics,
-    x: number,
-    y: number,
-    hairColor: number,
-    shirtColor: number,
-    label: string,
-  ): void {
-    graphics.fillStyle(0x2f2723, 0.35);
-    graphics.fillEllipse(x, y + 44, 48, 14);
-    graphics.fillStyle(shirtColor, 1);
-    graphics.fillRoundedRect(x - 18, y + 18, 36, 42, 12);
-    graphics.fillStyle(0xf4c89a, 1);
-    graphics.fillCircle(x, y + 8, 18);
-    graphics.fillStyle(hairColor, 1);
-    graphics.fillEllipse(x, y - 2, 40, 24);
-    graphics.fillStyle(0x473225, 1);
-    graphics.fillCircle(x - 6, y + 7, 2);
-    graphics.fillCircle(x + 7, y + 7, 2);
-
-    if (label === '____') {
-      graphics.fillStyle(0xffd7e4, 1);
-      graphics.fillTriangle(x - 14, y + 22, x + 14, y + 22, x, y + 38);
-    }
-  }
-
-  private drawReeds(
-    graphics: Phaser.GameObjects.Graphics,
-    x: number,
-    y: number,
-  ): void {
-    graphics.lineStyle(3, 0x71945f, 1);
-    for (let index = 0; index < 5; index += 1) {
-      const offset = index * 8;
-      graphics.lineBetween(x + offset, y + 24, x + offset - 5, y - 20 + index * 3);
-    }
-
-    graphics.fillStyle(0xa36d45, 1);
-    graphics.fillEllipse(x + 12, y - 12, 6, 20);
-    graphics.fillEllipse(x + 28, y - 4, 6, 18);
-  }
-
-  private drawLilyPad(
-    graphics: Phaser.GameObjects.Graphics,
-    x: number,
-    y: number,
-    scale: number,
-  ): void {
-    graphics.fillStyle(0x78aa68, 0.92);
-    graphics.fillEllipse(x, y, 42 * scale, 20 * scale);
-    graphics.fillStyle(0x224f5a, 1);
-    graphics.fillTriangle(x, y, x + 15 * scale, y - 7 * scale, x + 14 * scale, y + 4 * scale);
-  }
 }

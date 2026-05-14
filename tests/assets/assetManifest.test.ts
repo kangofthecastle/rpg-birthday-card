@@ -87,12 +87,16 @@ describe('assetManifest', () => {
     expect(getManifestAsset('keepsake-glowing-koi-scale').locationIds).toContain('friend-a');
     expect(friendonePondArt).toMatchObject({
       kind: 'activity-art',
-      status: 'temporary',
+      status: 'review',
       locationIds: ['friend-a'],
     });
+    expect(friendonePondArt.notes).toContain(
+      'public/assets/activities/friendone-fishing/pond-dock-v2.png',
+    );
+    expect(friendonePondArt.notes).toContain('live Phaser overlays');
     expect(friendonePondArt.qaChecks).toEqual(
       expect.arrayContaining([
-        'cozy readability',
+        'retro pixel-art readability',
         'player and ____ composition',
         'meter contrast',
       ]),

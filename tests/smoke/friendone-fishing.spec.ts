@@ -8,7 +8,9 @@ test('completes ____ PC fishing activity through test mode', async ({ page }) =>
   await expect(page.locator('.collection-panel')).toContainText('Keepsakes');
 
   await canvas.click();
-  await page.keyboard.press('E');
+  await page.keyboard.down('E');
+  await page.waitForTimeout(120);
+  await page.keyboard.up('E');
 
   await expect(page.getByText('The PC monitor warms into a soft pond scene.')).toBeVisible();
   await page.getByRole('button', { name: 'Continue' }).click();

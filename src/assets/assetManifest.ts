@@ -221,10 +221,11 @@ export const ASSET_MANIFEST: readonly GameAsset[] = [
     id: 'activity-art-friendone-pc-pond',
     kind: 'activity-art',
     label: '____ PC pond fishing scene',
-    status: 'temporary',
+    status: 'review',
     locationIds: ['friend-a'],
-    notes: 'Temporary Phaser-drawn cozy pond scene used for the first playable fishing activity.',
-    qaChecks: ['cozy readability', 'player and ____ composition', 'meter contrast'],
+    notes:
+      'Generated retro pixel-art pond and dock backdrop saved at public/assets/activities/friendone-fishing/pond-dock-v2.png for the ____ PC fishing activity. ____ and ____ are based on the current character sprite references while fishing lines, bobbers, fish, and koi glow remain live Phaser overlays.',
+    qaChecks: ['retro pixel-art readability', 'player and ____ composition', 'meter contrast'],
   },
   {
     id: 'activity-art-glowing-koi',

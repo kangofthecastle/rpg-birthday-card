@@ -347,6 +347,29 @@ describe('activityRegistry', () => {
     expect(() => getActivity('missing')).toThrow('Unknown activity: missing');
   });
 
+  it('renders final reveal with current keepsakes', async () => {
+    const activity = getActivity('final-keepsake-reveal');
+    const fixture = document.createElement('div');
+    const mount = document.createElement('div');
+
+    document.body.appendChild(fixture);
+    fixture.appendChild(mount);
+
+    try {
+      await activity.start({
+        state: createInitialRunState('final-spot'),
+        mount,
+        onComplete: vi.fn(),
+        onCancel: vi.fn(),
+      });
+
+      expect(mount.textContent).toContain('koi scale');
+      expect(mount.textContent).not.toContain('flower');
+    } finally {
+      fixture.remove();
+    }
+  });
+
   it('runs the ____ strategy table lifecycle and calls complete', async () => {
     const activity = getActivity('friendthree-strategy-table');
     const onComplete = vi.fn();

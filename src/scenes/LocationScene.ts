@@ -2,8 +2,13 @@ import Phaser from 'phaser';
 import { getActivity } from '../activities/activityRegistry';
 import {
   RECIPIENT_IDLE_ANIMATIONS,
+  RECIPIENT_IDLE_FRAME_OFFSETS,
   RECIPIENT_ROW_START_FRAME,
   RECIPIENT_SPRITE,
+  RECIPIENT_TAP_STEP_FRAME_OFFSETS,
+  RECIPIENT_TAP_STEP_HOLD_MS,
+  RECIPIENT_WALK_DUST,
+  RECIPIENT_WALK_FRAME_COUNTS,
   RECIPIENT_WALK_ANIMATIONS,
   PLAYER_FACINGS,
   type PlayerFacing,
@@ -27,7 +32,7 @@ import {
   type IsoPoint,
 } from '../game/isometricProjection';
 import { getPointObject, getRectObjects, type RectObject, type TiledMapJson } from '../game/mapHelpers';
-import { PlayerController } from '../game/playerController';
+import { getPlayerFacingFromScreenMovement, PlayerController } from '../game/playerController';
 import { renderCollectionPanel } from '../ui/collectionPanel';
 import { showDialogue } from '../ui/dialogueBox';
 import { clearUiRoot, getUiRoot } from '../ui/domRoot';
@@ -45,6 +50,13 @@ export class LocationScene extends Phaser.Scene {
   private player!: Phaser.Physics.Arcade.Sprite;
   private playerVisual?: Phaser.GameObjects.Sprite;
   private playerFacing: PlayerFacing = 'down';
+  private wasPlayerMoving = false;
+  private tapStepHoldUntil = 0;
+  private tapStepFrameByFacing = Object.fromEntries(
+    PLAYER_FACINGS.map((facing) => [facing, 0]),
+  ) as Record<PlayerFacing, number>;
+  private lastWalkDustAt = 0;
+  private walkDustFootSide = -1;
   private controller!: PlayerController;
   private canMove = true;
   private exits: RectObject[] = [];
@@ -300,22 +312,27 @@ export class LocationScene extends Phaser.Scene {
     const idleOffset = this.getIdleOffset();
     this.playerVisual.setPosition(position.x, position.y + idleOffset);
     this.playerVisual.setDepth(position.y + 10);
+    this.maybeSpawnWalkDust(position);
     this.updatePlayerVisualAnimation();
   }
 
   private createRecipientAnimations(): void {
+    this.createWalkDustTexture();
+
     for (const facing of PLAYER_FACINGS) {
       const walkKey = RECIPIENT_WALK_ANIMATIONS[facing];
       const idleKey = RECIPIENT_IDLE_ANIMATIONS[facing];
       const start = RECIPIENT_ROW_START_FRAME[facing];
+      const frameCount = RECIPIENT_WALK_FRAME_COUNTS[facing];
+      const idleFrame = start + RECIPIENT_IDLE_FRAME_OFFSETS[facing];
 
       if (!this.anims.exists(walkKey)) {
         this.anims.create({
           key: walkKey,
-        frames: this.anims.generateFrameNumbers(RECIPIENT_SPRITE.key, {
-          start,
-          end: start + RECIPIENT_SPRITE.framesPerDirection - 1,
-        }),
+          frames: this.anims.generateFrameNumbers(RECIPIENT_SPRITE.key, {
+            start,
+            end: start + frameCount - 1,
+          }),
           frameRate: RECIPIENT_SPRITE.walkFrameRate,
           repeat: -1,
         });
@@ -324,12 +341,25 @@ export class LocationScene extends Phaser.Scene {
       if (!this.anims.exists(idleKey)) {
         this.anims.create({
           key: idleKey,
-          frames: [{ key: RECIPIENT_SPRITE.key, frame: start }],
+          frames: [{ key: RECIPIENT_SPRITE.key, frame: idleFrame }],
           frameRate: 1,
           repeat: -1,
         });
       }
     }
+  }
+
+  private createWalkDustTexture(): void {
+    if (this.textures.exists(RECIPIENT_WALK_DUST.key)) {
+      return;
+    }
+
+    const graphics = this.add.graphics();
+    graphics.fillStyle(RECIPIENT_WALK_DUST.color, 1);
+    graphics.fillEllipse(11, 7, 20, 9);
+    graphics.fillEllipse(21, 8, 12, 6);
+    graphics.generateTexture(RECIPIENT_WALK_DUST.key, 30, 16);
+    graphics.destroy();
   }
 
   private updatePlayerVisualAnimation(): void {
@@ -342,27 +372,99 @@ export class LocationScene extends Phaser.Scene {
     const velocity = this.player.body?.velocity;
 
     if (!velocity || velocity.lengthSq() < 1) {
+      if (this.time.now < this.tapStepHoldUntil) {
+        visual.stop();
+        visual.setFrame(this.getCurrentTapStepFrame());
+        this.wasPlayerMoving = false;
+        return;
+      }
+
       visual.play(RECIPIENT_IDLE_ANIMATIONS[this.playerFacing], true);
+      this.wasPlayerMoving = false;
       return;
     }
 
+    const previousFacing = this.playerFacing;
     const screenVelocity = this.projectMapVelocityToScreen(velocity.x, velocity.y);
-    this.playerFacing =
-      Math.abs(screenVelocity.x) > Math.abs(screenVelocity.y)
-        ? screenVelocity.x > 0
-          ? 'right'
-          : 'left'
-        : screenVelocity.y > 0
-          ? 'down'
-          : 'up';
+    this.playerFacing = getPlayerFacingFromScreenMovement(screenVelocity, this.playerFacing);
 
     visual.play(RECIPIENT_WALK_ANIMATIONS[this.playerFacing], true);
+
+    if (!this.wasPlayerMoving || previousFacing !== this.playerFacing) {
+      visual.setFrame(this.advanceTapStepFrame(this.playerFacing));
+      this.tapStepHoldUntil = this.time.now + RECIPIENT_TAP_STEP_HOLD_MS;
+    }
+
+    this.wasPlayerMoving = true;
+  }
+
+  private maybeSpawnWalkDust(position: IsoPoint): void {
+    const velocity = this.player.body?.velocity;
+
+    if (
+      !velocity ||
+      velocity.lengthSq() < 1 ||
+      this.time.now - this.lastWalkDustAt < RECIPIENT_WALK_DUST.intervalMs
+    ) {
+      return;
+    }
+
+    this.lastWalkDustAt = this.time.now;
+    this.walkDustFootSide *= -1;
+
+    const screenVelocity = this.projectMapVelocityToScreen(velocity.x, velocity.y);
+    const screenDirection = new Phaser.Math.Vector2(screenVelocity.x, screenVelocity.y).normalize();
+    const sideOffset = this.walkDustFootSide * RECIPIENT_WALK_DUST.sideOffsetPixels;
+    const trailingOffsetX = -screenDirection.x * 7;
+    const trailingOffsetY = -screenDirection.y * 4;
+    const jitter = Phaser.Math.Between(-RECIPIENT_WALK_DUST.jitterPixels, RECIPIENT_WALK_DUST.jitterPixels);
+    const dust = this.add
+      .image(
+        position.x + sideOffset + trailingOffsetX + jitter,
+        position.y + RECIPIENT_WALK_DUST.footYOffset + trailingOffsetY,
+        RECIPIENT_WALK_DUST.key,
+      )
+      .setOrigin(0.5)
+      .setAlpha(RECIPIENT_WALK_DUST.alpha)
+      .setScale(RECIPIENT_WALK_DUST.startScale)
+      .setDepth(position.y + 8);
+
+    this.tweens.add({
+      targets: dust,
+      alpha: 0,
+      scaleX: RECIPIENT_WALK_DUST.endScale,
+      scaleY: RECIPIENT_WALK_DUST.endScale,
+      y: dust.y + 2,
+      duration: RECIPIENT_WALK_DUST.lifespanMs,
+      ease: 'Quad.easeOut',
+      onComplete: () => dust.destroy(),
+    });
+  }
+
+  private advanceTapStepFrame(facing: PlayerFacing): number {
+    const offsets = RECIPIENT_TAP_STEP_FRAME_OFFSETS[facing];
+    const index = this.tapStepFrameByFacing[facing] % offsets.length;
+
+    this.tapStepFrameByFacing[facing] = index + 1;
+    return RECIPIENT_ROW_START_FRAME[facing] + offsets[index];
+  }
+
+  private getCurrentTapStepFrame(): number {
+    const offsets = RECIPIENT_TAP_STEP_FRAME_OFFSETS[this.playerFacing];
+    const nextIndex = this.tapStepFrameByFacing[this.playerFacing] % offsets.length;
+    const currentIndex = (nextIndex - 1 + offsets.length) % offsets.length;
+
+    return RECIPIENT_ROW_START_FRAME[this.playerFacing] + offsets[currentIndex];
   }
 
   private getIdleOffset(): number {
     const velocity = this.player.body?.velocity;
 
     if (velocity && velocity.lengthSq() >= 1) {
+      return 0;
+    }
+
+    if (this.time.now < this.tapStepHoldUntil) {
       return 0;
     }
 

@@ -28,7 +28,7 @@ export const ASSET_MANIFEST: readonly GameAsset[] = [
     status: 'review',
     locationIds: ['global'],
     notes:
-      'Built from ____ reference images with warm skin tone, long dark wavy hair, cozy beige sweater, cream tote strap, and cheerful personality cues.',
+      'Built from ____ reference images with warm skin tone, long dark wavy hair, cozy beige sweater, small muted olive backpack, and cheerful personality cues.',
     qaChecks: ['recognizable stylization', 'palette lock', 'silhouette notes'],
   },
   {
@@ -66,7 +66,7 @@ export const ASSET_MANIFEST: readonly GameAsset[] = [
     status: 'review',
     locationIds: ['global'],
     notes:
-      'Saved at public/assets/sprites/characters/recipient-walk-4dir-v3-alpha.png. Raw generated copy is recipient-walk-4dir-v3.png. This is a review/prototype 4-direction pass with eight walk frames per direction and stronger side-walk passing poses; final main character target remains 8-direction movement.',
+      'Saved at public/assets/sprites/characters/recipient-walk-4dir-v13-alpha.png. This is the single active review/prototype 4-direction pass with eight vertical walk frames, an eight-frame side-walk cycle, neutral feet-together idle frames, and a small muted olive backpack instead of a tote; final main character target remains 8-direction movement.',
     qaChecks: ['4x8 layout', 'transparent background', 'identity consistency', 'anchor consistency'],
   },
   {
@@ -76,7 +76,17 @@ export const ASSET_MANIFEST: readonly GameAsset[] = [
     status: 'review',
     locationIds: ['global'],
     notes:
-      'Saved at public/assets/sprites/characters/friendone-walk-4dir-v1-alpha.png. Raw generated copy is friendone-walk-4dir-v1.png.',
+      'Saved at public/assets/sprites/characters/friendone-walk-4dir-v2-alpha.png with the bag removed. Raw generated copy is friendone-walk-4dir-v2.png.',
+    qaChecks: ['4x6 layout', 'transparent background', 'identity consistency', 'anchor consistency'],
+  },
+  {
+    id: 'character-friendthree-walk-4dir',
+    kind: 'spritesheet',
+    label: '____ 4-direction walk spritesheet',
+    status: 'review',
+    locationIds: ['global'],
+    notes:
+      'Saved at public/assets/sprites/characters/friendthree-walk-4dir-v1-alpha.png. Raw generated copy is friendthree-walk-4dir-v1.png.',
     qaChecks: ['4x6 layout', 'transparent background', 'identity consistency', 'anchor consistency'],
   },
   {
@@ -122,6 +132,16 @@ export const ASSET_MANIFEST: readonly GameAsset[] = [
     status: 'planned',
     locationIds: ['friend-c'],
     notes: 'Higher-detail illustrated pixel-art portrait tied to Friend C reward message.',
+    qaChecks: ['identity consistency', 'dialogue scale readability'],
+  },
+  {
+    id: 'portrait-friendthree',
+    kind: 'portrait',
+    label: '____ dialogue portrait',
+    status: 'planned',
+    locationIds: ['friend-c'],
+    notes:
+      'Dedicated portrait for ____ dialogue. The first dialogue-box pass can use the current ____ walk spritesheet as a temporary portrait source until final portrait art is produced.',
     qaChecks: ['identity consistency', 'dialogue scale readability'],
   },
   {

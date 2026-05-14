@@ -45,13 +45,15 @@ export function createFriendOneFishingActivity(
     id: 'friendone-pc-fishing',
     title: '____ Fishing',
     async start({ mount, onCancel, onComplete }) {
+      const testMode = isTestMode();
+
       mount.innerHTML = `
         <section class="activity-panel" role="dialog" aria-label="____ Fishing">
           <h2>____ Fishing</h2>
           <div data-friendone-fishing-host></div>
           <div class="activity-actions">
             <button type="button" data-friendone-fishing-cancel>Cancel</button>
-            <button type="button" data-friendone-fishing-test-complete${isTestMode() ? '' : ' hidden'}>Complete fishing</button>
+            ${testMode ? '<button type="button" data-friendone-fishing-test-complete>Complete fishing</button>' : ''}
           </div>
         </section>
       `;
@@ -60,37 +62,64 @@ export function createFriendOneFishingActivity(
       const cancelButton = mount.querySelector<HTMLButtonElement>(
         '[data-friendone-fishing-cancel]',
       );
-      const completeButton = mount.querySelector<HTMLButtonElement>(
-        '[data-friendone-fishing-test-complete]',
-      );
 
-      if (!host || !cancelButton || !completeButton) {
+      if (!host || !cancelButton) {
         throw new Error('Unable to mount ____ Fishing activity.');
       }
 
-      const game = await createFishingGame(host);
       let finished = false;
+      let game: FishingGameHandle | null = null;
+
+      const destroyGame = (): void => {
+        game?.destroy();
+        game = null;
+      };
+
       const finish = (callback: () => void): void => {
         if (finished) {
           return;
         }
 
         finished = true;
-        game.destroy();
+        destroyGame();
         callback();
       };
 
       cancelButton.addEventListener('click', () => finish(onCancel), {
         once: true,
       });
-      completeButton.addEventListener('click', () =>
-        finish(() =>
-          onComplete({
-            locationId: 'friend-a',
-            keepsakeId: 'glowing-koi-scale',
-          }),
-        ),
-      );
+
+      if (testMode) {
+        const completeButton = mount.querySelector<HTMLButtonElement>(
+          '[data-friendone-fishing-test-complete]',
+        );
+
+        if (!completeButton) {
+          throw new Error('Unable to mount ____ Fishing activity.');
+        }
+
+        completeButton.addEventListener('click', () =>
+          finish(() =>
+            onComplete({
+              locationId: 'friend-a',
+              keepsakeId: 'glowing-koi-scale',
+            }),
+          ),
+        );
+      }
+
+      try {
+        const createdGame = await createFishingGame(host);
+
+        if (finished) {
+          createdGame.destroy();
+          return;
+        }
+
+        game = createdGame;
+      } catch {
+        finish(onCancel);
+      }
     },
   };
 }

@@ -3,6 +3,7 @@ import {
   projectScreenDirectionToIsoVelocity,
   type IsoOrigin,
 } from './isometricProjection';
+import type { PlayerFacing } from '../assets/recipientSpriteConfig';
 
 type Direction = 'up' | 'down' | 'left' | 'right';
 
@@ -12,6 +13,37 @@ interface PlayerControllerOptions {
 }
 
 const DEFAULT_PLAYER_SPEED = 220;
+const MIN_FACING_MOVEMENT_LENGTH_SQ = 1;
+const EIGHT_WAY_FACING_SECTORS: readonly PlayerFacing[] = [
+  'right',
+  'down-right',
+  'down',
+  'down-left',
+  'left',
+  'up-left',
+  'up',
+  'up-right',
+];
+
+interface ScreenMovement {
+  readonly x: number;
+  readonly y: number;
+}
+
+export function getPlayerFacingFromScreenMovement(
+  movement: ScreenMovement,
+  previousFacing: PlayerFacing = 'down',
+): PlayerFacing {
+  if (movement.x * movement.x + movement.y * movement.y < MIN_FACING_MOVEMENT_LENGTH_SQ) {
+    return previousFacing;
+  }
+
+  const radians = Math.atan2(movement.y, movement.x);
+  const normalizedDegrees = ((radians * 180) / Math.PI + 360) % 360;
+  const sectorIndex = Math.round(normalizedDegrees / 45) % EIGHT_WAY_FACING_SECTORS.length;
+
+  return EIGHT_WAY_FACING_SECTORS[sectorIndex];
+}
 
 export class PlayerController {
   private readonly cursors: Phaser.Types.Input.Keyboard.CursorKeys;

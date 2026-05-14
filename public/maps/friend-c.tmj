@@ -807,6 +807,15 @@
         },
         {
           "id": 4,
+          "name": "friendthree-strategy-table",
+          "type": "activity",
+          "x": 832,
+          "y": 448,
+          "width": 128,
+          "height": 96
+        },
+        {
+          "id": 5,
           "name": "friend-c-easter-egg",
           "type": "easterEgg",
           "x": 960,

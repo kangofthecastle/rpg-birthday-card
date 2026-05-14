@@ -61,7 +61,8 @@ const maps = [
     exits: [rect(2, 'back-entry', 'exit', 640, 832, 128, 80)],
     interactables: [
       rect(3, 'friend-c-host', 'activity', 640, 384, 128, 96),
-      rect(4, 'friend-c-easter-egg', 'easterEgg', 960, 384, 128, 96),
+      rect(4, 'friendthree-strategy-table', 'activity', 832, 448, 128, 96),
+      rect(5, 'friend-c-easter-egg', 'easterEgg', 960, 384, 128, 96),
     ],
   },
   {

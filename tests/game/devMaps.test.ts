@@ -15,6 +15,17 @@ interface DevMap {
   readonly width: number;
   readonly height: number;
   readonly tilesets: readonly TiledTileset[];
+  readonly layers: readonly TiledLayer[];
+}
+
+interface TiledObject {
+  readonly name: string;
+}
+
+interface TiledLayer {
+  readonly name: string;
+  readonly type: string;
+  readonly objects?: readonly TiledObject[];
 }
 
 const mapFiles = [
@@ -64,5 +75,20 @@ describe('dev maps', () => {
       expect(map.width).toBeGreaterThanOrEqual(20);
       expect(map.height).toBeGreaterThanOrEqual(14);
     }
+  });
+
+  it('includes a ____ strategy table interactable in ____ house', () => {
+    const map = JSON.parse(
+      readFileSync(join(process.cwd(), 'public', 'maps', 'friend-c.tmj'), 'utf8'),
+    ) as DevMap;
+    const interactables = map.layers.find(
+      (layer) => layer.type === 'objectgroup' && layer.name === 'Interactables',
+    );
+
+    expect(interactables?.objects).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'friendthree-strategy-table' }),
+      ]),
+    );
   });
 });

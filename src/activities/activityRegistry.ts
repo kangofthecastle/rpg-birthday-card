@@ -1,4 +1,5 @@
 import type { ActivityModule } from './activityTypes';
+import { friendthreeStrategyActivity } from './friendthreeStrategyActivity';
 import { finalKeepsakeActivity } from './finalKeepsakeActivity';
 import { friendAActivity } from './friendAActivity';
 import { friendBActivity } from './friendBActivity';
@@ -10,6 +11,7 @@ const ACTIVITIES: readonly ActivityModule[] = [
   friendoneFishingActivity,
   friendBActivity,
   friendCActivity,
+  friendthreeStrategyActivity,
   finalKeepsakeActivity,
 ];
 

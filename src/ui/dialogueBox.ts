@@ -12,6 +12,8 @@ const PORTRAIT_URL_BY_ID: Readonly<Record<string, string>> = {
   'character-friendthree-walk-4dir': '/assets/sprites/characters/friendthree-walk-4dir-v1-alpha.png',
   'character-friendone-walk-4dir': '/assets/sprites/characters/friendone-walk-4dir-v2-alpha.png',
   'portrait-friendthree': '/assets/sprites/characters/friendthree-walk-4dir-v1-alpha.png',
+  'portrait-friendone': '/assets/sprites/characters/friendone-idle-walk-4dir-v1-alpha.png',
+  'portrait-friend-b': '/assets/sprites/characters/friendtwo-idle-walk-4dir-v1-alpha.png',
 };
 
 let activeDialogue: ActiveDialogue | undefined;

@@ -132,7 +132,8 @@ export const ASSET_MANIFEST: readonly GameAsset[] = [
     label: '____ dialogue portrait',
     status: 'planned',
     locationIds: ['friend-a'],
-    notes: 'Portrait used by ____ house dialogue and reward message.',
+    notes:
+      'Portrait used by ____ house dialogue and reward message. The dialogue box currently uses the ____ idle/walk spritesheet as a temporary portrait source until final portrait art is produced.',
     qaChecks: ['identity consistency', 'dialogue scale readability'],
   },
   {
@@ -141,7 +142,8 @@ export const ASSET_MANIFEST: readonly GameAsset[] = [
     label: 'Friend B portrait',
     status: 'planned',
     locationIds: ['friend-b'],
-    notes: 'Higher-detail illustrated pixel-art portrait tied to Friend B reward message.',
+    notes:
+      'Higher-detail illustrated pixel-art portrait tied to Friend B reward message. The dialogue box currently uses the ____ idle/walk spritesheet as a temporary portrait source until final portrait art is produced.',
     qaChecks: ['identity consistency', 'dialogue scale readability'],
   },
   {
@@ -180,15 +182,6 @@ export const ASSET_MANIFEST: readonly GameAsset[] = [
     locationIds: ['friend-a'],
     notes: 'Furniture, shelf clutter, garden objects, and activity props.',
     qaChecks: ['transparent background', 'scale consistency', 'collision readability'],
-  },
-  {
-    id: 'keepsake-pressed-flower',
-    kind: 'keepsake',
-    label: 'Pressed flower keepsake icon',
-    status: 'planned',
-    locationIds: ['friend-a', 'final-spot'],
-    notes: 'Small keepsake icon used in collection UI and final reveal.',
-    qaChecks: ['small-size readability', 'palette consistency'],
   },
   {
     id: 'keepsake-glowing-koi-scale',

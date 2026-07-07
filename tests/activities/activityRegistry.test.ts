@@ -335,7 +335,10 @@ describe('activityRegistry', () => {
     expect(() => getActivity('missing')).toThrow('Unknown activity: missing');
   });
 
-  it('renders final reveal with current keepsakes', async () => {
+  it('mounts the ending stage with the three keepsakes in order', () => {
+    // The ending is a timed, interactive sequence; assert the stage the
+    // activity builds synchronously, and keep fake timers from advancing it.
+    vi.useFakeTimers();
     const activity = getActivity('final-keepsake-reveal');
     const fixture = document.createElement('div');
     const mount = document.createElement('div');
@@ -344,16 +347,29 @@ describe('activityRegistry', () => {
     fixture.appendChild(mount);
 
     try {
-      await activity.start({
+      void activity.start({
         state: createInitialRunState('final-spot'),
         mount,
         onComplete: vi.fn(),
         onCancel: vi.fn(),
       });
 
-      expect(mount.textContent).toContain('koi scale');
+      expect(mount.querySelector('[data-ending-stage]')).not.toBeNull();
+      expect(mount.querySelector('[data-ending-ocean]')).not.toBeNull();
+
+      const keepsakes = [...mount.querySelectorAll('.ending-keepsake')].map(
+        (img) => img.getAttribute('alt'),
+      );
+      expect(keepsakes).toEqual([
+        'Glowing Koi Scale',
+        'Defused Spike Charm',
+        'Golden Hour Photo',
+      ]);
       expect(mount.textContent).not.toContain('flower');
+      expect(mount.textContent).not.toContain('paper star');
     } finally {
+      vi.clearAllTimers();
+      vi.useRealTimers();
       fixture.remove();
     }
   });

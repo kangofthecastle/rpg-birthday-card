@@ -111,20 +111,20 @@ export const ASSET_MANIFEST: readonly GameAsset[] = [
     id: 'portrait-friendone',
     kind: 'portrait',
     label: '____ dialogue portrait',
-    status: 'planned',
+    status: 'review',
     locationIds: ['friend-a'],
     notes:
-      'Portrait used by ____ house dialogue and reward message. The dialogue box currently uses the ____ idle/walk spritesheet as a temporary portrait source until final portrait art is produced.',
+      'Generated portrait saved at public/assets/portraits/portrait-friendone.png and wired into the dialogue box.',
     qaChecks: ['identity consistency', 'dialogue scale readability'],
   },
   {
     id: 'portrait-friend-b',
     kind: 'portrait',
     label: 'Friend B portrait',
-    status: 'planned',
+    status: 'review',
     locationIds: ['friend-b'],
     notes:
-      'Higher-detail illustrated pixel-art portrait tied to Friend B reward message. The dialogue box currently uses the ____ idle/walk spritesheet as a temporary portrait source until final portrait art is produced.',
+      'Generated ____ portrait saved at public/assets/portraits/portrait-friendtwo.png and wired into the dialogue box.',
     qaChecks: ['identity consistency', 'dialogue scale readability'],
   },
   {
@@ -149,7 +149,7 @@ export const ASSET_MANIFEST: readonly GameAsset[] = [
     id: 'keepsake-glowing-koi-scale',
     kind: 'keepsake',
     label: 'Glowing koi scale keepsake icon',
-    status: 'planned',
+    status: 'review',
     locationIds: ['friend-a', 'final-spot'],
     notes: 'Small keepsake icon used in collection UI and final reveal for ____ PC fishing.',
     qaChecks: ['small-size readability', 'palette consistency'],
@@ -158,7 +158,7 @@ export const ASSET_MANIFEST: readonly GameAsset[] = [
     id: 'keepsake-defused-spike-charm',
     kind: 'keepsake',
     label: 'Defused spike charm keepsake icon',
-    status: 'planned',
+    status: 'review',
     locationIds: ['friend-b', 'final-spot'],
     notes:
       'Small keepsake icon used in collection UI and final reveal for the SPLIT.EXE minigame. A miniature defused Valorant-style spike with a calm teal glowing core.',
@@ -168,7 +168,7 @@ export const ASSET_MANIFEST: readonly GameAsset[] = [
     id: 'keepsake-golden-hour-photo',
     kind: 'keepsake',
     label: 'Golden Hour Photo keepsake icon',
-    status: 'planned',
+    status: 'review',
     locationIds: ['recipient-house', 'final-spot'],
     notes:
       "Small keepsake icon for ____'s self-keepsake: a golden-hour photograph revealed by her PC once both friend keepsakes are collected.",
@@ -178,30 +178,30 @@ export const ASSET_MANIFEST: readonly GameAsset[] = [
     id: 'activity-art-split-arena-tiles',
     kind: 'activity-art',
     label: 'SPLIT.EXE arena tiles',
-    status: 'planned',
+    status: 'review',
     locationIds: ['friend-b'],
     notes:
-      'Low-bit pixel-art top-down floor/wall/cover tiles evoking Valorant Split B site. Batch 2, after the art-direction research lands. Placeholder colored shapes are generated in SplitScene.ts (keys in SPLIT_CONFIG.textures) and swap out without logic changes.',
+      'Low-bit pixel-art top-down floor/wall/cover tiles evoking Valorant Split B site. Delivered as public/assets/activities/valorant-split/arena-floor.png + props.png and wired into SplitScene via splitArt.ts; generated shapes remain as load-failure fallback.',
     qaChecks: ['64px-grid readability', 'palette lock', 'cover silhouette clarity'],
   },
   {
     id: 'activity-art-split-minisprites',
     kind: 'activity-art',
     label: 'SPLIT.EXE Viper/Omen/bot minisprites',
-    status: 'planned',
+    status: 'review',
     locationIds: ['friend-b'],
     notes:
-      'Top-down minisprites: ____-as-Viper (green accents), ____-as-Omen teammate (blue-purple shroud), and enemy bots with a readable top head band. Must keep the top ~22% head zone legible so the headshot hitbox reads. Placeholder shapes generated in SplitScene.ts today.',
+      'Top-down minisprites: ____-as-Viper (green accents), ____-as-Omen teammate (blue-purple shroud), and enemy bots with a readable top head band. Must keep the top ~22% head zone legible so the headshot hitbox reads. Delivered as viper.png/omen.png/bot.png under public/assets/activities/valorant-split/ and wired via splitArt.ts.',
     qaChecks: ['head-band readability', 'faction color contrast', 'top-down silhouette clarity'],
   },
   {
     id: 'activity-art-split-spike',
     kind: 'activity-art',
     label: 'SPLIT.EXE planted spike',
-    status: 'planned',
+    status: 'review',
     locationIds: ['friend-b'],
     notes:
-      'Planted/defusing spike prop with a pulsing teal core for the defuse finale. Placeholder is a Phaser-drawn box with a glowing core; real art swaps in by SPLIT_CONFIG.textures.spike.',
+      'Planted/defusing spike prop with a pulsing teal core for the defuse finale. Delivered as public/assets/activities/valorant-split/spike.png (armed + defusing states) and wired via splitArt.ts.',
     qaChecks: ['pulsing-core readability', 'planted-vs-defused states'],
   },
   {
@@ -231,6 +231,46 @@ export const ASSET_MANIFEST: readonly GameAsset[] = [
     locationIds: ['friend-a'],
     notes: 'Special-message image treatment for the first reward moment.',
     qaChecks: ['text-safe composition', 'portrait consistency'],
+  },
+  {
+    id: 'portrait-recipient',
+    kind: 'portrait',
+    label: '____ dialogue portrait',
+    status: 'review',
+    locationIds: ['global'],
+    notes:
+      'Generated portrait saved at public/assets/portraits/portrait-recipient.png and mapped in the dialogue box for any line tagged portrait-recipient.',
+    qaChecks: ['identity consistency', 'dialogue scale readability'],
+  },
+  {
+    id: 'tileset-recipient-room',
+    kind: 'tileset',
+    label: '____ room floor/wall tiles',
+    status: 'review',
+    locationIds: ['recipient-house'],
+    notes:
+      'Seamless 64x64 wood floor + cream wall pair at public/assets/tiles/recipient-room-tiles.png, rendered by roomRenderer for the dressed recipient-house.',
+    qaChecks: ['tile seams', 'scale consistency', 'palette consistency'],
+  },
+  {
+    id: 'props-recipient-room',
+    kind: 'prop-sheet',
+    label: '____ room prop sheet',
+    status: 'review',
+    locationIds: ['recipient-house'],
+    notes:
+      'Bed, desk/PC, violin, playbills, camera and photo wall, mango sticky rice table, rug, plants, and window at public/assets/props/recipient-room-props.png; crops and world footprints defined in roomDressing.ts.',
+    qaChecks: ['transparent background', 'scale vs player height', 'collision readability'],
+  },
+  {
+    id: 'ending-ocean-galaxy-backdrop',
+    kind: 'message-art',
+    label: 'Ending ocean-galaxy backdrop layers',
+    status: 'review',
+    locationIds: ['final-spot'],
+    notes:
+      'Galaxy sky (public/assets/ending/ending-sky.png) over starlit water (ending-water.png), composited by the ending sequence with code-drawn sunbeams and ripple motion.',
+    qaChecks: ['layer blend seam', 'star readability', 'emotional tone'],
   },
 ];
 

@@ -2,6 +2,11 @@ import Phaser from 'phaser';
 import { RECIPIENT_SPRITE } from '../assets/recipientSpriteConfig';
 import { LOCATIONS } from '../content/locations';
 import { createTempTextures } from '../game/createTempTextures';
+import {
+  createSeededRunState,
+  REQUIRED_FINAL_KEEPSAKE_IDS,
+  type RunState,
+} from '../game/runState';
 import { SceneKeys } from './sceneKeys';
 
 export class BootScene extends Phaser.Scene {
@@ -32,9 +37,22 @@ export class BootScene extends Phaser.Scene {
     const locationId = testMode ? params.get('locationId') ?? 'recipient-house' : 'recipient-house';
     const spawnId = testMode ? params.get('spawnId') ?? 'front-door' : 'front-door';
 
+    // testMode-only: seed collected keepsakes so a smoke can start from a
+    // realistic mid/late-run state (e.g. the clearing already unlocked).
+    const seedParam = testMode ? params.get('seedKeepsakes') : null;
+    let state: RunState | undefined;
+    if (seedParam) {
+      const ids =
+        seedParam === 'all'
+          ? REQUIRED_FINAL_KEEPSAKE_IDS
+          : seedParam.split(',').map((id) => id.trim()).filter(Boolean);
+      state = createSeededRunState(locationId, ids);
+    }
+
     this.scene.start(SceneKeys.Location, {
       locationId,
       spawnId,
+      state,
     });
   }
 }

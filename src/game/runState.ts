@@ -57,6 +57,29 @@ export function createInitialRunState(currentLocationId: string): RunState {
   };
 }
 
+/**
+ * testMode-only helper: build a run state that already holds the given
+ * keepsakes (and marks their owning locations complete). Lets a Playwright
+ * smoke land at, say, the lantern clearing with the run in a realistic
+ * "all keepsakes collected" state, mirroring the existing testMode jump-ins.
+ */
+export function createSeededRunState(
+  currentLocationId: string,
+  keepsakeIds: readonly string[],
+): RunState {
+  const completedLocationIds = LOCATIONS.flatMap((location) =>
+    location.keepsake && keepsakeIds.includes(location.keepsake.id)
+      ? [location.id]
+      : [],
+  );
+
+  return {
+    ...createInitialRunState(currentLocationId),
+    collectedKeepsakeIds: [...keepsakeIds],
+    completedLocationIds,
+  };
+}
+
 export function setCurrentLocation(
   state: RunState,
   currentLocationId: string,

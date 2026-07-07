@@ -27,6 +27,13 @@ export class BootScene extends Phaser.Scene {
     for (const location of LOCATIONS) {
       this.load.tilemapTiledJSON(location.mapKey, location.mapUrl);
     }
+
+    // Room-dressing art (floor/wall tiles + prop sheet) for dressed locations.
+    this.load.spritesheet('recipient-room-tiles', '/assets/tiles/recipient-room-tiles.png', {
+      frameWidth: 64,
+      frameHeight: 64,
+    });
+    this.load.image('recipient-room-props', '/assets/props/recipient-room-props.png');
   }
 
   create(): void {

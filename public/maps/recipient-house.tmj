@@ -835,8 +835,8 @@
           "id": 7,
           "name": "recipient-photo-wall",
           "type": "easterEgg",
-          "x": 1000,
-          "y": 560,
+          "x": 1080,
+          "y": 64,
           "width": 160,
           "height": 140
         },

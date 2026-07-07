@@ -17,6 +17,8 @@ import {
   type PlayerFacing,
 } from '../assets/recipientSpriteConfig';
 import { getLocation } from '../content/locations';
+import { getRoomDressing, type RoomDressing } from '../content/roomDressing';
+import { renderRoomDressing } from '../game/roomRenderer';
 import type { DialogueLine, LocationDefinition, LocationInteraction } from '../content/types';
 import {
   completeLocation,
@@ -93,6 +95,7 @@ export class LocationScene extends Phaser.Scene {
   private activeObject?: RectObject;
   private walls?: Phaser.Tilemaps.TilemapLayer;
   private isoOrigin?: IsoOrigin;
+  private dressing?: RoomDressing;
 
   constructor() {
     super(SceneKeys.Location);
@@ -186,8 +189,15 @@ export class LocationScene extends Phaser.Scene {
     }
 
     this.isoOrigin = this.createIsoOrigin(tilemap);
-    this.cameras.main.setBackgroundColor('#17211b');
-    this.createDevBackdrop(tilemap);
+    this.dressing = getRoomDressing(this.location.id);
+
+    if (this.dressing) {
+      this.cameras.main.setBackgroundColor(this.dressing.backgroundColor);
+      renderRoomDressing(this, this.dressing, tilemap, this.isoOrigin);
+    } else {
+      this.cameras.main.setBackgroundColor('#17211b');
+      this.createDevBackdrop(tilemap);
+    }
 
     const ground = tilemap.createLayer('Ground', [floorTileset, wallTileset], 0, 0);
     ground?.setDepth(-10);
@@ -303,6 +313,12 @@ export class LocationScene extends Phaser.Scene {
   }
 
   private createWorldMarkers(): void {
+    // Dressed rooms show art props instead of the debug interact rects. Pass
+    // ?dressDebug=1 to overlay the rects again for alignment checks.
+    if (this.dressing && !new URLSearchParams(window.location.search).has('dressDebug')) {
+      return;
+    }
+
     for (const exit of this.exits) {
       this.createWorldMarker(exit, 0x74c7ec, this.getObjectLabel(exit));
     }

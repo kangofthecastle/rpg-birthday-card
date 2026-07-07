@@ -80,7 +80,7 @@ const maps = [
   },
   {
     file: 'final-spot.tmj',
-    spawns: [point(1, 'clearing-path', 704, 768)],
+    spawns: [point(1, 'clearing-path', 704, 768), point(4, 'near-lantern', 704, 432)],
     exits: [rect(2, 'back-entry', 'exit', 640, 832, 128, 80)],
     interactables: [rect(3, 'final-table', 'activity', 640, 384, 128, 96)],
   },

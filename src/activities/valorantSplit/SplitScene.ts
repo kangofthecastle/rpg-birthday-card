@@ -12,6 +12,21 @@ import {
   type SplitInput,
   type SplitState,
 } from './splitModel';
+import {
+  ART_FILES,
+  ART_KEYS,
+  CHARACTER_ART,
+  COVER_PROP_ORDER,
+  CROSSHAIR_SCALE,
+  HEART_SCALE,
+  MEDAL_SCALE,
+  PROP_FRAMES,
+  SPIKE_BASE_SCALE,
+  SPIKE_FRAMES,
+  SPLIT_ART_BASE,
+  UI_FRAMES,
+  type ArtFrame,
+} from './splitArt';
 import { playSfx as playAudioSfx, type SfxKey } from '../../game/audio';
 
 const SFX_BY_EVENT: Readonly<Record<'shot' | 'heart' | 'beep' | 'clutch', SfxKey>> = {
@@ -34,6 +49,9 @@ const DEFAULT_CALLBACKS: SplitSceneCallbacks = {
 const ARENA = SPLIT_CONFIG.arena;
 const TEX = SPLIT_CONFIG.textures;
 const CLUTCH_DELAY_MS = 1600;
+const HIT_FLASH_MS = 90;
+const DEATH_FADE_MS = 260;
+const COVER_OVERHANG = 1.08;
 
 // ____-voice comms barks. Warm, personal, Valorant-flavored — the teammate is
 // ____, the player is ____, and this is a birthday gift.
@@ -50,6 +68,17 @@ interface Tracer {
   readonly to: { x: number; y: number };
   readonly color: number;
   readonly bornAt: number;
+}
+
+interface CharacterView {
+  readonly img: Phaser.GameObjects.Image;
+  readonly art: boolean;
+  readonly offsetY: number;
+  readonly originY: number;
+}
+
+interface EnemyView extends CharacterView {
+  deathPlayed: boolean;
 }
 
 export class SplitScene extends Phaser.Scene {
@@ -73,14 +102,20 @@ export class SplitScene extends Phaser.Scene {
 
   private firePressed = false;
   private pointer = { x: ARENA.width / 2, y: ARENA.height / 2 };
+  private lastHoldDefuse = false;
 
   private dynamic!: Phaser.GameObjects.Graphics;
+  private groundFx!: Phaser.GameObjects.Graphics;
   private hudGraphics!: Phaser.GameObjects.Graphics;
   private crosshair!: Phaser.GameObjects.Image;
-  private playerSprite!: Phaser.GameObjects.Image;
-  private teammateSprite!: Phaser.GameObjects.Image;
+  private playerView!: CharacterView;
+  private teammateView!: CharacterView;
   private spikeSprite!: Phaser.GameObjects.Image;
-  private enemySprites = new Map<number, Phaser.GameObjects.Image>();
+  private spikeArt = false;
+  private spikeBaseScale = 1;
+  private enemyViews = new Map<number, EnemyView>();
+  private heartImages: Phaser.GameObjects.Image[] = [];
+  private medalImage?: Phaser.GameObjects.Image;
   private roundText!: Phaser.GameObjects.Text;
   private statusText!: Phaser.GameObjects.Text;
   private barkText!: Phaser.GameObjects.Text;
@@ -89,79 +124,94 @@ export class SplitScene extends Phaser.Scene {
   private tracers: Tracer[] = [];
   private muzzleUntil = 0;
   private nextBeepAt = 0;
+  private playerFlashUntil = 0;
+  private enemyFlashUntil = new Map<number, number>();
+  private teammateFacingLeft = false;
+  private teammatePrevX: number = SPLIT_CONFIG.teammateStart.x;
 
   constructor(callbacks: SplitSceneCallbacks = DEFAULT_CALLBACKS) {
     super('SplitScene');
     this.callbacks = callbacks;
   }
 
+  preload(): void {
+    for (const { key, file } of ART_FILES) {
+      this.load.image(key, `${SPLIT_ART_BASE}/${file}`);
+    }
+  }
+
   create(): void {
     this.cameras.main.setBackgroundColor('#14171d');
     this.generateTextures();
+    this.registerArtFrames();
     this.drawStaticArena();
 
-    this.playerSprite = this.add.image(0, 0, TEX.player).setDepth(20);
-    this.teammateSprite = this.add.image(0, 0, TEX.teammate).setDepth(19);
-    this.spikeSprite = this.add
-      .image(SPLIT_CONFIG.spike.x, SPLIT_CONFIG.spike.y, TEX.spike)
-      .setDepth(8)
-      .setVisible(false);
+    this.playerView = this.createCharacter('player', TEX.player);
+    this.teammateView = this.createCharacter('teammate', TEX.teammate);
+    this.createSpike();
 
-    this.dynamic = this.add.graphics().setDepth(30);
-    this.hudGraphics = this.add.graphics().setDepth(40).setScrollFactor(0);
+    this.groundFx = this.add.graphics().setDepth(55);
+    this.dynamic = this.add.graphics().setDepth(700);
+    this.hudGraphics = this.add.graphics().setDepth(800).setScrollFactor(0);
+    this.createHud();
 
     this.roundText = this.add
       .text(ARENA.width / 2, 16, '1', {
         color: '#ffd15c',
         fontFamily: 'Arial, sans-serif',
-        fontSize: '30px',
+        fontSize: '38px',
         fontStyle: '700',
         stroke: '#141414',
-        strokeThickness: 5,
+        strokeThickness: 6,
       })
       .setOrigin(0.5, 0)
-      .setDepth(41);
+      .setDepth(810);
     this.statusText = this.add
-      .text(ARENA.width / 2, ARENA.height - 34, '', {
+      .text(ARENA.width / 2, ARENA.height - 38, '', {
         align: 'center',
         color: '#e6f2ff',
         fontFamily: 'Arial, sans-serif',
-        fontSize: '16px',
+        fontSize: '20px',
         stroke: '#141414',
-        strokeThickness: 4,
+        strokeThickness: 5,
       })
       .setOrigin(0.5)
-      .setDepth(41);
+      .setDepth(810);
     this.barkText = this.add
       .text(0, 0, '', {
         align: 'center',
         backgroundColor: '#20304aee',
         color: '#dfe9ff',
         fontFamily: 'Arial, sans-serif',
-        fontSize: '14px',
-        padding: { x: 8, y: 5 },
+        fontSize: '18px',
+        padding: { x: 10, y: 6 },
         stroke: '#0c1220',
         strokeThickness: 2,
-        wordWrap: { width: 220 },
+        wordWrap: { width: 280 },
       })
       .setOrigin(0.5, 1)
-      .setDepth(45)
+      .setDepth(815)
       .setVisible(false);
     this.popupText = this.add
-      .text(ARENA.width / 2, ARENA.height / 2 - 40, '', {
+      .text(ARENA.width / 2, ARENA.height / 2 - 60, '', {
         align: 'center',
         color: '#ff5470',
         fontFamily: 'Arial, sans-serif',
-        fontSize: '40px',
+        fontSize: '52px',
         fontStyle: '800',
         stroke: '#141414',
-        strokeThickness: 6,
+        strokeThickness: 7,
       })
       .setOrigin(0.5)
-      .setDepth(46)
+      .setDepth(820)
       .setVisible(false);
 
-    this.crosshair = this.add.image(this.pointer.x, this.pointer.y, TEX.crosshair).setDepth(50);
+    this.crosshair = this.hasArt(ART_KEYS.ui)
+      ? this.add
+          .image(this.pointer.x, this.pointer.y, ART_KEYS.ui, 'crosshair')
+          .setScale(CROSSHAIR_SCALE)
+      : this.add.image(this.pointer.x, this.pointer.y, TEX.crosshair);
+    this.crosshair.setDepth(900);
 
     this.createInput();
     this.showBark(BARKS.roundStart);
@@ -238,6 +288,7 @@ export class SplitScene extends Phaser.Scene {
     const player = this.state.player.pos;
     const aimAngle = Math.atan2(this.pointer.y - player.y, this.pointer.x - player.x);
     const holdDefuse = Boolean(keys?.e.isDown) && this.state.phase === 'defuse';
+    this.lastHoldDefuse = holdDefuse;
 
     return { move: { x, y }, aimAngle, fire: this.firePressed, holdDefuse };
   }
@@ -253,6 +304,9 @@ export class SplitScene extends Phaser.Scene {
           this.tracers.push({ from: event.from, to: event.to, color: 0x8affc1, bornAt: now });
           this.muzzleUntil = now + 70;
           this.playSfx('shot');
+          if (event.hitEnemyId !== null) {
+            this.enemyFlashUntil.set(event.hitEnemyId, now + HIT_FLASH_MS);
+          }
           if (event.headshot) {
             playAudioSfx('sfx-headshot');
             this.showPopup('HEADSHOT', '#ff5470');
@@ -260,12 +314,16 @@ export class SplitScene extends Phaser.Scene {
           break;
         case 'teammate-shot':
           this.tracers.push({ from: event.from, to: event.to, color: 0x9a7bff, bornAt: now });
+          if (event.hitEnemyId !== null) {
+            this.enemyFlashUntil.set(event.hitEnemyId, now + HIT_FLASH_MS);
+          }
           break;
         case 'enemy-shot':
           this.tracers.push({ from: event.from, to: event.to, color: 0xff6b6b, bornAt: now });
           break;
         case 'heart-lost':
           this.playSfx('heart');
+          this.playerFlashUntil = now + HIT_FLASH_MS + 30;
           this.cameras.main.shake(120, 0.006);
           break;
         case 'revive':
@@ -274,6 +332,9 @@ export class SplitScene extends Phaser.Scene {
           break;
         case 'first-blood':
           this.showBark(BARKS.firstBlood);
+          break;
+        case 'enemy-killed':
+          this.spawnSkull(event.enemyId);
           break;
         case 'spike-active':
           this.showBark(BARKS.spike);
@@ -295,12 +356,12 @@ export class SplitScene extends Phaser.Scene {
   private render(now: number): void {
     const { player, teammate } = this.state;
 
-    this.playerSprite.setPosition(player.pos.x, player.pos.y);
-    this.playerSprite.setAlpha(player.invulnMs > 0 ? 0.55 + Math.sin(now / 80) * 0.2 : 1);
-    this.teammateSprite.setPosition(teammate.pos.x, teammate.pos.y);
+    this.renderPlayer(now);
+    this.renderTeammate(now, teammate.pos);
     this.syncEnemySprites(now);
 
     this.dynamic.clear();
+    this.groundFx.clear();
     this.drawAimLine(player.pos, now);
     this.drawTelegraphs(now);
     this.drawTracers(now);
@@ -311,25 +372,117 @@ export class SplitScene extends Phaser.Scene {
     this.updateStatusText();
   }
 
+  private renderPlayer(now: number): void {
+    const player = this.state.player;
+    const bob = Math.sin(now / 320) * 1;
+
+    this.positionCharacter(this.playerView, player.pos, SPLIT_CONFIG.player.height, bob);
+    this.playerView.img.setFlipX(this.pointer.x < player.pos.x);
+    this.playerView.img.setAlpha(player.invulnMs > 0 ? 0.55 + Math.sin(now / 80) * 0.2 : 1);
+
+    if (now < this.playerFlashUntil) {
+      this.playerView.img.setTintFill(0xffffff);
+    } else {
+      this.playerView.img.clearTint();
+    }
+  }
+
+  private renderTeammate(now: number, pos: { x: number; y: number }): void {
+    const bob = Math.sin(now / 320 + 1.7) * 1;
+    const dx = pos.x - this.teammatePrevX;
+
+    if (Math.abs(dx) > 0.05) {
+      this.teammateFacingLeft = dx < 0;
+    }
+
+    this.teammatePrevX = pos.x;
+    this.positionCharacter(this.teammateView, pos, SPLIT_CONFIG.teammate.height, bob);
+    this.teammateView.img.setFlipX(this.teammateFacingLeft);
+  }
+
+  // Characters are foot-planted: art sprites anchor to the bottom (or top for
+  // the bot, keeping its sphere head on the headshot band) of the model rect.
+  private positionCharacter(
+    view: CharacterView,
+    pos: { x: number; y: number },
+    height: number,
+    bob: number,
+  ): void {
+    const footY = pos.y + height / 2;
+    const anchorY = view.originY === 1 ? footY : pos.y - height / 2;
+
+    view.img.setPosition(pos.x, anchorY + view.offsetY + bob);
+    view.img.setDepth(footY);
+  }
+
   private syncEnemySprites(now: number): void {
     for (const enemy of this.state.enemies) {
-      let sprite = this.enemySprites.get(enemy.id);
+      let view = this.enemyViews.get(enemy.id);
 
-      if (!sprite) {
-        sprite = this.add.image(enemy.pos.x, enemy.pos.y, TEX.enemy).setDepth(15);
-        this.enemySprites.set(enemy.id, sprite);
+      if (!view) {
+        view = { ...this.createCharacter('enemy', TEX.enemy), deathPlayed: false };
+        this.enemyViews.set(enemy.id, view);
       }
 
       if (!enemy.alive) {
-        sprite.setVisible(false);
+        this.playDeath(view);
         continue;
       }
 
+      const bob = Math.sin(now / 300 + enemy.id * 1.3) * 1;
+      view.img.setVisible(true);
+      this.positionCharacter(view, enemy.pos, SPLIT_CONFIG.enemy.height, bob);
+      view.img.setFlipX(this.state.player.pos.x < enemy.pos.x);
+
+      const flashUntil = this.enemyFlashUntil.get(enemy.id) ?? 0;
       const telegraphing = enemy.ai === 'telegraphing';
-      sprite.setVisible(true);
-      sprite.setPosition(enemy.pos.x, enemy.pos.y);
-      sprite.setTint(telegraphing && Math.floor(now / 90) % 2 === 0 ? 0xffcaca : 0xffffff);
+
+      if (now < flashUntil) {
+        view.img.setTintFill(0xffffff);
+      } else if (telegraphing && Math.floor(now / 90) % 2 === 0) {
+        view.img.setTint(0xffcaca);
+      } else {
+        view.img.clearTint();
+      }
     }
+  }
+
+  private playDeath(view: EnemyView): void {
+    if (view.deathPlayed) {
+      return;
+    }
+
+    view.deathPlayed = true;
+    view.img.clearTint();
+    this.tweens.add({
+      targets: view.img,
+      alpha: 0,
+      duration: DEATH_FADE_MS,
+      scaleX: view.img.scaleX * 0.6,
+      scaleY: view.img.scaleY * 0.6,
+      y: view.img.y + 6,
+      onComplete: () => view.img.setVisible(false),
+    });
+  }
+
+  private spawnSkull(enemyId: number): void {
+    const view = this.enemyViews.get(enemyId);
+
+    if (!view || !this.hasArt(ART_KEYS.ui)) {
+      return;
+    }
+
+    const skull = this.add
+      .image(view.img.x, view.img.y - 8, ART_KEYS.ui, 'skull')
+      .setDepth(650)
+      .setAlpha(0.95);
+    this.tweens.add({
+      targets: skull,
+      alpha: 0,
+      duration: 600,
+      y: skull.y - 20,
+      onComplete: () => skull.destroy(),
+    });
   }
 
   private drawAimLine(player: { x: number; y: number }, now: number): void {
@@ -385,15 +538,23 @@ export class SplitScene extends Phaser.Scene {
       this.nextBeepAt = now + Math.max(90, 520 - progress * 420);
     }
 
-    const spikePulse = 0.5 + Math.abs(Math.sin(now / (this.state.phase === 'defuse' ? 130 : 400))) * 0.5;
-    this.spikeSprite.setScale(1 + spikePulse * 0.25);
-    this.dynamic.fillStyle(0x2ee6c4, 0.18 + spikePulse * 0.2);
-    this.dynamic.fillCircle(SPLIT_CONFIG.spike.x, SPLIT_CONFIG.spike.y, 22 + spikePulse * 10);
+    const defusing = this.state.phase === 'defuse' && this.lastHoldDefuse;
 
-    const barWidth = 220;
-    const barHeight = 14;
+    if (this.spikeArt) {
+      this.spikeSprite.setFrame(defusing ? 'spike-defusing' : 'spike-armed');
+    }
+
+    // Pulsing ground glow layered UNDER the spike sprite so the core reads:
+    // teal while armed, warning red while the defuse is in progress.
+    const spikePulse = 0.5 + Math.abs(Math.sin(now / (this.state.phase === 'defuse' ? 130 : 400))) * 0.5;
+    this.spikeSprite.setScale(this.spikeBaseScale * (1 + spikePulse * 0.25));
+    this.groundFx.fillStyle(defusing ? 0xff5470 : 0x2ee6c4, 0.18 + spikePulse * 0.2);
+    this.groundFx.fillCircle(SPLIT_CONFIG.spike.x, SPLIT_CONFIG.spike.y, 24 + spikePulse * 10);
+
+    const barWidth = 280;
+    const barHeight = 16;
     const barX = ARENA.width / 2 - barWidth / 2;
-    const barY = ARENA.height / 2 + 40;
+    const barY = ARENA.height / 2 + 70;
 
     this.dynamic.fillStyle(0x0c1220, 0.85);
     this.dynamic.fillRoundedRect(barX - 3, barY - 3, barWidth + 6, barHeight + 6, 4);
@@ -406,20 +567,50 @@ export class SplitScene extends Phaser.Scene {
     this.dynamic.strokeRoundedRect(barX, barY, barWidth, barHeight, 3);
   }
 
-  private drawHud(): void {
-    const graphics = this.hudGraphics;
-    graphics.clear();
+  private createHud(): void {
+    if (!this.hasArt(ART_KEYS.ui)) {
+      return;
+    }
 
-    const hearts = this.state.player.hearts;
     const max = SPLIT_CONFIG.player.maxHearts;
 
     for (let i = 0; i < max; i += 1) {
-      const x = 20 + i * 26;
-      const y = 22;
+      const heart = this.add
+        .image(30 + i * 40, 34, ART_KEYS.ui, 'heartFull')
+        .setScale(HEART_SCALE)
+        .setDepth(805)
+        .setScrollFactor(0);
+      this.heartImages.push(heart);
+    }
+
+    // Gold round-counter medallion behind the round number.
+    this.medalImage = this.add
+      .image(ARENA.width / 2, 40, ART_KEYS.ui, 'medal')
+      .setScale(MEDAL_SCALE)
+      .setDepth(808)
+      .setScrollFactor(0);
+  }
+
+  private drawHud(): void {
+    const hearts = this.state.player.hearts;
+    const max = SPLIT_CONFIG.player.maxHearts;
+
+    if (this.heartImages.length > 0) {
+      this.heartImages.forEach((img, i) => {
+        img.setFrame(i < hearts ? 'heartFull' : 'heartEmpty');
+      });
+      return;
+    }
+
+    const graphics = this.hudGraphics;
+    graphics.clear();
+
+    for (let i = 0; i < max; i += 1) {
+      const x = 24 + i * 30;
+      const y = 26;
       const filled = i < hearts;
       graphics.fillStyle(filled ? 0xff5470 : 0x3a2530, 1);
-      this.fillHeart(graphics, x, y, 9);
-      graphics.lineStyle(2, 0x141414, 0.6);
+      this.fillHeart(graphics, x, y, 10);
     }
   }
 
@@ -438,9 +629,12 @@ export class SplitScene extends Phaser.Scene {
     if (this.state.phase === 'defuse') {
       this.statusText.setText('THE SPIKE IS ACTIVE — hold E on the spike to defuse. Esc leaves.');
       this.roundText.setText('DEFUSE');
+      this.medalImage?.setVisible(false);
       return;
     }
 
+    this.roundText.setText(String(this.state.waveIndex + 1));
+    this.medalImage?.setVisible(true);
     this.statusText.setText(
       `WASD to move, aim with the mouse, click to fire. ${aliveEnemyCount(this.state)} left. Esc leaves.`,
     );
@@ -454,8 +648,8 @@ export class SplitScene extends Phaser.Scene {
     const pos = this.state.teammate.pos;
     this.barkText.setText(text);
     this.barkText.setPosition(
-      Phaser.Math.Clamp(pos.x, 120, ARENA.width - 120),
-      Math.max(40, pos.y - 26),
+      Phaser.Math.Clamp(pos.x, 160, ARENA.width - 160),
+      Math.max(52, pos.y - 30),
     );
     this.barkText.setVisible(true).setAlpha(1);
     this.tweens.killTweensOf(this.barkText);
@@ -521,6 +715,71 @@ export class SplitScene extends Phaser.Scene {
 
   private playSfx(key: 'shot' | 'heart' | 'beep' | 'clutch'): void {
     playAudioSfx(SFX_BY_EVENT[key]);
+  }
+
+  // ------------------------------------------------------------------
+  // Real-art wiring. Frames are carved out of the loaded sheets; every art
+  // consumer checks hasArt() and falls back to the generated placeholder
+  // textures below when a file failed to load.
+  // ------------------------------------------------------------------
+
+  private hasArt(key: string): boolean {
+    return this.textures.exists(key);
+  }
+
+  private registerArtFrames(): void {
+    this.addFrames(ART_KEYS.props, PROP_FRAMES);
+    this.addFrames(ART_KEYS.ui, UI_FRAMES);
+    this.addFrames(ART_KEYS.spike, {
+      'spike-armed': SPIKE_FRAMES.armed,
+      'spike-defusing': SPIKE_FRAMES.defusing,
+    });
+  }
+
+  private addFrames(key: string, frames: Readonly<Record<string, ArtFrame>>): void {
+    if (!this.hasArt(key)) {
+      return;
+    }
+
+    const texture = this.textures.get(key);
+
+    for (const [name, frame] of Object.entries(frames)) {
+      if (!texture.has(name)) {
+        texture.add(name, 0, frame.x, frame.y, frame.width, frame.height);
+      }
+    }
+  }
+
+  private createCharacter(
+    role: keyof typeof CHARACTER_ART,
+    placeholderKey: string,
+  ): CharacterView {
+    const spec = CHARACTER_ART[role];
+    const art = this.hasArt(spec.key);
+    const img = this.add.image(0, 0, art ? spec.key : placeholderKey);
+
+    img.setOrigin(0.5, spec.originY);
+
+    if (art) {
+      img.setScale(spec.scale);
+    }
+
+    return { img, art, offsetY: art ? spec.offsetY : 0, originY: spec.originY };
+  }
+
+  private createSpike(): void {
+    this.spikeArt = this.hasArt(ART_KEYS.spike);
+    this.spikeBaseScale = this.spikeArt ? SPIKE_BASE_SCALE : 1;
+    this.spikeSprite = this.add
+      .image(
+        SPLIT_CONFIG.spike.x,
+        SPLIT_CONFIG.spike.y,
+        this.spikeArt ? ART_KEYS.spike : TEX.spike,
+        this.spikeArt ? 'spike-armed' : undefined,
+      )
+      .setScale(this.spikeBaseScale)
+      .setDepth(60)
+      .setVisible(false);
   }
 
   // ------------------------------------------------------------------
@@ -601,26 +860,66 @@ export class SplitScene extends Phaser.Scene {
   }
 
   private drawStaticArena(): void {
-    const floor = this.add.tileSprite(0, 0, ARENA.width, ARENA.height, TEX.floor).setOrigin(0).setDepth(-10);
-    floor.setActive(true);
+    if (this.hasArt(ART_KEYS.floor)) {
+      // 1280x720 art over a 960x540 arena: exact 0.75 uniform scale, so the
+      // baked walls line up with the model's playable box (see SPLIT_CONFIG).
+      this.add
+        .image(0, 0, ART_KEYS.floor)
+        .setOrigin(0)
+        .setDisplaySize(ARENA.width, ARENA.height)
+        .setDepth(-10);
+    } else {
+      this.add
+        .tileSprite(0, 0, ARENA.width, ARENA.height, TEX.floor)
+        .setOrigin(0)
+        .setDepth(-10);
 
-    const walls = this.add.graphics().setDepth(-5);
-    const t = SPLIT_CONFIG.wallThickness;
-    walls.fillStyle(0x2b3240, 1);
-    walls.fillRect(0, 0, ARENA.width, t);
-    walls.fillRect(0, ARENA.height - t, ARENA.width, t);
-    walls.fillRect(0, 0, t, ARENA.height);
-    walls.fillRect(ARENA.width - t, 0, t, ARENA.height);
-
-    const cover = this.add.graphics().setDepth(5);
-    for (const rect of SPLIT_CONFIG.cover) {
-      cover.fillStyle(0x39424f, 1);
-      cover.fillRoundedRect(rect.x, rect.y, rect.width, rect.height, 6);
-      cover.lineStyle(2, 0x1d2530, 0.9);
-      cover.strokeRoundedRect(rect.x, rect.y, rect.width, rect.height, 6);
-      cover.fillStyle(0x4a5563, 1);
-      cover.fillRect(rect.x + 6, rect.y + 6, rect.width - 12, 6);
+      // Wall bands drawn out to the playable box (asymmetric via arena.x/y).
+      const t = SPLIT_CONFIG.wallThickness;
+      const left = ARENA.x + t;
+      const top = ARENA.y + t;
+      const right = ARENA.x + ARENA.width - t;
+      const bottom = ARENA.y + ARENA.height - t;
+      const walls = this.add.graphics().setDepth(-5);
+      walls.fillStyle(0x2b3240, 1);
+      walls.fillRect(0, 0, ARENA.width, top);
+      walls.fillRect(0, bottom, ARENA.width, ARENA.height - bottom);
+      walls.fillRect(0, 0, left, ARENA.height);
+      walls.fillRect(right, 0, ARENA.width - right, ARENA.height);
     }
+
+    this.drawCoverProps();
+  }
+
+  private drawCoverProps(): void {
+    const propsArt = this.hasArt(ART_KEYS.props);
+    const fallback = propsArt ? null : this.add.graphics().setDepth(5);
+
+    SPLIT_CONFIG.cover.forEach((rect, index) => {
+      const frameName = COVER_PROP_ORDER[index % COVER_PROP_ORDER.length];
+      const frame = PROP_FRAMES[frameName];
+
+      if (propsArt && frame) {
+        // The rect stays the collision truth; the prop sprite is bottom-
+        // anchored on it with a small overhang past the sides and top.
+        const scale = (rect.width * COVER_OVERHANG) / frame.width;
+        this.add
+          .image(rect.x + rect.width / 2, rect.y + rect.height + 3, ART_KEYS.props, frameName)
+          .setOrigin(0.5, 1)
+          .setScale(scale)
+          .setDepth(rect.y + rect.height);
+        return;
+      }
+
+      if (fallback) {
+        fallback.fillStyle(0x39424f, 1);
+        fallback.fillRoundedRect(rect.x, rect.y, rect.width, rect.height, 6);
+        fallback.lineStyle(2, 0x1d2530, 0.9);
+        fallback.strokeRoundedRect(rect.x, rect.y, rect.width, rect.height, 6);
+        fallback.fillStyle(0x4a5563, 1);
+        fallback.fillRect(rect.x + 6, rect.y + 6, rect.width - 12, 6);
+      }
+    });
   }
 }
 

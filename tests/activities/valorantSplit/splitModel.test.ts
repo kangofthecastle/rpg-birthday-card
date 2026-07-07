@@ -102,10 +102,11 @@ describe('player hitscan resolution', () => {
   });
 
   it('is blocked by cover between the player and the enemy', () => {
-    // Cover rect {300,150,120,40} sits directly above the player column.
+    // Cover rect {405,190,150,44} (the platform barrier) spans the x=480
+    // column between the player and the enemy.
     const state = setPlayerPos(
-      withState({ enemies: [enemyAt({ x: 360, y: 90 })] }),
-      { x: 360, y: 470 },
+      withState({ enemies: [enemyAt({ x: 480, y: 140 })] }),
+      { x: 480, y: 400 },
     );
 
     const { state: next, result } = firePlayerShot(state, UP);
@@ -129,8 +130,9 @@ describe('player hitscan resolution', () => {
 
 describe('teammate fire (____ / Omen)', () => {
   it('softens the nearest visible enemy with body shots but never lands the kill', () => {
+    // Directly up the teammate's column (x=426) with a clear line of sight.
     let state = withState({
-      enemies: [enemyAt({ x: 296, y: 300 })],
+      enemies: [enemyAt({ x: 426, y: 300 })],
     });
 
     for (let shot = 0; shot < 12; shot += 1) {

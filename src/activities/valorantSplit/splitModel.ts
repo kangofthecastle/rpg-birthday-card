@@ -26,8 +26,13 @@ export interface Rect {
 }
 
 export const SPLIT_CONFIG = {
-  arena: { x: 0, y: 0, width: 720, height: 560 },
-  wallThickness: 28,
+  // The canvas is arena.width x arena.height; the playable box is that rect
+  // inset by wallThickness and shifted by arena.x/y. The numbers mirror the
+  // painted floor of arena-floor.png (1280x720 art at an exact 0.75 scale):
+  // playable x [120, 860], y [122, 442] — left wall band 120, right 100, top
+  // 122 (the Heaven walkway), bottom 98 (movement stops at the hazard stripes).
+  arena: { x: 10, y: 12, width: 960, height: 540 },
+  wallThickness: 110,
   player: {
     width: 26,
     height: 34,
@@ -59,26 +64,29 @@ export const SPLIT_CONFIG = {
   revive: { holdFireMs: 2000 },
   defuse: { totalMs: 7000, checkpointMs: 3500 },
   waves: [3, 2] as const,
-  spike: { x: 360, y: 244, size: 26 },
-  playerStart: { x: 360, y: 470 },
-  teammateStart: { x: 296, y: 486 },
+  // The spike sits on the painted "B" site stencil at the arena center.
+  spike: { x: 480, y: 290, size: 26 },
+  playerStart: { x: 480, y: 415 },
+  teammateStart: { x: 426, y: 422 },
   enemySpawns: [
     [
-      { x: 200, y: 92 },
-      { x: 360, y: 72 },
-      { x: 520, y: 92 },
+      { x: 300, y: 150 },
+      { x: 480, y: 140 },
+      { x: 660, y: 150 },
     ],
     [
-      { x: 276, y: 90 },
-      { x: 444, y: 90 },
+      { x: 390, y: 145 },
+      { x: 570, y: 145 },
     ],
   ] as const,
+  // Collision footprints for the five props in props.png (see splitArt.ts):
+  // crate cluster, long platform barrier, double stack, low crate, lantern.
   cover: [
-    { x: 150, y: 214, width: 92, height: 70 },
-    { x: 300, y: 150, width: 120, height: 40 },
-    { x: 470, y: 210, width: 92, height: 70 },
-    { x: 322, y: 306, width: 84, height: 60 },
-    { x: 178, y: 384, width: 82, height: 60 },
+    { x: 252, y: 225, width: 110, height: 74 },
+    { x: 405, y: 190, width: 150, height: 44 },
+    { x: 635, y: 228, width: 58, height: 64 },
+    { x: 488, y: 334, width: 64, height: 52 },
+    { x: 305, y: 344, width: 56, height: 46 },
   ] as const,
   // Placeholder-art texture keys, kept in one place so real art swaps in later.
   textures: {

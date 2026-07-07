@@ -54,7 +54,7 @@ describe('showDialogue', () => {
     const root = document.querySelector<HTMLElement>('#ui-root');
     const portrait = root?.querySelector<HTMLImageElement>('.dialogue-box__portrait');
 
-    expect(portrait?.getAttribute('src')).toBe('/assets/sprites/characters/friendone-idle-walk-4dir-v1-alpha.png');
+    expect(portrait?.getAttribute('src')).toBe('/assets/portraits/portrait-friendone.png');
     expect(portrait?.getAttribute('alt')).toBe('');
 
     root?.querySelector<HTMLButtonElement>('.dialogue-box__action')?.click();

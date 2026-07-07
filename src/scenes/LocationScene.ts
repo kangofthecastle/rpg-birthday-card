@@ -37,6 +37,7 @@ import {
   type IsoOrigin,
   type IsoPoint,
 } from '../game/isometricProjection';
+import { playMusic, playSfx, type MusicKey } from '../game/audio';
 import { getPointObject, getRectObjects, type RectObject, type TiledMapJson } from '../game/mapHelpers';
 import { getPlayerFacingFromScreenMovement, PlayerController } from '../game/playerController';
 import { renderCollectionPanel } from '../ui/collectionPanel';
@@ -49,6 +50,25 @@ interface LocationSceneData {
   readonly locationId: string;
   readonly spawnId?: string;
   readonly state?: RunState;
+}
+
+// Ambient bed per location; activities layer their own bed on top and the
+// location bed resumes when they end. The ending swaps beds itself.
+const MUSIC_BY_LOCATION_ID: Readonly<Record<string, MusicKey>> = {
+  'recipient-house': 'music-home',
+  entry: 'music-path',
+  'friend-a': 'music-home',
+  'friend-b': 'music-home',
+  'final-spot': 'music-path',
+};
+
+const ACTIVITY_MUSIC_BY_ID: Readonly<Record<string, MusicKey | undefined>> = {
+  'friendone-pc-fishing': 'music-friendone',
+  'valorant-split': 'music-split',
+};
+
+function locationMusicKey(locationId: string): MusicKey {
+  return MUSIC_BY_LOCATION_ID[locationId] ?? 'music-path';
 }
 
 export class LocationScene extends Phaser.Scene {
@@ -92,6 +112,7 @@ export class LocationScene extends Phaser.Scene {
     this.createHud();
     this.createLocationLabel();
     this.applyWarmLightingTint();
+    playMusic(locationMusicKey(this.location.id), { fadeMs: 1200 });
 
     this.interactKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.E);
     this.promptText = this.add
@@ -613,6 +634,7 @@ export class LocationScene extends Phaser.Scene {
   }
 
   private async activateInteraction(interaction: LocationInteraction): Promise<void> {
+    playSfx('sfx-interact');
     if (isInteractionLocked(interaction, this.state)) {
       if (interaction.lockedDialogue) {
         await this.pauseForDialogue(interaction.lockedDialogue);
@@ -642,15 +664,30 @@ export class LocationScene extends Phaser.Scene {
     const activityMount = document.createElement('div');
     root.append(activityMount);
 
+    const activityMusic = ACTIVITY_MUSIC_BY_ID[activityId];
+    if (activityMusic) {
+      playMusic(activityMusic, { fadeMs: 900 });
+    }
+    const resumeLocationMusic = () => {
+      if (activityMusic) {
+        playMusic(locationMusicKey(this.location.id), { fadeMs: 1200 });
+      }
+    };
+
     await activity.start({
       state: this.state,
       mount: activityMount,
       onCancel: () => {
         activityMount.remove();
+        resumeLocationMusic();
         this.canMove = true;
       },
       onComplete: async (completion) => {
         activityMount.remove();
+        resumeLocationMusic();
+        if (this.location.keepsake) {
+          playSfx('sfx-keepsake');
+        }
         this.state = completeLocation(this.state, completion);
 
         if (completion.locationId === 'final-spot') {

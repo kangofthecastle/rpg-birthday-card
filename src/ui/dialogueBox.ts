@@ -1,4 +1,5 @@
 import type { DialogueLine } from '../content/types';
+import { playSfx } from '../game/audio';
 import { getUiRoot } from './domRoot';
 
 interface ActiveDialogue {
@@ -10,8 +11,9 @@ interface ActiveDialogue {
 const PORTRAIT_URL_BY_ID: Readonly<Record<string, string>> = {
   'character-recipient-walk-8dir': '/assets/sprites/characters/recipient-idle-walk-8dir-v1-alpha.png',
   'character-friendone-walk-4dir': '/assets/sprites/characters/friendone-walk-4dir-v2-alpha.png',
-  'portrait-friendone': '/assets/sprites/characters/friendone-idle-walk-4dir-v1-alpha.png',
-  'portrait-friend-b': '/assets/sprites/characters/friendtwo-idle-walk-4dir-v1-alpha.png',
+  'portrait-recipient': '/assets/portraits/portrait-recipient.png',
+  'portrait-friendone': '/assets/portraits/portrait-friendone.png',
+  'portrait-friend-b': '/assets/portraits/portrait-friendtwo.png',
 };
 
 let activeDialogue: ActiveDialogue | undefined;
@@ -52,6 +54,7 @@ export function showDialogue(lines: readonly DialogueLine[]): Promise<void> {
         return;
       }
 
+      playSfx('sfx-dialogue-advance');
       render();
     };
 

@@ -1,7 +1,13 @@
 import Phaser from 'phaser';
+import { initAudio } from './game/audio';
 import { createGameConfig } from './game/gameConfig';
 import { runBootScreen } from './ui/bootScreen';
 import './styles.css';
+
+// Fallback for paths that skip the boot overlay (testMode): arm WebAudio on
+// the first user gesture of any kind.
+document.addEventListener('keydown', () => initAudio(), { once: true });
+document.addEventListener('pointerdown', () => initAudio(), { once: true });
 
 const root = document.querySelector<HTMLDivElement>('#game-root');
 

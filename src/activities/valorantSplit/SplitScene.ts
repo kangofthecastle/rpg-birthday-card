@@ -12,6 +12,14 @@ import {
   type SplitInput,
   type SplitState,
 } from './splitModel';
+import { playSfx as playAudioSfx, type SfxKey } from '../../game/audio';
+
+const SFX_BY_EVENT: Readonly<Record<'shot' | 'heart' | 'beep' | 'clutch', SfxKey>> = {
+  shot: 'sfx-shot',
+  heart: 'sfx-heart-loss',
+  beep: 'sfx-spike-beep',
+  clutch: 'sfx-clutch',
+};
 
 export interface SplitSceneCallbacks {
   readonly onComplete: () => void;
@@ -246,6 +254,7 @@ export class SplitScene extends Phaser.Scene {
           this.muzzleUntil = now + 70;
           this.playSfx('shot');
           if (event.headshot) {
+            playAudioSfx('sfx-headshot');
             this.showPopup('HEADSHOT', '#ff5470');
           }
           break;
@@ -510,9 +519,8 @@ export class SplitScene extends Phaser.Scene {
     this.callbacks.onCancel();
   }
 
-  // Audio hooks are no-op stubs; a real audio manager swaps in later.
-  private playSfx(_key: 'shot' | 'heart' | 'beep' | 'clutch'): void {
-    // intentionally empty
+  private playSfx(key: 'shot' | 'heart' | 'beep' | 'clutch'): void {
+    playAudioSfx(SFX_BY_EVENT[key]);
   }
 
   // ------------------------------------------------------------------

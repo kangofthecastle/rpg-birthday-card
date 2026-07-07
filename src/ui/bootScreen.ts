@@ -7,6 +7,8 @@
  *
  * Reused later by the post-ending letters screen (Phase 3).
  */
+import { initAudio, playSfx } from '../game/audio';
+
 export const DEFAULT_BOOT_LINES: readonly string[] = [
   'FOR RECIPIENT — v1.0',
   'loading: one small world..........ok',
@@ -114,6 +116,11 @@ export function runBootScreen(options: BootScreenOptions = {}): Promise<void> {
       if (event.repeat) {
         return;
       }
+
+      // A keypress is a user gesture, so this is the earliest safe moment to
+      // arm WebAudio (autoplay policy).
+      initAudio();
+      playSfx('sfx-boot-key');
 
       if (phase === 'typing') {
         event.preventDefault();

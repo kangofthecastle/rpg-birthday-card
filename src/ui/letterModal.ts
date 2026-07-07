@@ -1,4 +1,5 @@
 import type { DialogueLine } from '../content/types';
+import { playSfx } from '../game/audio';
 import { getUiRoot } from './domRoot';
 
 export interface LetterModalOptions {
@@ -21,6 +22,8 @@ export function showLetterModal(lines: readonly DialogueLine[]): Promise<void> {
   if (lines.length === 0) {
     return Promise.resolve();
   }
+
+  playSfx('sfx-letter-open');
 
   return new Promise((resolve) => {
     const host = getLetterHost();

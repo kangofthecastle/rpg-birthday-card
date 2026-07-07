@@ -88,16 +88,22 @@ export class SplitScene extends Phaser.Scene {
   private callbackDelivered = false;
 
   private keys?: {
-    up: Phaser.Input.Keyboard.Key;
-    down: Phaser.Input.Keyboard.Key;
-    left: Phaser.Input.Keyboard.Key;
-    right: Phaser.Input.Keyboard.Key;
-    w: Phaser.Input.Keyboard.Key;
-    a: Phaser.Input.Keyboard.Key;
-    s: Phaser.Input.Keyboard.Key;
-    d: Phaser.Input.Keyboard.Key;
-    e: Phaser.Input.Keyboard.Key;
     escape: Phaser.Input.Keyboard.Key;
+  };
+
+  // Movement/defuse keys are tracked with window-level listeners rather than
+  // Phaser Key objects: the location scene's Phaser instance keeps running
+  // beneath the activity modal and captures (preventDefaults) keys like E,
+  // which makes this second Phaser instance drop those keydowns entirely.
+  private heldCodes = new Set<string>();
+  private readonly onWindowKeyDown = (event: KeyboardEvent): void => {
+    this.heldCodes.add(event.code);
+  };
+  private readonly onWindowKeyUp = (event: KeyboardEvent): void => {
+    this.heldCodes.delete(event.code);
+  };
+  private readonly onWindowBlur = (): void => {
+    this.heldCodes.clear();
   };
 
   private firePressed = false;
@@ -247,21 +253,16 @@ export class SplitScene extends Phaser.Scene {
     const keyboard = this.input.keyboard;
 
     if (keyboard) {
-      const K = Phaser.Input.Keyboard.KeyCodes;
       this.keys = {
-        up: keyboard.addKey(K.UP),
-        down: keyboard.addKey(K.DOWN),
-        left: keyboard.addKey(K.LEFT),
-        right: keyboard.addKey(K.RIGHT),
-        w: keyboard.addKey(K.W),
-        a: keyboard.addKey(K.A),
-        s: keyboard.addKey(K.S),
-        d: keyboard.addKey(K.D),
-        e: keyboard.addKey(K.E, false),
-        escape: keyboard.addKey(K.ESC),
+        escape: keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC),
       };
-      keyboard.removeCapture([K.W, K.A, K.S, K.D, K.E]);
     }
+
+    window.addEventListener('keydown', this.onWindowKeyDown);
+    window.addEventListener('keyup', this.onWindowKeyUp);
+    window.addEventListener('blur', this.onWindowBlur);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.removeWindowKeyListeners());
+    this.events.once(Phaser.Scenes.Events.DESTROY, () => this.removeWindowKeyListeners());
 
     this.input.setDefaultCursor('none');
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
@@ -273,21 +274,26 @@ export class SplitScene extends Phaser.Scene {
     });
   }
 
+  private removeWindowKeyListeners(): void {
+    window.removeEventListener('keydown', this.onWindowKeyDown);
+    window.removeEventListener('keyup', this.onWindowKeyUp);
+    window.removeEventListener('blur', this.onWindowBlur);
+    this.heldCodes.clear();
+  }
+
   private readInput(): SplitInput {
-    const keys = this.keys;
+    const held = this.heldCodes;
     let x = 0;
     let y = 0;
 
-    if (keys) {
-      if (keys.left.isDown || keys.a.isDown) x -= 1;
-      if (keys.right.isDown || keys.d.isDown) x += 1;
-      if (keys.up.isDown || keys.w.isDown) y -= 1;
-      if (keys.down.isDown || keys.s.isDown) y += 1;
-    }
+    if (held.has('ArrowLeft') || held.has('KeyA')) x -= 1;
+    if (held.has('ArrowRight') || held.has('KeyD')) x += 1;
+    if (held.has('ArrowUp') || held.has('KeyW')) y -= 1;
+    if (held.has('ArrowDown') || held.has('KeyS')) y += 1;
 
     const player = this.state.player.pos;
     const aimAngle = Math.atan2(this.pointer.y - player.y, this.pointer.x - player.x);
-    const holdDefuse = Boolean(keys?.e.isDown) && this.state.phase === 'defuse';
+    const holdDefuse = held.has('KeyE') && this.state.phase === 'defuse';
     this.lastHoldDefuse = holdDefuse;
 
     return { move: { x, y }, aimAngle, fire: this.firePressed, holdDefuse };

@@ -772,6 +772,14 @@
           "x": 704,
           "y": 768,
           "point": true
+        },
+        {
+          "id": 5,
+          "name": "near-friendtwo-pc",
+          "type": "spawn",
+          "x": 704,
+          "y": 432,
+          "point": true
         }
       ]
     },
@@ -810,6 +818,15 @@
           "name": "friend-b-easter-egg",
           "type": "easterEgg",
           "x": 960,
+          "y": 384,
+          "width": 128,
+          "height": 96
+        },
+        {
+          "id": 6,
+          "name": "friendtwo-host",
+          "type": "dialogue",
+          "x": 464,
           "y": 384,
           "width": 128,
           "height": 96

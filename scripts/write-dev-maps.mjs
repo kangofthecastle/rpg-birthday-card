@@ -49,11 +49,15 @@ const maps = [
   },
   {
     file: 'friend-b.tmj',
-    spawns: [point(1, 'front-door', 704, 768)],
+    spawns: [
+      point(1, 'front-door', 704, 768),
+      point(5, 'near-friendtwo-pc', 704, 432),
+    ],
     exits: [rect(2, 'back-entry', 'exit', 640, 832, 128, 80)],
     interactables: [
       rect(3, 'friend-b-host', 'activity', 640, 384, 128, 96),
       rect(4, 'friend-b-easter-egg', 'easterEgg', 960, 384, 128, 96),
+      rect(6, 'friendtwo-host', 'dialogue', 464, 384, 128, 96),
     ],
   },
   {

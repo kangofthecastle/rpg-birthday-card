@@ -136,7 +136,7 @@ describe('runState', () => {
 
     state = completeLocation(state, {
       locationId: 'friend-b',
-      keepsakeId: 'paper-star',
+      keepsakeId: 'defused-spike-charm',
     });
 
     expect(isFinalSpotUnlocked(state)).toBe(true);

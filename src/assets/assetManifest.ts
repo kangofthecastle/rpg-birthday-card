@@ -155,13 +155,44 @@ export const ASSET_MANIFEST: readonly GameAsset[] = [
     qaChecks: ['small-size readability', 'palette consistency'],
   },
   {
-    id: 'keepsake-paper-star',
+    id: 'keepsake-defused-spike-charm',
     kind: 'keepsake',
-    label: 'Paper star keepsake icon',
+    label: 'Defused spike charm keepsake icon',
     status: 'planned',
     locationIds: ['friend-b', 'final-spot'],
-    notes: 'Small keepsake icon used in collection UI and final reveal.',
+    notes:
+      'Small keepsake icon used in collection UI and final reveal for the SPLIT.EXE minigame. A miniature defused Valorant-style spike with a calm teal glowing core.',
     qaChecks: ['small-size readability', 'palette consistency'],
+  },
+  {
+    id: 'activity-art-split-arena-tiles',
+    kind: 'activity-art',
+    label: 'SPLIT.EXE arena tiles',
+    status: 'planned',
+    locationIds: ['friend-b'],
+    notes:
+      'Low-bit pixel-art top-down floor/wall/cover tiles evoking Valorant Split B site. Batch 2, after the art-direction research lands. Placeholder colored shapes are generated in SplitScene.ts (keys in SPLIT_CONFIG.textures) and swap out without logic changes.',
+    qaChecks: ['64px-grid readability', 'palette lock', 'cover silhouette clarity'],
+  },
+  {
+    id: 'activity-art-split-minisprites',
+    kind: 'activity-art',
+    label: 'SPLIT.EXE Viper/Omen/bot minisprites',
+    status: 'planned',
+    locationIds: ['friend-b'],
+    notes:
+      'Top-down minisprites: ____-as-Viper (green accents), ____-as-Omen teammate (blue-purple shroud), and enemy bots with a readable top head band. Must keep the top ~22% head zone legible so the headshot hitbox reads. Placeholder shapes generated in SplitScene.ts today.',
+    qaChecks: ['head-band readability', 'faction color contrast', 'top-down silhouette clarity'],
+  },
+  {
+    id: 'activity-art-split-spike',
+    kind: 'activity-art',
+    label: 'SPLIT.EXE planted spike',
+    status: 'planned',
+    locationIds: ['friend-b'],
+    notes:
+      'Planted/defusing spike prop with a pulsing teal core for the defuse finale. Placeholder is a Phaser-drawn box with a glowing core; real art swaps in by SPLIT_CONFIG.textures.spike.',
+    qaChecks: ['pulsing-core readability', 'planted-vs-defused states'],
   },
   {
     id: 'activity-art-friendone-pc-pond',

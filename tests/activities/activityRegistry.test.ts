@@ -15,7 +15,7 @@ describe('activityRegistry', () => {
 
     expect(ids).toEqual([
       'friendone-pc-fishing',
-      'friend-b-paper-stars',
+      'valorant-split',
       'final-keepsake-reveal',
     ]);
   });
@@ -366,7 +366,7 @@ describe('activityRegistry', () => {
 
     expect(activityIds).toEqual([
       'friendone-pc-fishing',
-      'friend-b-paper-stars',
+      'valorant-split',
       'final-keepsake-reveal',
     ]);
     expect(() => {

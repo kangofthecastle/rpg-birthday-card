@@ -34,7 +34,7 @@ const BARKS = {
   firstBlood: "That's the one. Knew you'd pop off.",
   revive: "I've got you. Get up — we're not done.",
   spike: "I've got your back. Seven seconds. You've got this.",
-  clutch: "That's my duelist. Clutch.",
+  clutch: "That's my Viper. Clutch.",
 } as const;
 
 interface Tracer {

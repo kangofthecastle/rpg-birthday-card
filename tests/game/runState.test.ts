@@ -5,9 +5,14 @@ import {
   applyActivityCompletion,
   hasActivityCompleted,
   hasActivityWon,
+  hasAllFriendKeepsakes,
   hasKeepsake,
+  hasSeenBeat,
   isFinalSpotUnlocked,
+  markBeatSeen,
   markEndingCompleted,
+  FRIEND_KEEPSAKE_IDS,
+  REQUIRED_FINAL_KEEPSAKE_IDS,
 } from '../../src/game/runState';
 import type { ActivityCompletionInput } from '../../src/game/runState';
 
@@ -125,7 +130,7 @@ describe('runState', () => {
     expect(hasKeepsake(next, 'glowing-koi-scale')).toBe(true);
   });
 
-  it('unlocks the final spot only after all required keepsakes are collected', () => {
+  it('unlocks the final spot only after every keepsake-bearing location is cleared', () => {
     let state = createInitialRunState('entry');
     state = completeLocation(state, {
       locationId: 'friend-a',
@@ -139,7 +144,44 @@ describe('runState', () => {
       keepsakeId: 'defused-spike-charm',
     });
 
+    // Both friend keepsakes are in hand, but the home keepsake is still required.
+    expect(hasAllFriendKeepsakes(state)).toBe(true);
+    expect(isFinalSpotUnlocked(state)).toBe(false);
+
+    state = completeLocation(state, {
+      locationId: 'recipient-house',
+      keepsakeId: 'golden-hour-photo',
+    });
+
     expect(isFinalSpotUnlocked(state)).toBe(true);
+  });
+
+  it('derives required keepsakes from friend and home locations', () => {
+    expect(REQUIRED_FINAL_KEEPSAKE_IDS).toContain('golden-hour-photo');
+    expect(FRIEND_KEEPSAKE_IDS).not.toContain('golden-hour-photo');
+    expect(REQUIRED_FINAL_KEEPSAKE_IDS.length).toBe(FRIEND_KEEPSAKE_IDS.length + 1);
+  });
+
+  it('reports friend-keepsake completion for the return-home beat', () => {
+    let state = createInitialRunState('entry');
+    expect(hasAllFriendKeepsakes(state)).toBe(false);
+
+    for (const keepsakeId of FRIEND_KEEPSAKE_IDS) {
+      state = completeLocation(state, { locationId: `loc-${keepsakeId}`, keepsakeId });
+    }
+
+    expect(hasAllFriendKeepsakes(state)).toBe(true);
+  });
+
+  it('tracks one-time entry beats without mutating the original state', () => {
+    const state = createInitialRunState('recipient-house');
+    expect(hasSeenBeat(state, 'recipient-intro')).toBe(false);
+
+    const next = markBeatSeen(state, 'recipient-intro');
+
+    expect(hasSeenBeat(next, 'recipient-intro')).toBe(true);
+    expect(hasSeenBeat(state, 'recipient-intro')).toBe(false);
+    expect(markBeatSeen(next, 'recipient-intro').seenBeatIds).toEqual(['recipient-intro']);
   });
 
   it('marks the ending completed without mutating the original state', () => {

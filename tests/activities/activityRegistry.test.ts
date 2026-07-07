@@ -17,6 +17,7 @@ describe('activityRegistry', () => {
       'friendone-pc-fishing',
       'valorant-split',
       'final-keepsake-reveal',
+      'recipient-pc-letter',
     ]);
   });
 
@@ -368,6 +369,7 @@ describe('activityRegistry', () => {
       'friendone-pc-fishing',
       'valorant-split',
       'final-keepsake-reveal',
+      'recipient-pc-letter',
     ]);
     expect(() => {
       activityIds.forEach((activityId) => getActivity(activityId));

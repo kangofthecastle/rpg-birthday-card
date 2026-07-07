@@ -31,6 +31,7 @@ interface TiledLayer {
 
 const mapFiles = [
   'entry.tmj',
+  'recipient-house.tmj',
   'friend-a.tmj',
   'friend-b.tmj',
   'final-spot.tmj',
@@ -97,6 +98,61 @@ describe('dev maps', () => {
       expect.arrayContaining([
         expect.objectContaining({ name: 'friendone-host', type: 'dialogue' }),
         expect.objectContaining({ name: 'friendone-pc', type: 'activity' }),
+      ]),
+    );
+  });
+
+  it('includes the front-door spawn, exit, and PC in ____’s room', () => {
+    const map = JSON.parse(
+      readFileSync(join(process.cwd(), 'public', 'maps', 'recipient-house.tmj'), 'utf8'),
+    ) as DevMap;
+    const spawns = map.layers.find(
+      (layer) => layer.type === 'objectgroup' && layer.name === 'Spawns',
+    );
+    const exits = map.layers.find(
+      (layer) => layer.type === 'objectgroup' && layer.name === 'Exits',
+    );
+    const interactables = map.layers.find(
+      (layer) => layer.type === 'objectgroup' && layer.name === 'Interactables',
+    );
+
+    expect(spawns?.objects).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'front-door', type: 'spawn' }),
+      ]),
+    );
+    expect(exits?.objects).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'step-outside', type: 'exit' }),
+      ]),
+    );
+    expect(interactables?.objects).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'recipient-pc', type: 'activity' }),
+        expect.objectContaining({ name: 'recipient-violin', type: 'easterEgg' }),
+      ]),
+    );
+  });
+
+  it('gives entry a matching return-home exit and spawn', () => {
+    const map = JSON.parse(
+      readFileSync(join(process.cwd(), 'public', 'maps', 'entry.tmj'), 'utf8'),
+    ) as DevMap;
+    const spawns = map.layers.find(
+      (layer) => layer.type === 'objectgroup' && layer.name === 'Spawns',
+    );
+    const exits = map.layers.find(
+      (layer) => layer.type === 'objectgroup' && layer.name === 'Exits',
+    );
+
+    expect(spawns?.objects).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'from-recipient-house', type: 'spawn' }),
+      ]),
+    );
+    expect(exits?.objects).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'to-recipient-house', type: 'exit' }),
       ]),
     );
   });

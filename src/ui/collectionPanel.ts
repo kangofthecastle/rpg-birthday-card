@@ -1,10 +1,10 @@
-import { getLocation } from '../content/locations';
+import { LOCATIONS } from '../content/locations';
 import type { RunState } from '../game/runState';
 
 export function renderCollectionPanel(state: RunState): string {
-  const keepsakes = ['friend-a', 'friend-b']
-    .map((locationId) => getLocation(locationId).keepsake)
-    .filter((keepsake) => keepsake !== undefined);
+  const keepsakes = LOCATIONS.map((location) => location.keepsake).filter(
+    (keepsake) => keepsake !== undefined,
+  );
 
   const items = keepsakes
     .map((keepsake) => {

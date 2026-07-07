@@ -21,11 +21,14 @@ import type { DialogueLine, LocationDefinition, LocationInteraction } from '../c
 import {
   completeLocation,
   createInitialRunState,
+  hasAllFriendKeepsakes,
   isFinalSpotUnlocked,
+  markBeatSeen,
   markEndingCompleted,
   setCurrentLocation,
   type RunState,
 } from '../game/runState';
+import { isInteractionLocked, shouldPlayEnterBeat } from '../game/interactionState';
 import {
   getIsoBounds,
   getIsoRectCorners,
@@ -88,6 +91,7 @@ export class LocationScene extends Phaser.Scene {
     this.createPlayer();
     this.createHud();
     this.createLocationLabel();
+    this.applyWarmLightingTint();
 
     this.interactKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.E);
     this.promptText = this.add
@@ -99,6 +103,38 @@ export class LocationScene extends Phaser.Scene {
       })
       .setScrollFactor(0)
       .setDepth(1000);
+
+    void this.runEnterBeats();
+  }
+
+  private applyWarmLightingTint(): void {
+    if (
+      !this.location.warmLightingRequiresAllFriendKeepsakes ||
+      !hasAllFriendKeepsakes(this.state)
+    ) {
+      return;
+    }
+
+    this.add
+      .rectangle(0, 0, this.cameras.main.width, this.cameras.main.height, 0xffb454, 0.16)
+      .setOrigin(0, 0)
+      .setScrollFactor(0)
+      .setDepth(900);
+  }
+
+  private async runEnterBeats(): Promise<void> {
+    for (const beat of this.location.enterBeats ?? []) {
+      if (!shouldPlayEnterBeat(beat, this.state)) {
+        continue;
+      }
+
+      if (beat.once !== false) {
+        this.state = markBeatSeen(this.state, beat.id);
+        this.registry.set('runState', this.state);
+      }
+
+      await this.pauseForDialogue(beat.dialogue);
+    }
   }
 
   update(): void {
@@ -577,6 +613,13 @@ export class LocationScene extends Phaser.Scene {
   }
 
   private async activateInteraction(interaction: LocationInteraction): Promise<void> {
+    if (isInteractionLocked(interaction, this.state)) {
+      if (interaction.lockedDialogue) {
+        await this.pauseForDialogue(interaction.lockedDialogue);
+      }
+      return;
+    }
+
     if (interaction.dialogue) {
       await this.pauseForDialogue(interaction.dialogue);
     }

@@ -165,6 +165,16 @@ export const ASSET_MANIFEST: readonly GameAsset[] = [
     qaChecks: ['small-size readability', 'palette consistency'],
   },
   {
+    id: 'keepsake-golden-hour-photo',
+    kind: 'keepsake',
+    label: 'Golden Hour Photo keepsake icon',
+    status: 'planned',
+    locationIds: ['recipient-house', 'final-spot'],
+    notes:
+      "Small keepsake icon for ____'s self-keepsake: a golden-hour photograph revealed by her PC once both friend keepsakes are collected.",
+    qaChecks: ['small-size readability', 'palette consistency'],
+  },
+  {
     id: 'activity-art-split-arena-tiles',
     kind: 'activity-art',
     label: 'SPLIT.EXE arena tiles',

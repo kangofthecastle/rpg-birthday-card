@@ -1,8 +1,18 @@
 import { LOCATIONS } from '../content/locations';
 
+const KEEPSAKE_LOCATION_KINDS: readonly string[] = ['friend', 'home'];
+
+export const FRIEND_KEEPSAKE_IDS: readonly string[] = LOCATIONS.flatMap((location) =>
+  location.kind === 'friend' && location.keepsake ? [location.keepsake.id] : [],
+);
+
+// The final spot needs every keepsake-bearing location cleared — the two friend
+// houses plus ____'s own home (the Golden Hour Photo). Stays data-driven.
 export const REQUIRED_FINAL_KEEPSAKE_IDS: readonly string[] = LOCATIONS.flatMap(
   (location) =>
-    location.kind === 'friend' && location.keepsake ? [location.keepsake.id] : [],
+    KEEPSAKE_LOCATION_KINDS.includes(location.kind) && location.keepsake
+      ? [location.keepsake.id]
+      : [],
 );
 
 export interface RunState {
@@ -11,6 +21,7 @@ export interface RunState {
   readonly collectedKeepsakeIds: readonly string[];
   readonly completedActivityIds: readonly string[];
   readonly wonActivityIds: readonly string[];
+  readonly seenBeatIds: readonly string[];
   readonly endingCompleted: boolean;
 }
 
@@ -41,6 +52,7 @@ export function createInitialRunState(currentLocationId: string): RunState {
     collectedKeepsakeIds: [],
     completedActivityIds: [],
     wonActivityIds: [],
+    seenBeatIds: [],
     endingCompleted: false,
   };
 }
@@ -94,6 +106,21 @@ export function hasCompletedLocation(state: RunState, locationId: string): boole
 
 export function hasKeepsake(state: RunState, keepsakeId: string): boolean {
   return state.collectedKeepsakeIds.includes(keepsakeId);
+}
+
+export function hasAllFriendKeepsakes(state: RunState): boolean {
+  return FRIEND_KEEPSAKE_IDS.every((keepsakeId) => hasKeepsake(state, keepsakeId));
+}
+
+export function hasSeenBeat(state: RunState, beatId: string): boolean {
+  return state.seenBeatIds.includes(beatId);
+}
+
+export function markBeatSeen(state: RunState, beatId: string): RunState {
+  return {
+    ...state,
+    seenBeatIds: addUnique(state.seenBeatIds, beatId),
+  };
 }
 
 export function hasActivityCompleted(state: RunState, activityId: string): boolean {

@@ -29,8 +29,8 @@ export class BootScene extends Phaser.Scene {
 
     const params = new URLSearchParams(window.location.search);
     const testMode = params.get('testMode') === '1';
-    const locationId = testMode ? params.get('locationId') ?? 'entry' : 'entry';
-    const spawnId = testMode ? params.get('spawnId') ?? 'start' : 'start';
+    const locationId = testMode ? params.get('locationId') ?? 'recipient-house' : 'recipient-house';
+    const spawnId = testMode ? params.get('spawnId') ?? 'front-door' : 'front-door';
 
     this.scene.start(SceneKeys.Location, {
       locationId,

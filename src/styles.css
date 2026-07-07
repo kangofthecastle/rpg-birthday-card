@@ -55,6 +55,110 @@ body {
   font-size: 18px;
 }
 
+.boot-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: clamp(20px, 6vw, 72px);
+  background: #05060a;
+  pointer-events: auto;
+}
+
+/* subtle CRT scanlines over the whole screen */
+.boot-screen::after {
+  position: absolute;
+  inset: 0;
+  content: '';
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0) 0 2px,
+    rgba(0, 0, 0, 0.28) 2px 3px
+  );
+  opacity: 0.5;
+  mix-blend-mode: multiply;
+}
+
+.boot-screen__crt {
+  width: min(760px, 100%);
+  color: #b6f7c1;
+  font-family: "Courier New", ui-monospace, monospace;
+  font-size: clamp(15px, 2.3vw, 21px);
+  line-height: 1.7;
+  text-shadow: 0 0 6px rgba(120, 245, 160, 0.45);
+}
+
+.boot-screen__console {
+  display: flex;
+  align-items: flex-end;
+  min-height: 6.8em;
+}
+
+.boot-screen__lines {
+  margin: 0;
+  font: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.boot-screen__cursor {
+  display: inline-block;
+  width: 0.62em;
+  height: 1.05em;
+  margin-left: 0.12em;
+  background: #b6f7c1;
+  box-shadow: 0 0 8px rgba(120, 245, 160, 0.6);
+  transform: translateY(0.16em);
+  animation: boot-screen-blink 1.05s step-end infinite;
+}
+
+.boot-screen__prompt {
+  margin: 1.6em 0 0;
+  color: #f2ffe9;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  animation: boot-screen-blink 1.2s step-end infinite;
+}
+
+.boot-screen--flash {
+  animation: boot-screen-flash 260ms ease-out forwards;
+}
+
+@keyframes boot-screen-blink {
+  0%,
+  55% {
+    opacity: 1;
+  }
+  56%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes boot-screen-flash {
+  0% {
+    background: #05060a;
+  }
+  35% {
+    background: #f6fff2;
+  }
+  100% {
+    background: #05060a;
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .boot-screen__cursor,
+  .boot-screen__prompt,
+  .boot-screen--flash {
+    animation-duration: 0.001ms;
+    animation-iteration-count: 1;
+  }
+}
+
 .activity-panel,
 .collection-panel {
   pointer-events: auto;

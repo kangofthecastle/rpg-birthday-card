@@ -1,6 +1,14 @@
 import Phaser from 'phaser';
+import { RECIPIENT_SPRITE } from '../assets/recipientSpriteConfig';
 import { projectToIso, type IsoOrigin, type IsoPoint } from './isometricProjection';
-import type { PropPlacement, RoomDressing } from '../content/roomDressing';
+import {
+  getPropColliders,
+  type PropColliderRect,
+  type PropPlacement,
+  type RoomDressing,
+} from '../content/roomDressing';
+
+export type { PropColliderRect } from '../content/roomDressing';
 
 // Render depths sit far below the player/prop billboards (which depth-sort by
 // projected screen Y, i.e. hundreds of px) so the floor and walls always draw
@@ -8,9 +16,23 @@ import type { PropPlacement, RoomDressing } from '../content/roomDressing';
 const FLOOR_DEPTH = -60;
 const WALL_DEPTH = -58;
 const FLOOR_SKIRT_DEPTH = -59;
+// Doormat sits just above the floor/rug but below every billboard, so the
+// player visibly stands ON it. Its glow pulses beneath the mat.
+const DOORMAT_DEPTH = -26;
+const DOORMAT_GLOW_DEPTH = -27;
+
+// The player yardstick: how tall ____'s sprite actually reads on screen. Her
+// 256px frame is drawn at RECIPIENT_SPRITE.scale, and the visible character fills
+// ~0.88 of that frame height (measured in-scene: ~102px of the 115px frame).
+// Prop heightRatios are multiples of this, so props stay sized to the player.
+const RECIPIENT_VISIBLE_FRACTION = 0.88;
+const PLAYER_VISUAL_HEIGHT_PX =
+  RECIPIENT_SPRITE.frameHeight * RECIPIENT_SPRITE.scale * RECIPIENT_VISIBLE_FRACTION;
 
 export interface RoomRenderResult {
   readonly objects: readonly Phaser.GameObjects.GameObject[];
+  /** Floor colliders for solid props, in map coordinates. */
+  readonly colliders: readonly PropColliderRect[];
 }
 
 /**
@@ -46,7 +68,118 @@ export function renderRoomDressing(
   objects.push(renderFloor(scene, dressing, [top, right, bottom, left]));
   objects.push(...renderProps(scene, dressing, origin));
 
-  return { objects };
+  return { objects, colliders: getPropColliders(dressing) };
+}
+
+/**
+ * Renders a warm woven doormat plus a soft pulsing glow at an exit rect, so a
+ * dressed room (which hides the debug rects) still shows the way out. The mat
+ * lays flat on the floor, scaled to the exit rect's projected footprint.
+ */
+export function renderExitDoormat(
+  scene: Phaser.Scene,
+  dressing: RoomDressing,
+  exit: PropColliderRect,
+  origin: IsoOrigin,
+): RoomRenderResult {
+  const matKey = buildDoormatTexture(scene, dressing);
+  const glowKey = buildDoormatGlowTexture(scene, dressing);
+
+  const center = projectToIso(exit.x + exit.width / 2, exit.y + exit.height / 2, origin);
+  const verticalScale = origin.verticalScale ?? 0.5;
+  const span = exit.width + exit.height;
+  const projWidth = span / 2;
+  const projHeight = (span * verticalScale) / 2;
+
+  const glow = scene.add
+    .image(center.x, center.y, glowKey)
+    .setOrigin(0.5, 0.5)
+    .setDepth(DOORMAT_GLOW_DEPTH)
+    .setBlendMode(Phaser.BlendModes.ADD)
+    .setDisplaySize(projWidth * 2.6, projHeight * 2.6);
+  glow.setAlpha(0.7);
+
+  scene.tweens.add({
+    targets: glow,
+    alpha: { from: 0.45, to: 0.95 },
+    scaleX: { from: glow.scaleX * 0.88, to: glow.scaleX * 1.12 },
+    scaleY: { from: glow.scaleY * 0.88, to: glow.scaleY * 1.12 },
+    duration: 1100,
+    yoyo: true,
+    repeat: -1,
+    ease: 'Sine.easeInOut',
+  });
+
+  const mat = scene.add
+    .image(center.x, center.y, matKey)
+    .setOrigin(0.5, 0.5)
+    .setDepth(DOORMAT_DEPTH)
+    .setDisplaySize(projWidth * 1.06, projHeight * 1.12);
+
+  return { objects: [glow, mat], colliders: [] };
+}
+
+function buildDoormatTexture(scene: Phaser.Scene, dressing: RoomDressing): string {
+  const key = `${dressing.tilesTextureKey}-doormat`;
+
+  if (scene.textures.exists(key)) {
+    return key;
+  }
+
+  const w = 132;
+  const h = 76;
+  const radius = 20;
+  const graphics = scene.make.graphics({}, false);
+
+  // Dark wicker border, then the warm mat body, then a lighter inner panel.
+  graphics.fillStyle(0x4a3324, 1);
+  graphics.fillRoundedRect(0, 0, w, h, radius);
+  graphics.fillStyle(0x8a6a4f, 1);
+  graphics.fillRoundedRect(5, 5, w - 10, h - 10, radius - 5);
+  graphics.fillStyle(0xb0865a, 1);
+  graphics.fillRoundedRect(14, 14, w - 28, h - 28, radius - 10);
+
+  // Woven cross-hatch for a wicker/doormat read.
+  graphics.lineStyle(2, 0x6f5237, 0.55);
+  for (let x = 18; x < w - 14; x += 9) {
+    graphics.lineBetween(x, 16, x, h - 16);
+  }
+  graphics.lineStyle(2, 0x6f5237, 0.35);
+  for (let y = 18; y < h - 14; y += 9) {
+    graphics.lineBetween(16, y, w - 16, y);
+  }
+
+  graphics.generateTexture(key, w, h);
+  graphics.destroy();
+
+  return key;
+}
+
+function buildDoormatGlowTexture(scene: Phaser.Scene, dressing: RoomDressing): string {
+  const key = `${dressing.tilesTextureKey}-doormat-glow`;
+
+  if (scene.textures.exists(key)) {
+    return key;
+  }
+
+  const w = 180;
+  const h = 108;
+  const graphics = scene.make.graphics({}, false);
+  const cx = w / 2;
+  const cy = h / 2;
+  const rings = 10;
+
+  // Stacked translucent ellipses fake a soft radial falloff (no blur in canvas).
+  for (let i = rings; i >= 1; i -= 1) {
+    const t = i / rings;
+    graphics.fillStyle(0xffca74, 0.08);
+    graphics.fillEllipse(cx, cy, w * t, h * t);
+  }
+
+  graphics.generateTexture(key, w, h);
+  graphics.destroy();
+
+  return key;
 }
 
 function registerPropFrames(scene: Phaser.Scene, dressing: RoomDressing): void {
@@ -240,7 +373,7 @@ function renderProp(
   origin: IsoOrigin,
 ): Phaser.GameObjects.Image {
   const point = projectToIso(placement.mapX, placement.mapY, origin);
-  const scale = placement.scale ?? 1;
+  const scale = resolvePropScale(dressing, placement);
   let textureKey = dressing.propsTextureKey;
   let frameName: string | undefined = placement.frame;
   let screenY = point.y - (placement.screenYRaise ?? 0);
@@ -267,6 +400,21 @@ function renderProp(
   image.setDepth(placement.fixedDepth ?? point.y);
 
   return image;
+}
+
+/**
+ * Sizes a prop against the player yardstick: heightRatio (a multiple of the
+ * player's on-screen height) is converted to a sprite scale from the frame's
+ * height, so props read at a consistent size relative to ____ regardless of
+ * their sheet crop. Flat/wall props fall back to an explicit `scale`.
+ */
+function resolvePropScale(dressing: RoomDressing, placement: PropPlacement): number {
+  if (placement.heightRatio !== undefined) {
+    const frame = dressing.frames[placement.frame];
+    return (PLAYER_VISUAL_HEIGHT_PX * placement.heightRatio) / frame.h;
+  }
+
+  return placement.scale ?? 1;
 }
 
 function buildShearedPropTexture(

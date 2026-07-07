@@ -18,7 +18,11 @@ import {
 } from '../assets/recipientSpriteConfig';
 import { getLocation } from '../content/locations';
 import { getRoomDressing, type RoomDressing } from '../content/roomDressing';
-import { renderRoomDressing } from '../game/roomRenderer';
+import {
+  renderExitDoormat,
+  renderRoomDressing,
+  type PropColliderRect,
+} from '../game/roomRenderer';
 import type { DialogueLine, LocationDefinition, LocationInteraction } from '../content/types';
 import {
   completeLocation,
@@ -96,6 +100,9 @@ export class LocationScene extends Phaser.Scene {
   private walls?: Phaser.Tilemaps.TilemapLayer;
   private isoOrigin?: IsoOrigin;
   private dressing?: RoomDressing;
+  private propColliders: PropColliderRect[] = [];
+  private propColliderBodies: Phaser.GameObjects.Rectangle[] = [];
+  private debugMarkers = false;
 
   constructor() {
     super(SceneKeys.Location);
@@ -110,6 +117,10 @@ export class LocationScene extends Phaser.Scene {
 
   create(): void {
     clearUiRoot();
+    this.debugMarkers = new URLSearchParams(window.location.search).has('dressDebug');
+    // Mirror the current location onto the DOM so the on-screen location label
+    // change is observable to smoke tests (Phaser canvas text is not queryable).
+    document.body.dataset.locationId = this.location.id;
     this.createMap();
     this.createPlayer();
     this.createHud();
@@ -165,6 +176,10 @@ export class LocationScene extends Phaser.Scene {
     this.controller.update(this.canMove);
     this.syncPlayerVisual();
 
+    if (this.debugMarkers) {
+      document.body.dataset.playerPos = `${Math.round(this.player.x)},${Math.round(this.player.y)}`;
+    }
+
     if (!this.canMove) {
       this.activeObject = undefined;
       this.promptText?.setText('');
@@ -191,9 +206,13 @@ export class LocationScene extends Phaser.Scene {
     this.isoOrigin = this.createIsoOrigin(tilemap);
     this.dressing = getRoomDressing(this.location.id);
 
+    this.propColliders = [];
+    this.propColliderBodies = [];
+
     if (this.dressing) {
       this.cameras.main.setBackgroundColor(this.dressing.backgroundColor);
-      renderRoomDressing(this, this.dressing, tilemap, this.isoOrigin);
+      const rendered = renderRoomDressing(this, this.dressing, tilemap, this.isoOrigin);
+      this.propColliders = [...rendered.colliders];
     } else {
       this.cameras.main.setBackgroundColor('#17211b');
       this.createDevBackdrop(tilemap);
@@ -217,6 +236,56 @@ export class LocationScene extends Phaser.Scene {
     const isoBounds = getIsoBounds(tilemap.widthInPixels, tilemap.heightInPixels, this.isoOrigin);
     this.cameras.main.setBounds(0, 0, isoBounds.maxX + 192, isoBounds.maxY + 224);
     this.createWorldMarkers();
+    this.createDressedExitMarkers();
+    this.createPropColliderBodies();
+  }
+
+  // Dressed rooms hide the debug rects, so render a diegetic doormat + glow at
+  // each exit as the visible "way out". Undressed rooms keep the dev markers.
+  private createDressedExitMarkers(): void {
+    if (!this.dressing || !this.isoOrigin) {
+      return;
+    }
+
+    for (const exit of this.exits) {
+      renderExitDoormat(
+        this,
+        this.dressing,
+        { x: exit.x, y: exit.y, width: exit.width, height: exit.height },
+        this.isoOrigin,
+      );
+    }
+  }
+
+  // Static physics bodies (map space) for solid props' floor footprints. The
+  // bodies are invisible; ?dressDebug=1 overlays their projected outlines.
+  private createPropColliderBodies(): void {
+    const debug = new URLSearchParams(window.location.search).has('dressDebug');
+    const origin = this.getIsoOrigin();
+
+    for (const collider of this.propColliders) {
+      const body = this.add
+        .rectangle(
+          collider.x + collider.width / 2,
+          collider.y + collider.height / 2,
+          collider.width,
+          collider.height,
+        )
+        .setVisible(false);
+      this.physics.add.existing(body, true);
+      this.propColliderBodies.push(body);
+
+      if (debug) {
+        const outline = this.add.graphics().setDepth(6);
+        const polygon = this.toPhaserPoints(
+          getIsoRectCorners(collider.x, collider.y, collider.width, collider.height, origin),
+        );
+        outline.fillStyle(0xff3366, 0.18);
+        outline.fillPoints(polygon, true);
+        outline.lineStyle(2, 0xff3366, 0.9);
+        outline.strokePoints(polygon, true);
+      }
+    }
   }
 
   private createDevBackdrop(tilemap: Phaser.Tilemaps.Tilemap): void {
@@ -286,6 +355,10 @@ export class LocationScene extends Phaser.Scene {
 
     if (this.walls) {
       this.physics.add.collider(this.player, this.walls);
+    }
+
+    if (this.propColliderBodies.length > 0) {
+      this.physics.add.collider(this.player, this.propColliderBodies);
     }
 
     this.controller = new PlayerController(this, this.player, {
@@ -596,15 +669,34 @@ export class LocationScene extends Phaser.Scene {
   }
 
   private findActiveObject(): RectObject | undefined {
+    // Exits win when the player is actually standing on one, tested against the
+    // compact physics body (feet) rather than the tall sprite bounds. This lets
+    // an exit sit under a taller interactable's rect (e.g. the doormat below the
+    // desk PC) and still be usable — the player's full bounds always overlap the
+    // PC rect, so a bounds test could never surface the exit there.
+    const body = this.player.body;
+
+    if (body) {
+      const feet = new Phaser.Geom.Rectangle(body.x, body.y, body.width, body.height);
+      const onExit = this.exits.find((exit) =>
+        Phaser.Geom.Intersects.RectangleToRectangle(feet, this.toRectangle(exit)),
+      );
+
+      if (onExit) {
+        return onExit;
+      }
+    }
+
     const playerBounds = this.player.getBounds();
     const objects = [...this.interactions, ...this.exits];
 
     return objects.find((object) =>
-      Phaser.Geom.Intersects.RectangleToRectangle(
-        playerBounds,
-        new Phaser.Geom.Rectangle(object.x, object.y, object.width, object.height),
-      ),
+      Phaser.Geom.Intersects.RectangleToRectangle(playerBounds, this.toRectangle(object)),
     );
+  }
+
+  private toRectangle(object: RectObject): Phaser.Geom.Rectangle {
+    return new Phaser.Geom.Rectangle(object.x, object.y, object.width, object.height);
   }
 
   private getObjectLabel(object: RectObject): string {

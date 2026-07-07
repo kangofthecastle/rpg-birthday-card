@@ -15,12 +15,51 @@ export interface PropFrame {
   readonly h: number;
 }
 
+/**
+ * Floor footprint of a prop, in *map* pixels. Describes the rectangle the prop
+ * actually occupies on the ground (NOT its full billboard height): `w` runs
+ * along map-x, `d` (depth) along map-y. The rectangle is anchored under the
+ * prop's placement anchor and extends back (north, toward smaller map-y) from
+ * it, since the anchor is the sprite's front-center floor-contact point.
+ *
+ * Drives the static collider so the player is blocked at the prop's base but
+ * can still pass behind tall props. For interactable-linked props, derive `w`/
+ * `d` from the interact rect (e.g. recipient-bed is 180x150); for pure dressing,
+ * use sensible values a touch smaller than the art so prompts stay reachable.
+ */
+export interface PropFootprint {
+  readonly w: number;
+  readonly d: number;
+}
+
 export interface PropPlacement {
   /** Named frame in RoomDressing.frames. */
   readonly frame: string;
   /** Anchor point in map coordinates (projected to screen for placement). */
   readonly mapX: number;
   readonly mapY: number;
+  /**
+   * Target on-screen display height as a multiple of the player visual's
+   * display height (the yardstick), following cozy-RPG canon (Stardew): bed
+   * ~2x, desk ~1.0-1.2x (plus monitor/lamp/chair headroom for the cluster),
+   * chair ~0.8x, table ~0.9x, plants ~0.6-1.2x, shelf ~1.0x. The renderer
+   * converts this to a sprite scale from the frame height, so props read at a
+   * consistent size relative to the player regardless of their sheet crop.
+   * Prefer this over `scale` for floor-standing props; `scale` still works for
+   * flat/wall props (rug, window, photo wall) where height is not the measure.
+   */
+  readonly heightRatio?: number;
+  /** Floor footprint for a static collider. Omit for flat/wall/pass-through props. */
+  readonly footprint?: PropFootprint;
+  /**
+   * Shift the collider rect south (+, toward the viewer) in map px from its
+   * default position (extending back from the anchor). Used for the desk, whose
+   * base sits under the spawn point: the collider is pushed to the chair in
+   * front so the player is never trapped at spawn but still can't walk through.
+   */
+  readonly colliderOffsetY?: number;
+  /** Shift the collider rect east (+) / west (-) in map px. */
+  readonly colliderOffsetX?: number;
   readonly scale?: number;
   /** Sprite origin; defaults to bottom-center so props stand on the floor. */
   readonly originX?: number;
@@ -87,12 +126,13 @@ const RECIPIENT_HOUSE_DRESSING: RoomDressing = {
   backgroundColor: '#171015',
   props: [
     // --- Non-interactable dressing (drawn first / lowest) ---
-    // Rug centered on the floor; flat, so the player walks over it.
+    // Rug centered on the floor; flat, so the player walks over it. Stays broad
+    // and flat (sized by scale, not height ratio); no collider.
     {
       frame: 'rug',
       mapX: 704,
       mapY: 512,
-      scale: 0.95,
+      scale: 0.82,
       originX: 0.5,
       originY: 0.5,
       fixedDepth: -30,
@@ -116,14 +156,16 @@ const RECIPIENT_HOUSE_DRESSING: RoomDressing = {
       frame: 'monstera',
       mapX: 170,
       mapY: 170,
-      scale: 0.52,
+      heightRatio: 1.2,
+      footprint: { w: 64, d: 48 },
       note: 'monstera, top corner where the walls meet',
     },
     {
       frame: 'pothos',
       mapX: 200,
       mapY: 860,
-      scale: 0.5,
+      heightRatio: 0.95,
+      footprint: { w: 64, d: 48 },
       note: 'pothos in urn, left corner',
     },
 
@@ -131,9 +173,10 @@ const RECIPIENT_HOUSE_DRESSING: RoomDressing = {
     // recipient-bed rect: 300,600 180x150 -> center 390,675
     {
       frame: 'bed',
-      mapX: 388,
-      mapY: 700,
-      scale: 0.62,
+      mapX: 372,
+      mapY: 688,
+      heightRatio: 2.0,
+      footprint: { w: 168, d: 108 },
       note: 'bed -> recipient-bed',
     },
     // recipient-violin rect: 240,300 160x140 -> center 320,370
@@ -141,22 +184,23 @@ const RECIPIENT_HOUSE_DRESSING: RoomDressing = {
       frame: 'violin',
       mapX: 296,
       mapY: 392,
-      scale: 0.52,
-      note: 'violin on stand -> recipient-violin',
+      heightRatio: 1.15,
+      note: 'violin on stand -> recipient-violin (thin; no collider)',
     },
     {
       frame: 'musicStand',
       mapX: 392,
       mapY: 388,
-      scale: 0.5,
-      note: 'sheet-music stand (dressing beside violin)',
+      heightRatio: 1.0,
+      note: 'sheet-music stand (dressing beside violin; no collider)',
     },
     // recipient-playbills rect: 560,280 160x140 -> center 640,350
     {
       frame: 'playbills',
       mapX: 640,
       mapY: 372,
-      scale: 0.6,
+      heightRatio: 1.0,
+      footprint: { w: 150, d: 36 },
       note: 'playbill shelf -> recipient-playbills',
     },
     // recipient-mango-rice rect: 960,300 160x140 -> center 1040,370
@@ -164,7 +208,8 @@ const RECIPIENT_HOUSE_DRESSING: RoomDressing = {
       frame: 'kitchen',
       mapX: 1040,
       mapY: 392,
-      scale: 0.6,
+      heightRatio: 1.0,
+      footprint: { w: 120, d: 64 },
       note: 'kitchenette table w/ mango sticky rice -> recipient-mango-rice',
     },
     // recipient-photo-wall rect: 1080,64 160x140 -> center 1160,134; the frame
@@ -183,15 +228,25 @@ const RECIPIENT_HOUSE_DRESSING: RoomDressing = {
       frame: 'camera',
       mapX: 1240,
       mapY: 250,
-      scale: 0.56,
-      note: 'camera on tripod (dressing under the photo wall)',
+      heightRatio: 1.3,
+      note: 'camera on tripod (dressing under the photo wall; thin, no collider)',
     },
-    // recipient-pc rect: 624,720 160x140 -> center 704,790
+    // recipient-pc rect: 624,720 160x140 -> center 704,790. Spawn sits at 704,768
+    // (just north of the desk base) so the collider is shallow and pushed south
+    // of spawn: the player stands at spawn to use the PC, never trapped.
     {
       frame: 'desk',
       mapX: 704,
       mapY: 812,
-      scale: 0.6,
+      heightRatio: 1.55,
+      // The desk base sits between the spawn and the exit doormat (both at map
+      // x~704). Keep a compact collider under the chair/left of the desk, nudged
+      // west and south of the spawn, so the player can't walk through the desk
+      // yet the natural south-front approach to the doormat stays open and the
+      // spawn is never trapped.
+      footprint: { w: 54, d: 30 },
+      colliderOffsetY: 46,
+      colliderOffsetX: -34,
       note: 'desk + PC + chair -> recipient-pc',
     },
   ],
@@ -203,4 +258,39 @@ const ROOM_DRESSINGS: Readonly<Record<string, RoomDressing>> = {
 
 export function getRoomDressing(locationId: string): RoomDressing | undefined {
   return ROOM_DRESSINGS[locationId];
+}
+
+/** Axis-aligned collider footprint in *map* pixels (top-left origin). */
+export interface PropColliderRect {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+/**
+ * Static floor colliders for the dressing's solid props (those with a
+ * footprint). Each rect extends back (north) from the anchor's front-center
+ * floor point, then shifts by colliderOffsetX/Y, so the player is blocked at a
+ * prop's base but can still pass behind it. Flat/wall/pass-through props (no
+ * footprint) contribute nothing.
+ */
+export function getPropColliders(dressing: RoomDressing): PropColliderRect[] {
+  const rects: PropColliderRect[] = [];
+
+  for (const placement of dressing.props) {
+    const { footprint } = placement;
+    if (!footprint) {
+      continue;
+    }
+
+    rects.push({
+      x: placement.mapX - footprint.w / 2 + (placement.colliderOffsetX ?? 0),
+      y: placement.mapY - footprint.d + (placement.colliderOffsetY ?? 0),
+      width: footprint.w,
+      height: footprint.d,
+    });
+  }
+
+  return rects;
 }

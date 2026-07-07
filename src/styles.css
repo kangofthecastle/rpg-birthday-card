@@ -996,10 +996,25 @@ body {
 
 .collection-item {
   display: grid;
-  grid-template-columns: 24px 1fr;
+  grid-template-columns: 28px 1fr;
   gap: 8px;
   align-items: center;
   color: #b9c0b8;
+}
+
+.collection-item__icon {
+  width: 28px;
+  height: 28px;
+  display: block;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
+.collection-item__icon--empty {
+  border: 1px dashed rgba(185, 192, 184, 0.4);
+  border-radius: 6px;
+  background: rgba(185, 192, 184, 0.08);
+  opacity: 0.6;
 }
 
 .collection-item--collected {

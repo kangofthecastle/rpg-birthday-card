@@ -10,10 +10,16 @@ export function renderCollectionPanel(state: RunState): string {
     .map((keepsake) => {
       const collected = state.collectedKeepsakeIds.includes(keepsake.id);
       const label = collected ? keepsake.label : 'Hidden keepsake';
+      const safeLabel = escapeHtml(label);
+      const icon = collected
+        ? `<img class="collection-item__icon" src="/assets/keepsakes/${encodeURIComponent(
+            keepsake.iconAssetId,
+          )}.png" alt="${safeLabel}" title="${safeLabel}" />`
+        : '<span class="collection-item__icon collection-item__icon--empty" aria-hidden="true"></span>';
       return `
         <li class="collection-item ${collected ? 'collection-item--collected' : ''}">
-          <span class="collection-item__icon">${collected ? '*' : '?'}</span>
-          <span>${escapeHtml(label)}</span>
+          ${icon}
+          <span>${safeLabel}</span>
         </li>
       `;
     })

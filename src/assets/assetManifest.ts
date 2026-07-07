@@ -80,16 +80,6 @@ export const ASSET_MANIFEST: readonly GameAsset[] = [
     qaChecks: ['8x6 idle-walk layout', 'transparent background', 'identity consistency', 'anchor consistency'],
   },
   {
-    id: 'character-friendthree-walk-4dir',
-    kind: 'spritesheet',
-    label: '____ 4-direction idle/walk spritesheet',
-    status: 'review',
-    locationIds: ['global'],
-    notes:
-      'Saved at public/assets/sprites/characters/friendthree-idle-walk-4dir-v1-alpha.png. Built from existing ____ walk art with idle rows, mirrored side timing, and boundary-aware recovery for the back-facing head crop.',
-    qaChecks: ['8x6 idle-walk layout', 'transparent background', 'identity consistency', 'anchor consistency'],
-  },
-  {
     id: 'character-friendtwo-walk-4dir',
     kind: 'spritesheet',
     label: '____ 4-direction idle/walk spritesheet',
@@ -106,15 +96,6 @@ export const ASSET_MANIFEST: readonly GameAsset[] = [
     status: 'planned',
     locationIds: ['friend-b'],
     notes: 'Built from user-provided reference images and Friend B-specific personality notes.',
-    qaChecks: ['recognizable stylization', 'palette lock'],
-  },
-  {
-    id: 'friend-c-reference-board',
-    kind: 'reference-board',
-    label: 'Friend C reference board',
-    status: 'planned',
-    locationIds: ['friend-c'],
-    notes: 'Built from user-provided reference images and Friend C-specific personality notes.',
     qaChecks: ['recognizable stylization', 'palette lock'],
   },
   {
@@ -144,25 +125,6 @@ export const ASSET_MANIFEST: readonly GameAsset[] = [
     locationIds: ['friend-b'],
     notes:
       'Higher-detail illustrated pixel-art portrait tied to Friend B reward message. The dialogue box currently uses the ____ idle/walk spritesheet as a temporary portrait source until final portrait art is produced.',
-    qaChecks: ['identity consistency', 'dialogue scale readability'],
-  },
-  {
-    id: 'portrait-friend-c',
-    kind: 'portrait',
-    label: 'Friend C portrait',
-    status: 'planned',
-    locationIds: ['friend-c'],
-    notes: 'Higher-detail illustrated pixel-art portrait tied to Friend C reward message.',
-    qaChecks: ['identity consistency', 'dialogue scale readability'],
-  },
-  {
-    id: 'portrait-friendthree',
-    kind: 'portrait',
-    label: '____ dialogue portrait',
-    status: 'planned',
-    locationIds: ['friend-c'],
-    notes:
-      'Dedicated portrait for ____ dialogue. The first dialogue-box pass can use the current ____ walk spritesheet as a temporary portrait source until final portrait art is produced.',
     qaChecks: ['identity consistency', 'dialogue scale readability'],
   },
   {
@@ -198,15 +160,6 @@ export const ASSET_MANIFEST: readonly GameAsset[] = [
     label: 'Paper star keepsake icon',
     status: 'planned',
     locationIds: ['friend-b', 'final-spot'],
-    notes: 'Small keepsake icon used in collection UI and final reveal.',
-    qaChecks: ['small-size readability', 'palette consistency'],
-  },
-  {
-    id: 'keepsake-tiny-key',
-    kind: 'keepsake',
-    label: 'Tiny key keepsake icon',
-    status: 'planned',
-    locationIds: ['friend-c', 'final-spot'],
     notes: 'Small keepsake icon used in collection UI and final reveal.',
     qaChecks: ['small-size readability', 'palette consistency'],
   },

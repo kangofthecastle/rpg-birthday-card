@@ -43,14 +43,6 @@ SOURCES = [
         frame_indices={"left": (0, 1, 2, 3, 4, 3)},
     ),
     CharacterSource(
-        name="friendthree",
-        input_path=Path("public/assets/sprites/characters/friendthree-walk-4dir-v1-alpha.png"),
-        output_path=Path("public/assets/sprites/characters/friendthree-idle-walk-4dir-v1-alpha.png"),
-        source_rows={"down": 0, "left": 1, "right": 2, "up": 3},
-        remove_light_background=True,
-        top_crop_margins={"up": 96},
-    ),
-    CharacterSource(
         name="friendtwo",
         input_path=Path("public/assets/characters/friendtwo/friendtwo-spritesheet-v1.png"),
         output_path=Path("public/assets/sprites/characters/friendtwo-idle-walk-4dir-v1-alpha.png"),

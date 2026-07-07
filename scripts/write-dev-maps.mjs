@@ -26,16 +26,14 @@ const maps = [
       point(1, 'start', 704, 512),
       point(2, 'from-friend-a', 320, 512),
       point(3, 'from-friend-b', 704, 512),
-      point(4, 'from-friend-c', 1088, 512),
-      point(5, 'from-final', 704, 768),
+      point(4, 'from-final', 704, 768),
     ],
     exits: [
-      rect(6, 'to-friend-a', 'exit', 256, 256, 128, 96),
-      rect(7, 'to-friend-b', 'exit', 640, 256, 128, 96),
-      rect(8, 'to-friend-c', 'exit', 1024, 256, 128, 96),
-      rect(9, 'to-final', 'exit', 640, 768, 128, 96),
+      rect(5, 'to-friend-a', 'exit', 256, 256, 128, 96),
+      rect(6, 'to-friend-b', 'exit', 640, 256, 128, 96),
+      rect(7, 'to-final', 'exit', 640, 768, 128, 96),
     ],
-    interactables: [rect(10, 'entry-sign', 'dialogue', 656, 544, 128, 80)],
+    interactables: [rect(8, 'entry-sign', 'dialogue', 656, 544, 128, 80)],
   },
   {
     file: 'friend-a.tmj',
@@ -56,16 +54,6 @@ const maps = [
     interactables: [
       rect(3, 'friend-b-host', 'activity', 640, 384, 128, 96),
       rect(4, 'friend-b-easter-egg', 'easterEgg', 960, 384, 128, 96),
-    ],
-  },
-  {
-    file: 'friend-c.tmj',
-    spawns: [point(1, 'front-door', 704, 768)],
-    exits: [rect(2, 'back-entry', 'exit', 640, 832, 128, 80)],
-    interactables: [
-      rect(3, 'friend-c-host', 'activity', 640, 384, 128, 96),
-      rect(4, 'friendthree-strategy-table', 'activity', 832, 448, 128, 96),
-      rect(5, 'friend-c-easter-egg', 'easterEgg', 960, 384, 128, 96),
     ],
   },
   {

@@ -102,13 +102,13 @@ describe('runState', () => {
   it('tracks activity-only wins passed through completeLocation without granting a keepsake', () => {
     const state = createInitialRunState('entry');
     const next = completeLocation(state, {
-      locationId: 'friend-c',
-      activityId: 'friendthree-strategy-table',
+      locationId: 'friend-b',
+      activityId: 'craft-side-game',
       won: true,
     });
 
-    expect(next.completedActivityIds).toEqual(['friendthree-strategy-table']);
-    expect(next.wonActivityIds).toEqual(['friendthree-strategy-table']);
+    expect(next.completedActivityIds).toEqual(['craft-side-game']);
+    expect(next.wonActivityIds).toEqual(['craft-side-game']);
     expect(next.completedLocationIds).toEqual([]);
     expect(next.collectedKeepsakeIds).toEqual([]);
   });
@@ -131,16 +131,12 @@ describe('runState', () => {
       locationId: 'friend-a',
       keepsakeId: 'glowing-koi-scale',
     });
-    state = completeLocation(state, {
-      locationId: 'friend-b',
-      keepsakeId: 'paper-star',
-    });
 
     expect(isFinalSpotUnlocked(state)).toBe(false);
 
     state = completeLocation(state, {
-      locationId: 'friend-c',
-      keepsakeId: 'tiny-key',
+      locationId: 'friend-b',
+      keepsakeId: 'paper-star',
     });
 
     expect(isFinalSpotUnlocked(state)).toBe(true);

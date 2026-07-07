@@ -1,10 +1,9 @@
-export const REQUIRED_FINAL_KEEPSAKE_IDS = [
-  'glowing-koi-scale',
-  'paper-star',
-  'tiny-key',
-] as const;
+import { LOCATIONS } from '../content/locations';
 
-export type RequiredKeepsakeId = (typeof REQUIRED_FINAL_KEEPSAKE_IDS)[number];
+export const REQUIRED_FINAL_KEEPSAKE_IDS: readonly string[] = LOCATIONS.flatMap(
+  (location) =>
+    location.kind === 'friend' && location.keepsake ? [location.keepsake.id] : [],
+);
 
 export interface RunState {
   readonly currentLocationId: string;

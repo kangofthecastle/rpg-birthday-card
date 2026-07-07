@@ -32,7 +32,7 @@ describe('showDialogue', () => {
   });
 
   it('omits the speaker label when one is not provided', async () => {
-    const promise = showDialogue([{ text: 'Three doors are waiting.' }]);
+    const promise = showDialogue([{ text: 'Each door holds a small piece of the way forward.' }]);
     const root = document.querySelector<HTMLElement>('#ui-root');
 
     expect(root?.querySelector('.dialogue-box__speaker')).toBeNull();
@@ -47,14 +47,14 @@ describe('showDialogue', () => {
   it('renders known portraits and falls back to an empty portrait frame for unknown ids', async () => {
     const known = showDialogue([
       {
-        text: '____ waits across the table.',
-        portraitId: 'portrait-friendthree',
+        text: '____ waits beside the pond.',
+        portraitId: 'portrait-friendone',
       },
     ]);
     const root = document.querySelector<HTMLElement>('#ui-root');
     const portrait = root?.querySelector<HTMLImageElement>('.dialogue-box__portrait');
 
-    expect(portrait?.getAttribute('src')).toBe('/assets/sprites/characters/friendthree-walk-4dir-v1-alpha.png');
+    expect(portrait?.getAttribute('src')).toBe('/assets/sprites/characters/friendone-idle-walk-4dir-v1-alpha.png');
     expect(portrait?.getAttribute('alt')).toBe('');
 
     root?.querySelector<HTMLButtonElement>('.dialogue-box__action')?.click();

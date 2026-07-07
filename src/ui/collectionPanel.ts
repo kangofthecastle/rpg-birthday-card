@@ -2,7 +2,7 @@ import { getLocation } from '../content/locations';
 import type { RunState } from '../game/runState';
 
 export function renderCollectionPanel(state: RunState): string {
-  const keepsakes = ['friend-a', 'friend-b', 'friend-c']
+  const keepsakes = ['friend-a', 'friend-b']
     .map((locationId) => getLocation(locationId).keepsake)
     .filter((keepsake) => keepsake !== undefined);
 

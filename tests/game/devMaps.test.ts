@@ -33,7 +33,6 @@ const mapFiles = [
   'entry.tmj',
   'friend-a.tmj',
   'friend-b.tmj',
-  'friend-c.tmj',
   'final-spot.tmj',
 ] as const;
 
@@ -76,21 +75,6 @@ describe('dev maps', () => {
       expect(map.width).toBeGreaterThanOrEqual(20);
       expect(map.height).toBeGreaterThanOrEqual(14);
     }
-  });
-
-  it('includes a ____ strategy table interactable in ____ house', () => {
-    const map = JSON.parse(
-      readFileSync(join(process.cwd(), 'public', 'maps', 'friend-c.tmj'), 'utf8'),
-    ) as DevMap;
-    const interactables = map.layers.find(
-      (layer) => layer.type === 'objectgroup' && layer.name === 'Interactables',
-    );
-
-    expect(interactables?.objects).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ name: 'friendthree-strategy-table' }),
-      ]),
-    );
   });
 
   it('includes ____ host and PC fishing markers in ____ house', () => {

@@ -1,15 +1,11 @@
 import type { ActivityModule } from './activityTypes';
-import { friendthreeStrategyActivity } from './friendthreeStrategyActivity';
 import { finalKeepsakeActivity } from './finalKeepsakeActivity';
 import { friendBActivity } from './friendBActivity';
-import { friendCActivity } from './friendCActivity';
 import { friendoneFishingActivity } from './friendoneFishing/friendoneFishingActivity';
 
 const ACTIVITIES: readonly ActivityModule[] = [
   friendoneFishingActivity,
   friendBActivity,
-  friendCActivity,
-  friendthreeStrategyActivity,
   finalKeepsakeActivity,
 ];
 

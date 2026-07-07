@@ -554,7 +554,7 @@ export class LocationScene extends Phaser.Scene {
     if (exit) {
       if (exit.requiresFinalUnlock && !isFinalSpotUnlocked(this.state)) {
         await this.pauseForDialogue([
-          { text: 'The clearing feels close, but three keepsakes are still needed.' },
+          { text: 'The clearing feels close, but some keepsakes are still missing.' },
         ]);
         return;
       }

@@ -9,17 +9,6 @@ function setSearch(search: string): void {
   window.history.pushState({}, '', `/${search}`);
 }
 
-function getEnabledFriendThreeAction(mount: HTMLElement, action: string): HTMLButtonElement {
-  const button = mount.querySelector<HTMLButtonElement>(
-    `[data-friendthree-action="${action}"]`,
-  );
-
-  expect(button).not.toBeNull();
-  expect(button?.disabled).toBe(false);
-
-  return button as HTMLButtonElement;
-}
-
 describe('activityRegistry', () => {
   it('lists all vertical-slice activities', () => {
     const ids = listActivities().map((activity) => activity.id);
@@ -27,8 +16,6 @@ describe('activityRegistry', () => {
     expect(ids).toEqual([
       'friendone-pc-fishing',
       'friend-b-paper-stars',
-      'friend-c-song-line',
-      'friendthree-strategy-table',
       'final-keepsake-reveal',
     ]);
   });
@@ -370,51 +357,6 @@ describe('activityRegistry', () => {
     }
   });
 
-  it('runs the ____ strategy table lifecycle and calls complete', async () => {
-    const activity = getActivity('friendthree-strategy-table');
-    const onComplete = vi.fn();
-    const fixture = document.createElement('div');
-    const mount = document.createElement('div');
-
-    document.body.appendChild(fixture);
-    fixture.appendChild(mount);
-
-    try {
-      await activity.start({
-        state: createInitialRunState('friend-c'),
-        mount,
-        onComplete,
-        onCancel: vi.fn(),
-      });
-
-      expect(mount.querySelector('.friendthree-tabletop')).not.toBeNull();
-
-      const road0 = getEnabledFriendThreeAction(mount, 'build-road:e0');
-      road0.click();
-      const road1 = getEnabledFriendThreeAction(mount, 'build-road:e1');
-      road1.click();
-      const road2 = getEnabledFriendThreeAction(mount, 'build-road:e2');
-      road2.click();
-      const settlement = getEnabledFriendThreeAction(mount, 'build-settlement:n3');
-      settlement.click();
-
-      road0.click();
-      road1.click();
-      road2.click();
-      settlement.click();
-
-      expect(onComplete).toHaveBeenCalledWith({
-        activityId: 'friendthree-strategy-table',
-        locationId: 'friend-c',
-        won: true,
-      });
-      expect(onComplete).toHaveBeenCalledTimes(1);
-      expect(mount.querySelector('[data-friendthree-action]')).toBeNull();
-    } finally {
-      fixture.remove();
-    }
-  });
-
   it('registers every activity interaction used by locations', () => {
     const activityIds = LOCATIONS.flatMap((location) =>
       location.interactions.flatMap((interaction) =>
@@ -425,8 +367,6 @@ describe('activityRegistry', () => {
     expect(activityIds).toEqual([
       'friendone-pc-fishing',
       'friend-b-paper-stars',
-      'friend-c-song-line',
-      'friendthree-strategy-table',
       'final-keepsake-reveal',
     ]);
     expect(() => {

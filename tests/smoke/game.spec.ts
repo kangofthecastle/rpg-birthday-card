@@ -20,6 +20,6 @@ test('shows an interaction prompt when the player reaches the entry sign', async
   await page.keyboard.press('E', { delay: 50 });
 
   await expect(
-    page.getByText('Three doors are waiting. Each one holds a small piece of the way forward.'),
+    page.getByText('Each door holds a small piece of the way forward.'),
   ).toBeVisible();
 });

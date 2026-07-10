@@ -1,8 +1,9 @@
 /**
  * Cold-open boot overlay. A DOM-only "old PC booting" sequence that plays over
  * a black page before the Phaser game is created. Lines type out with a
- * typewriter effect; any key fast-forwards the line currently typing; once every
- * line is shown a "press any key" gate waits for one final key, then a CRT
+ * typewriter effect; any key or a left-click fast-forwards the line currently
+ * typing; once every line is shown a "press any key" gate waits for one final
+ * key or click, then a CRT
  * power-on flash reveals the game.
  *
  * Reused later by the post-ending letters screen (Phase 3).
@@ -103,6 +104,7 @@ export function runBootScreen(options: BootScreenOptions = {}): Promise<void> {
 
       phase = 'done';
       document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('pointerdown', onPointerDown);
       clearTimer();
       cursorEl.hidden = true;
       overlay.classList.add('boot-screen--flash');
@@ -112,18 +114,16 @@ export function runBootScreen(options: BootScreenOptions = {}): Promise<void> {
       }, flashMs);
     };
 
-    function onKeyDown(event: KeyboardEvent): void {
-      if (event.repeat) {
-        return;
-      }
-
-      // A keypress is a user gesture, so this is the earliest safe moment to
+    // Any key or a left-click advances the boot sequence: while typing it
+    // fast-forwards the current line; at the final "press any key" gate it
+    // dismisses the prompt and reveals the game.
+    const advanceBoot = (): void => {
+      // A key/click is a user gesture, so this is the earliest safe moment to
       // arm WebAudio (autoplay policy).
       initAudio();
       playSfx('sfx-boot-key');
 
       if (phase === 'typing') {
-        event.preventDefault();
         clearTimer();
         charIndex = lines[lineIndex].length;
         renderLines();
@@ -132,12 +132,30 @@ export function runBootScreen(options: BootScreenOptions = {}): Promise<void> {
       }
 
       if (phase === 'prompt') {
-        event.preventDefault();
         finish();
       }
+    };
+
+    function onKeyDown(event: KeyboardEvent): void {
+      if (event.repeat) {
+        return;
+      }
+
+      event.preventDefault();
+      advanceBoot();
+    }
+
+    function onPointerDown(event: PointerEvent): void {
+      // Left button only; button 0 also covers trackpad taps and touch.
+      if (event.button !== 0) {
+        return;
+      }
+
+      advanceBoot();
     }
 
     document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('pointerdown', onPointerDown);
 
     if (lines.length === 0) {
       enterPromptPhase();

@@ -74,3 +74,27 @@ test('cold open plays, then lands in ____’s room with the dark PC', async ({ p
   }
   expect(easterEggShown).toBe(true);
 });
+
+// The boot gate must also accept mouse left-clicks, not just keys, so the game
+// is fully playable with the mouse alone.
+test('cold open can be advanced by mouse clicks alone', async ({ page }) => {
+  await page.goto('/');
+
+  const bootScreen = page.locator('.boot-screen');
+  await expect(bootScreen).toBeVisible();
+  await expect(page.locator('canvas')).toHaveCount(0);
+
+  // Left-click repeatedly to fast-forward the typed lines and pass the final
+  // "press any key" gate, without touching the keyboard.
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    await page.mouse.click(640, 360);
+    await page.waitForTimeout(160);
+    if ((await bootScreen.count()) === 0) {
+      break;
+    }
+  }
+  await expect(bootScreen).toHaveCount(0);
+
+  // The Phaser game is revealed, same as the keyboard path.
+  await expect(page.locator('canvas')).toBeVisible();
+});

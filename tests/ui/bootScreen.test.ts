@@ -5,6 +5,10 @@ function pressKey(key = 'Enter'): void {
   document.dispatchEvent(new KeyboardEvent('keydown', { key }));
 }
 
+function clickPointer(button = 0): void {
+  document.dispatchEvent(new MouseEvent('pointerdown', { button }));
+}
+
 function overlay(): HTMLElement | null {
   return document.querySelector<HTMLElement>('.boot-screen');
 }
@@ -93,5 +97,60 @@ describe('runBootScreen', () => {
     await vi.advanceTimersByTimeAsync(10);
     await promise;
     expect(host.querySelector('.boot-screen')).toBeNull();
+  });
+
+  it('lets a left-click stand in for the final gate key', async () => {
+    const promise = runBootScreen({ lines: ['AB'], typeDelayMs: 10, flashMs: 20 });
+
+    await vi.advanceTimersByTimeAsync(100);
+    expect(document.querySelector<HTMLElement>('.boot-screen__prompt')?.hidden).toBe(false);
+
+    clickPointer();
+    expect(overlay()?.classList.contains('boot-screen--flash')).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(30);
+    await promise;
+    expect(overlay()).toBeNull();
+  });
+
+  it('lets a left-click fast-forward the line that is currently typing', async () => {
+    const promise = runBootScreen({
+      lines: ['LONG-FIRST-LINE', 'second'],
+      typeDelayMs: 40,
+      flashMs: 10,
+    });
+
+    await vi.advanceTimersByTimeAsync(80);
+    expect(linesText().length).toBeLessThan('LONG-FIRST-LINE'.length);
+
+    clickPointer();
+    expect(linesText().startsWith('LONG-FIRST-LINE')).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(400);
+    expect(linesText()).toBe('LONG-FIRST-LINE\nsecond');
+
+    clickPointer();
+    await vi.advanceTimersByTimeAsync(20);
+    await promise;
+    expect(overlay()).toBeNull();
+  });
+
+  it('ignores non-left mouse buttons at the gate', async () => {
+    const promise = runBootScreen({ lines: ['AB'], typeDelayMs: 10, flashMs: 20 });
+
+    await vi.advanceTimersByTimeAsync(100);
+    expect(document.querySelector<HTMLElement>('.boot-screen__prompt')?.hidden).toBe(false);
+
+    // A right-click (button 2) must not dismiss the gate.
+    clickPointer(2);
+    expect(overlay()?.classList.contains('boot-screen--flash')).toBe(false);
+
+    // …but a left-click still does.
+    clickPointer(0);
+    expect(overlay()?.classList.contains('boot-screen--flash')).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(30);
+    await promise;
+    expect(overlay()).toBeNull();
   });
 });

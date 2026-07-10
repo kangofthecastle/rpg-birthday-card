@@ -1,0 +1,55 @@
+/* Panel sizing for "the piece on the stand" activity. A wide music-stand view,
+ * mirroring the develop/photo activities' proportions but owning its own
+ * classes so it can be tuned independently. */
+
+.activity-panel--violin {
+  display: flex;
+  flex-direction: column;
+  width: min(1120px, calc(100vw - 4px));
+  max-height: calc(100vh - 4px);
+  padding: clamp(8px, 1.4vw, 20px);
+  overflow: auto;
+}
+
+.activity-panel--violin h2 {
+  flex: none;
+  letter-spacing: 0.04em;
+}
+
+.violin-game__caption {
+  flex: none;
+  margin: 0 0 10px;
+  opacity: 0.82;
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
+
+.activity-panel--violin .activity-actions {
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.violin-game {
+  display: grid;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 180px;
+  max-height: min(640px, calc(100vh - 132px));
+  aspect-ratio: 16 / 9;
+  place-items: stretch;
+  overflow: hidden;
+  border: 2px solid rgba(241, 200, 138, 0.5);
+  background: #1c1622;
+}
+
+.violin-game__host {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.violin-game__host canvas {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+}

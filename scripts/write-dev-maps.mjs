@@ -8,8 +8,19 @@ const mapsDir = join(root, 'public', 'maps');
 mkdirSync(mapsDir, { recursive: true });
 
 const TILE = 64;
+// Interiors keep the standard room size (iso rooms are dressed to this footprint
+// and are NOT part of the outdoor-pacing pass).
 const STD_W = 22;
 const STD_H = 16;
+// Outdoor areas are deliberately smaller "connected pockets" so crossing one is
+// a few seconds of walking, not a trek across a field. Tuned against the player
+// walk speed so a full main-outside edge-to-edge crossing is ~5-6s.
+const MAIN_W = 22;
+const MAIN_H = 13;
+const YARD_W = 16;
+const YARD_H = 11;
+const CLEARING_W = 16;
+const CLEARING_H = 10;
 
 // Per-map definitions. `openEdges` lists sides whose border wall is opened along
 // its full walkable span (tiles 1..n-2), so the player can walk off that side
@@ -17,45 +28,50 @@ const STD_H = 16;
 const maps = [
   {
     file: 'main-outside.tmj',
-    width: 30,
-    height: 18,
+    width: MAIN_W,
+    height: MAIN_H,
     openEdges: ['west', 'east', 'south'],
+    // ____'s home sits at the north edge (door center 704,192); the signpost
+    // and start spawn read down the middle toward the open south road.
     spawns: [
-      point(1, 'start', 960, 900),
-      point(2, 'from-recipient-house', 960, 470),
+      point(1, 'start', 704, 640),
+      point(2, 'from-recipient-house', 704, 300),
     ],
-    exits: [rect(3, 'to-recipient-house', 'exit', 896, 320, 128, 88)],
-    interactables: [rect(4, 'main-signpost', 'dialogue', 896, 720, 128, 88)],
+    exits: [rect(3, 'to-recipient-house', 'exit', 640, 148, 128, 88)],
+    interactables: [rect(4, 'main-signpost', 'dialogue', 640, 430, 128, 88)],
   },
   {
     file: 'friendtwo-yard.tmj',
-    width: STD_W,
-    height: STD_H,
+    width: YARD_W,
+    height: YARD_H,
     openEdges: ['east'],
-    spawns: [point(1, 'start', 704, 640), point(2, 'from-friend-b', 704, 500)],
-    exits: [rect(3, 'to-friend-b', 'exit', 640, 344, 128, 84)],
+    // House composed at the top-center of the yard (door center 512,192); the
+    // open east edge is the road back to the neighbourhood.
+    spawns: [point(1, 'start', 512, 460), point(2, 'from-friend-b', 512, 320)],
+    exits: [rect(3, 'to-friend-b', 'exit', 448, 150, 128, 84)],
     interactables: [],
   },
   {
     file: 'friendone-yard.tmj',
-    width: STD_W,
-    height: STD_H,
+    width: YARD_W,
+    height: YARD_H,
     openEdges: ['west'],
-    spawns: [point(1, 'start', 704, 640), point(2, 'from-friend-a', 704, 500)],
-    exits: [rect(3, 'to-friend-a', 'exit', 640, 344, 128, 84)],
+    // Mirror of ____'s yard: house top-center, open west edge back to the road.
+    spawns: [point(1, 'start', 512, 460), point(2, 'from-friend-a', 512, 320)],
+    exits: [rect(3, 'to-friend-a', 'exit', 448, 150, 128, 84)],
     interactables: [],
   },
   {
     file: 'clearing.tmj',
-    width: STD_W,
-    height: STD_H,
+    width: CLEARING_W,
+    height: CLEARING_H,
     openEdges: ['north', 'south'],
-    spawns: [point(1, 'start', 704, 512)],
+    spawns: [point(1, 'start', 512, 300)],
     exits: [],
     // The origami ritual at the southern shore — a wide kneel-at-the-water zone
-    // set a couple of tiles in from the south edge, so the player reaches it
-    // before the (gated) edge transition.
-    interactables: [rect(4, 'clearing-shore', 'activity', 512, 800, 384, 128)],
+    // set a couple of tiles in from the south edge (the ~2-tile water band), so
+    // the player reaches it before the (gated) edge transition.
+    interactables: [rect(4, 'clearing-shore', 'activity', 320, 440, 384, 128)],
   },
   {
     file: 'recipient-house.tmj',

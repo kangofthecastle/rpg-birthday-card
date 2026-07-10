@@ -70,14 +70,33 @@ describe('dev maps', () => {
     }
   });
 
-  it('give the temporary prototype enough room to visibly move around', () => {
-    for (const mapFile of mapFiles) {
+  // Interiors stay at the standard dressed-room footprint; outdoor areas are the
+  // smaller "connected pockets" from the pacing pass, so they get their own
+  // (smaller) floor — still big enough to walk around in, not a single screen.
+  const interiorFiles = ['recipient-house.tmj', 'friend-a.tmj', 'friend-b.tmj', 'final-spot.tmj'];
+
+  it('give interior rooms enough room to visibly move around', () => {
+    for (const mapFile of interiorFiles) {
       const map = JSON.parse(
         readFileSync(join(process.cwd(), 'public', 'maps', mapFile), 'utf8'),
       ) as DevMap;
 
       expect(map.width).toBeGreaterThanOrEqual(20);
       expect(map.height).toBeGreaterThanOrEqual(14);
+    }
+  });
+
+  it('keeps outdoor pockets compact but still walkable', () => {
+    for (const mapFile of mapFiles.filter((file) => !interiorFiles.includes(file))) {
+      const map = JSON.parse(
+        readFileSync(join(process.cwd(), 'public', 'maps', mapFile), 'utf8'),
+      ) as DevMap;
+
+      expect(map.width).toBeGreaterThanOrEqual(16);
+      expect(map.height).toBeGreaterThanOrEqual(10);
+      // Small pockets, not fields.
+      expect(map.width).toBeLessThanOrEqual(24);
+      expect(map.height).toBeLessThanOrEqual(14);
     }
   });
 
@@ -143,8 +162,8 @@ describe('dev maps', () => {
     const exits = objectLayer(map, 'Exits');
     const interactables = objectLayer(map, 'Interactables');
 
-    expect(map.width).toBe(30);
-    expect(map.height).toBe(18);
+    expect(map.width).toBe(22);
+    expect(map.height).toBe(13);
     expect(spawns).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ name: 'start', type: 'spawn' }),

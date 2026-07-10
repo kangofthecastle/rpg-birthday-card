@@ -36,13 +36,13 @@ export interface ExteriorPlacement {
 // door glow sits at the base of the house.
 export const OUTDOOR_EXTERIORS: Readonly<Record<string, readonly ExteriorPlacement[]>> = {
   'main-outside': [
-    { asset: 'recipient-home', mapX: 960, mapY: 364, heightRatio: 2.9, footprint: { w: 168, d: 84 } },
+    { asset: 'recipient-home', mapX: 704, mapY: 192, heightRatio: 2.9, footprint: { w: 168, d: 84 } },
   ],
   'friendtwo-yard': [
-    { asset: 'friendtwo-house', mapX: 704, mapY: 386, heightRatio: 2.9, footprint: { w: 168, d: 84 } },
+    { asset: 'friendtwo-house', mapX: 512, mapY: 192, heightRatio: 2.9, footprint: { w: 168, d: 84 } },
   ],
   'friendone-yard': [
-    { asset: 'friendone-house', mapX: 704, mapY: 386, heightRatio: 2.9, footprint: { w: 168, d: 84 } },
+    { asset: 'friendone-house', mapX: 512, mapY: 192, heightRatio: 2.9, footprint: { w: 168, d: 84 } },
   ],
 };
 

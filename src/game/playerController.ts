@@ -12,7 +12,10 @@ interface PlayerControllerOptions {
   readonly speed?: number;
 }
 
-const DEFAULT_PLAYER_SPEED = 220;
+// Bumped ~14% (220 -> 250) as part of the outdoor-pacing pass: the smaller
+// connected outdoor pockets read best with a slightly brisker walk, and the
+// modest bump still feels right in the (smaller) iso interiors.
+const DEFAULT_PLAYER_SPEED = 250;
 const MIN_FACING_MOVEMENT_LENGTH_SQ = 1;
 const EIGHT_WAY_FACING_SECTORS: readonly PlayerFacing[] = [
   'right',

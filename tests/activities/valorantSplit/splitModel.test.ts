@@ -8,9 +8,14 @@ import {
   defuseProgress,
   firePlayerShot,
   fireTeammateShot,
+  isInDefuseRadius,
   isSplitWon,
+  rayRect,
+  spikeTimeRemainingMs,
   tickSplit,
+  type DefuseState,
   type EnemyState,
+  type Rect,
   type SplitEvent,
   type SplitInput,
   type SplitState,
@@ -26,6 +31,7 @@ const IDLE_INPUT: SplitInput = {
 
 const UP = -Math.PI / 2;
 const DOWN = Math.PI / 2;
+const SPIKE = SPLIT_CONFIG.spike;
 
 function enemyAt(pos: Vec2, overrides: Partial<EnemyState> = {}): EnemyState {
   return {
@@ -48,19 +54,27 @@ function setPlayerPos(state: SplitState, pos: Vec2): SplitState {
   return { ...state, player: { ...state.player, pos } };
 }
 
+function withDefuse(state: SplitState, defuse: Partial<DefuseState>): SplitState {
+  return { ...state, defuse: { ...state.defuse, ...defuse } };
+}
+
 function collect(events: readonly SplitEvent[], type: SplitEvent['type']): SplitEvent[] {
   return events.filter((event) => event.type === type);
 }
 
 describe('splitModel construction', () => {
-  it('starts with four hearts, three enemies, and combat phase', () => {
+  it('starts a live retake: full fuse, four hearts, three enemies, defuse at zero', () => {
     const state = createSplitState(1);
 
-    expect(state.phase).toBe('combat');
+    expect(state.phase).toBe('retake');
     expect(state.player.hearts).toBe(4);
     expect(state.enemies).toHaveLength(3);
     expect(aliveEnemyCount(state)).toBe(3);
-    expect(SPLIT_CONFIG.waves).toEqual([3, 2]);
+    expect(state.spikeTimerMs).toBe(SPLIT_CONFIG.spikeTimerMs);
+    expect(spikeTimeRemainingMs(state)).toBe(SPLIT_CONFIG.spikeTimerMs);
+    expect(state.attempt).toBe(0);
+    expect(state.defuse.progressMs).toBe(0);
+    expect(state.reinforcementsSpawned).toBe(1);
   });
 });
 
@@ -198,14 +212,16 @@ describe('player hearts, revive, and no-fail', () => {
     let heartLossEvents = 0;
     let reviveEvents = 0;
 
-    for (let elapsed = 0; elapsed < 60000; elapsed += 32) {
+    // Stay well under the 60s fuse so the round never detonates out from
+    // under the assertion.
+    for (let elapsed = 0; elapsed < 40000; elapsed += 32) {
       state = tickSplit(state, IDLE_INPUT, 32);
       heartLossEvents += collect(state.events, 'heart-lost').length;
       reviveEvents += collect(state.events, 'revive').length;
 
       expect(state.player.hearts).toBeGreaterThanOrEqual(1);
       expect(state.player.hearts).toBeLessThanOrEqual(4);
-      expect(state.phase).toBe('combat');
+      expect(state.phase).toBe('retake');
     }
 
     expect(heartLossEvents).toBeGreaterThan(0);
@@ -243,75 +259,222 @@ describe('enemy accuracy is poor and seed-deterministic', () => {
   });
 });
 
-describe('wave progression and win condition', () => {
-  it('spawns the second wave only after the first is cleared', () => {
-    const cleared = {
-      ...createSplitState(1),
-      enemies: createSplitState(1).enemies.map((enemy) => ({ ...enemy, alive: false })),
-    };
+describe('timed reinforcements', () => {
+  it('bleeds in the scheduled groups as the fuse burns down', () => {
+    // No starting enemies so the schedule is the only thing that spawns.
+    let state = withState({ enemies: [], reinforcementsSpawned: 1 });
 
-    const next = tickSplit(cleared, IDLE_INPUT, 0);
+    expect(state.reinforcementsSpawned).toBe(1);
 
-    expect(next.waveIndex).toBe(1);
-    expect(next.enemies).toHaveLength(5);
-    expect(aliveEnemyCount(next)).toBe(2);
-    expect(collect(next.events, 'wave-start')).toHaveLength(1);
-    expect(next.phase).toBe('combat');
+    // Past the ~T-40s reinforcement.
+    state = tickSplit(state, IDLE_INPUT, 20050);
+    expect(state.reinforcementsSpawned).toBe(2);
+    expect(state.enemies).toHaveLength(2);
+    const first = collect(state.events, 'reinforcement');
+    expect(first).toHaveLength(1);
+    expect((first[0] as { index: number; count: number }).index).toBe(1);
+    expect((first[0] as { index: number; count: number }).count).toBe(2);
+
+    // Past the ~T-20s reinforcement.
+    state = tickSplit(state, IDLE_INPUT, 20050);
+    expect(state.reinforcementsSpawned).toBe(3);
+    expect(state.enemies).toHaveLength(4);
+    expect(collect(state.events, 'reinforcement')).toHaveLength(1);
   });
 
-  it('activates the spike after the final wave is cleared', () => {
-    let state = createSplitState(1);
-    state = { ...state, enemies: state.enemies.map((e) => ({ ...e, alive: false })) };
-    state = tickSplit(state, IDLE_INPUT, 0); // spawn wave 2
-    state = { ...state, enemies: state.enemies.map((e) => ({ ...e, alive: false })) };
-    state = tickSplit(state, IDLE_INPUT, 0); // clear wave 2
+  it('does not require killing everyone — the win is the defuse', () => {
+    // Winning while enemies are still alive.
+    let state = setPlayerPos(withState({ enemies: [enemyAt({ x: 480, y: 145 })] }), SPIKE);
+    state = withDefuse(state, { progressMs: SPLIT_CONFIG.defuse.checkpointMs, checkpointReached: true });
 
-    expect(state.phase).toBe('defuse');
-    expect(collect(state.events, 'spike-active')).toHaveLength(1);
+    state = tickSplit(state, { ...IDLE_INPUT, holdDefuse: true }, 3600);
+
+    expect(isSplitWon(state)).toBe(true);
+    expect(aliveEnemyCount(state)).toBeGreaterThan(0);
   });
 });
 
-describe('spike defuse hold / release / half tick', () => {
-  function defusingState(): SplitState {
-    return withState({ phase: 'defuse', enemies: [] });
-  }
-
+describe('contested defuse', () => {
   function hold(state: SplitState, ms: number, holding: boolean): SplitState {
     return tickSplit(state, { ...IDLE_INPUT, holdDefuse: holding }, ms);
   }
 
-  it('accumulates progress while E is held', () => {
-    const next = hold(defusingState(), 1000, true);
+  function atSpike(): SplitState {
+    return setPlayerPos(withState({ enemies: [] }), SPIKE);
+  }
 
-    expect(next.defuse.progressMs).toBeCloseTo(1000);
+  it('accumulates progress only while in radius and holding E', () => {
+    expect(isInDefuseRadius(atSpike())).toBe(true);
+
+    const next = hold(atSpike(), 1000, true);
+
+    expect(next.defuse.progressMs).toBeCloseTo(1000, 0);
+    expect(next.defuse.defusing).toBe(true);
     expect(defuseProgress(next)).toBeGreaterThan(0);
   });
 
-  it('pauses (does not reset) progress when released before the checkpoint', () => {
-    let state = hold(defusingState(), 1000, true);
+  it('makes no progress when holding E outside the defuse radius', () => {
+    const away = setPlayerPos(withState({ enemies: [] }), { x: 200, y: 400 });
+
+    expect(isInDefuseRadius(away)).toBe(false);
+
+    const next = hold(away, 1000, true);
+
+    expect(next.defuse.progressMs).toBe(0);
+    expect(next.defuse.defusing).toBe(false);
+  });
+
+  it('decays progress slowly back toward the last checkpoint on release', () => {
+    // Before the checkpoint the floor is zero, so a release bleeds toward zero
+    // (slowly — decayPerMs < 1) but never below it.
+    let state = hold(atSpike(), 1000, true);
+    expect(state.defuse.progressMs).toBeCloseTo(1000, 0);
+
     state = hold(state, 1000, false);
 
-    expect(state.defuse.progressMs).toBeCloseTo(1000);
-    expect(state.defuse.checkpointReached).toBe(false);
+    expect(state.defuse.progressMs).toBeLessThan(1000);
+    expect(state.defuse.progressMs).toBeGreaterThanOrEqual(0);
+    // decayPerMs = 0.4 -> loses ~400ms over 1000ms.
+    expect(state.defuse.progressMs).toBeCloseTo(600, -1);
   });
 
   it('never falls below the half-defuse checkpoint once reached', () => {
-    let state = hold(defusingState(), 3500, true);
+    let state = hold(atSpike(), 3500, true);
 
     expect(state.defuse.checkpointReached).toBe(true);
     expect(collect(state.events, 'defuse-checkpoint')).toHaveLength(1);
-    expect(defuseProgress(state)).toBeCloseTo(0.5);
+    expect(defuseProgress(state)).toBeCloseTo(0.5, 1);
 
-    state = hold(state, 2000, false);
+    // Long release: decay is clamped at the checkpoint.
+    state = hold(state, 8000, false);
 
     expect(state.defuse.progressMs).toBeGreaterThanOrEqual(SPLIT_CONFIG.defuse.checkpointMs);
   });
 
+  it('knocks ____ off the defuse (back to the checkpoint floor) when she takes a hit', () => {
+    // Above the checkpoint but pre-checkpoint floor is zero.
+    let state = withDefuse(withState({ enemies: [] }), {
+      progressMs: 2000,
+      checkpointReached: false,
+      defusing: true,
+    });
+
+    state = damagePlayer(state);
+
+    expect(state.defuse.progressMs).toBe(0);
+    expect(state.defuse.defusing).toBe(false);
+    expect(collect(state.events, 'defuse-interrupted')).toHaveLength(1);
+    expect(collect(state.events, 'heart-lost')).toHaveLength(1);
+
+    // With the checkpoint banked, a hit only drops back to the checkpoint.
+    let banked = withDefuse(withState({ enemies: [] }), {
+      progressMs: 5000,
+      checkpointReached: true,
+      defusing: true,
+    });
+
+    banked = damagePlayer(banked);
+
+    expect(banked.defuse.progressMs).toBe(SPLIT_CONFIG.defuse.checkpointMs);
+    expect(collect(banked.events, 'defuse-interrupted')).toHaveLength(1);
+  });
+
   it('wins once the full seven-second hold completes', () => {
-    let state = hold(defusingState(), 3500, true);
+    let state = hold(atSpike(), 3500, true);
     state = hold(state, 3500, true);
 
     expect(isSplitWon(state)).toBe(true);
     expect(collect(state.events, 'defuse-complete')).toHaveLength(1);
+  });
+});
+
+describe('detonation soft-reset (no-fail)', () => {
+  it('detonates when the fuse hits zero and then runs it back with a fresh round', () => {
+    // Short-fuse the spike so we reach zero quickly.
+    let state = withState({ spikeTimerMs: 120, enemies: [] });
+
+    state = tickSplit(state, IDLE_INPUT, 200);
+
+    expect(state.phase).toBe('detonated');
+    expect(state.attempt).toBe(1);
+    const detonated = collect(state.events, 'detonated');
+    expect(detonated).toHaveLength(1);
+    expect((detonated[0] as { attempt: number }).attempt).toBe(1);
+
+    // Ride out the detonation overlay: it soft-resets into a fresh retake.
+    state = tickSplit(state, IDLE_INPUT, SPLIT_CONFIG.detonation.holdMs + 50);
+
+    const reset = collect(state.events, 'round-reset');
+    expect(reset).toHaveLength(1);
+    expect((reset[0] as { attempt: number }).attempt).toBe(1);
+    expect(state.phase).toBe('retake');
+    expect(state.attempt).toBe(1);
+    expect(state.spikeTimerMs).toBe(SPLIT_CONFIG.spikeTimerMs);
+    expect(state.player.hearts).toBe(SPLIT_CONFIG.player.maxHearts);
+    expect(state.defuse.progressMs).toBe(0);
+    expect(state.enemies).toHaveLength(3);
+    expect(aliveEnemyCount(state)).toBe(3);
+  });
+});
+
+describe('rayRect — ray/AABB slab intersection', () => {
+  // A 20x20 rect spanning x:[100,120], y:[100,120].
+  const RECT: Rect = { x: 100, y: 100, width: 20, height: 20 };
+
+  it('handles a vertical ray grazing the rect’s exact left edge x (no NaN)', () => {
+    // Origin sits exactly on x=100 (the left slab boundary) with dir.x=0. The
+    // old `0 * Infinity` slab math produced NaN here, silently ignoring cover.
+    const hit = rayRect({ x: 100, y: 0 }, { x: 0, y: 1 }, RECT);
+
+    expect(hit).not.toBeNull();
+    expect(Number.isNaN(hit?.t ?? NaN)).toBe(false);
+    expect(hit?.t).toBeCloseTo(100, 6);
+    expect(hit?.point.x).toBeCloseTo(100, 6);
+    expect(hit?.point.y).toBeCloseTo(100, 6);
+  });
+
+  it('handles a horizontal ray on the rect’s exact top edge y (no NaN)', () => {
+    const hit = rayRect({ x: 0, y: 100 }, { x: 1, y: 0 }, RECT);
+
+    expect(hit).not.toBeNull();
+    expect(Number.isNaN(hit?.t ?? NaN)).toBe(false);
+    expect(hit?.t).toBeCloseTo(100, 6);
+    expect(hit?.point.x).toBeCloseTo(100, 6);
+    expect(hit?.point.y).toBeCloseTo(100, 6);
+  });
+
+  it('misses when a vertical ray is parallel to and outside the x slab', () => {
+    expect(rayRect({ x: 50, y: 0 }, { x: 0, y: 1 }, RECT)).toBeNull();
+  });
+
+  it('misses when a horizontal ray is parallel to and outside the y slab', () => {
+    expect(rayRect({ x: 0, y: 50 }, { x: 1, y: 0 }, RECT)).toBeNull();
+  });
+
+  it('registers a normal straight-through hit at the near face', () => {
+    const hit = rayRect({ x: 110, y: 0 }, { x: 0, y: 1 }, RECT);
+
+    expect(hit).not.toBeNull();
+    expect(hit?.t).toBeCloseTo(100, 6);
+    expect(hit?.point).toEqual({ x: 110, y: 100 });
+  });
+
+  it('registers a normal diagonal hit at the corner', () => {
+    const inv = 1 / Math.SQRT2;
+    const hit = rayRect({ x: 90, y: 90 }, { x: inv, y: inv }, RECT);
+
+    expect(hit).not.toBeNull();
+    expect(hit?.t).toBeCloseTo(Math.hypot(10, 10), 6);
+    expect(hit?.point.x).toBeCloseTo(100, 6);
+    expect(hit?.point.y).toBeCloseTo(100, 6);
+  });
+
+  it('misses when the rect is entirely behind the ray origin', () => {
+    // From below the rect (y=200): firing further down (+y, away) misses; firing
+    // up (−y, toward it) enters the near face at y=120 → t=80.
+    expect(rayRect({ x: 110, y: 200 }, { x: 0, y: 1 }, RECT)).toBeNull();
+    expect(rayRect({ x: 110, y: 200 }, { x: 0, y: -1 }, RECT)?.t).toBeCloseTo(80, 6);
+    // From above the rect (y=90): firing up (−y, away) misses.
+    expect(rayRect({ x: 110, y: 90 }, { x: 0, y: -1 }, RECT)).toBeNull();
   });
 });

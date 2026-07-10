@@ -1,4 +1,5 @@
 import type { ActivityModule } from '../activityTypes';
+import { addKeyboardActivation } from '../activityDom';
 import { SPLIT_CONFIG } from './splitModel';
 import type { SplitSceneCallbacks } from './SplitScene';
 
@@ -42,34 +43,18 @@ function isTestMode(): boolean {
   return new URL(window.location.href).searchParams.get('testMode') === '1';
 }
 
-function addKeyboardActivation(button: HTMLButtonElement, activate: () => void): void {
-  button.addEventListener(
-    'keydown',
-    (event) => {
-      if (event.key !== 'Enter' && event.key !== ' ' && event.code !== 'Space') {
-        return;
-      }
-
-      event.preventDefault();
-      event.stopPropagation();
-      activate();
-    },
-    { capture: true },
-  );
-}
-
 export function createValorantSplitActivity(
   createSplitGame: CreateSplitGame = createDefaultSplitGame,
 ): ActivityModule {
   return {
     id: 'valorant-split',
-    title: 'SPLIT.EXE',
+    title: 'RETAKE.EXE',
     async start({ mount, onCancel, onComplete }) {
       const testMode = isTestMode();
 
       mount.innerHTML = `
-        <section class="activity-panel activity-panel--valorant-split" role="dialog" aria-label="SPLIT.EXE">
-          <h2>SPLIT.EXE</h2>
+        <section class="activity-panel activity-panel--valorant-split" role="dialog" aria-label="RETAKE.EXE">
+          <h2>RETAKE.EXE</h2>
           <div class="valorant-split-game">
             <div class="valorant-split-game__host" data-valorant-split-host></div>
           </div>

@@ -1,13 +1,18 @@
 import { rollChance, seedRng } from './rng';
+import { clamp } from '../../game/mathUtils';
 
 // ---------------------------------------------------------------------------
-// SPLIT.EXE pure model
+// RETAKE.EXE pure model
 //
 // A deterministic, Phaser-free simulation of a top-down retro shooter homage to
-// Valorant's Split B site. Everything here is unit-testable: entity movement,
-// hitscan shot resolution (head vs body hitboxes), enemy/teammate AI, player
-// hearts + revive, wave progression, and the hold-to-defuse finale. The Phaser
-// scene renders this state and feeds it input; it owns no game rules of its own.
+// Valorant's Split B site — reframed as a *retake*: the spike is already planted
+// and ticking from frame one, and ____'s squad has to fight onto the site and
+// defuse it under fire before the timer hits zero. Everything here is unit-
+// testable: entity movement, hitscan shot resolution (head vs body hitboxes),
+// enemy/teammate AI, player hearts + revive, timed reinforcements, the live
+// spike timer, the contest-able hold-to-defuse, and the no-fail detonation
+// reset. The Phaser scene renders this state and feeds it input; it owns no
+// game rules of its own.
 //
 // All sizes, keys, and tuning live in SPLIT_CONFIG so art/tuning can be swapped
 // without touching logic.
@@ -62,22 +67,54 @@ export const SPLIT_CONFIG = {
     range: 560,
   },
   revive: { holdFireMs: 2000 },
-  defuse: { totalMs: 7000, checkpointMs: 3500 },
-  waves: [3, 2] as const,
+  // The spike is live from the first frame. spikeTimerMs is the total fuse; a
+  // clean run defuses (7s of hold) with well over ten seconds to spare.
+  spikeTimerMs: 60000,
+  defuse: {
+    totalMs: 7000,
+    checkpointMs: 3500,
+    // ____ must stand within this radius of the spike (centre-to-centre) to
+    // make defuse progress.
+    radius: 74,
+    // When not actively defusing, progress bleeds back toward the last
+    // checkpoint at this fraction of real time (slow — a lull is recoverable).
+    decayPerMs: 0.4,
+  },
+  // When the fuse hits zero the round soft-resets. This is the "RUN IT BACK."
+  // beat: screen flash/shake, then a fresh round. No keepsake loss, no exit.
+  detonation: { holdMs: 1500 },
   // The spike sits on the painted "B" site stencil at the arena center.
   spike: { x: 480, y: 290, size: 26 },
   playerStart: { x: 480, y: 415 },
   teammateStart: { x: 426, y: 422 },
-  enemySpawns: [
-    [
-      { x: 300, y: 150 },
-      { x: 480, y: 140 },
-      { x: 660, y: 150 },
-    ],
-    [
-      { x: 390, y: 145 },
-      { x: 570, y: 145 },
-    ],
+  // Timed reinforcements: the first group is live at spawn; the rest bleed in
+  // as the fuse burns down so there's never a long dead stretch. Killing every
+  // bot is NOT the win condition — completing the defuse under fire is.
+  reinforcements: [
+    {
+      atElapsedMs: 0,
+      spawns: [
+        { x: 300, y: 150 },
+        { x: 480, y: 140 },
+        { x: 660, y: 150 },
+      ],
+    },
+    {
+      // ~T-40s (40s left on a 60s fuse).
+      atElapsedMs: 20000,
+      spawns: [
+        { x: 360, y: 150 },
+        { x: 600, y: 150 },
+      ],
+    },
+    {
+      // ~T-20s (20s left).
+      atElapsedMs: 40000,
+      spawns: [
+        { x: 430, y: 145 },
+        { x: 540, y: 145 },
+      ],
+    },
   ] as const,
   // Collision footprints for the five props in props.png (see splitArt.ts):
   // crate cluster, long platform barrier, double stack, low crate, lantern.
@@ -103,7 +140,7 @@ export const SPLIT_CONFIG = {
 
 const MAX_STEP_MS = 50;
 
-export type SplitPhase = 'combat' | 'defuse' | 'won';
+export type SplitPhase = 'retake' | 'won' | 'detonated';
 
 export type EnemyAiState = 'advancing' | 'pausing' | 'telegraphing';
 
@@ -133,6 +170,9 @@ export interface EnemyState {
 export interface DefuseState {
   readonly progressMs: number;
   readonly checkpointReached: boolean;
+  // True on ticks where ____ is actively advancing the defuse (in-radius,
+  // holding E, not reviving). Drives the scene's defuse-tick SFX.
+  readonly defusing: boolean;
 }
 
 export type SplitEvent =
@@ -165,19 +205,33 @@ export type SplitEvent =
       readonly enemyId: number;
       readonly by: 'player' | 'teammate';
     }
-  | { readonly type: 'wave-start'; readonly wave: number }
-  | { readonly type: 'spike-active' }
+  | { readonly type: 'reinforcement'; readonly index: number; readonly count: number }
+  // ____ was knocked off the defuse by taking a hit (progress fell to the
+  // last checkpoint).
+  | { readonly type: 'defuse-interrupted' }
   | { readonly type: 'defuse-checkpoint' }
-  | { readonly type: 'defuse-complete' };
+  | { readonly type: 'defuse-complete' }
+  // Fuse hit zero: begin the detonation overlay.
+  | { readonly type: 'detonated'; readonly attempt: number }
+  // Detonation overlay finished; a fresh round is now live.
+  | { readonly type: 'round-reset'; readonly attempt: number };
 
 export interface SplitState {
   readonly phase: SplitPhase;
   readonly elapsedMs: number;
+  // Remaining fuse on the planted spike, in ms. Counts down during 'retake'.
+  readonly spikeTimerMs: number;
+  // Countdown for the detonation overlay while phase === 'detonated'.
+  readonly detonationMs: number;
+  // How many times the fuse has run out (0 on the first attempt). Purely for
+  // flavor/bark text — failure never ends the game.
+  readonly attempt: number;
   readonly rngState: number;
   readonly player: PlayerState;
   readonly teammate: TeammateState;
   readonly enemies: readonly EnemyState[];
-  readonly waveIndex: number;
+  // How many reinforcement groups have spawned so far.
+  readonly reinforcementsSpawned: number;
   readonly holdFireMs: number;
   readonly firstBloodDone: boolean;
   readonly defuse: DefuseState;
@@ -205,10 +259,25 @@ export interface ShotResult {
 // ---------------------------------------------------------------------------
 
 export function createSplitState(seed = 1): SplitState {
+  return freshRound(seedRng(seed), 0, []);
+}
+
+// Builds a live retake round from an existing RNG state (so a detonation reset
+// deterministically continues the sequence rather than re-seeding). `events`
+// seeds the new state's event list — used to carry the round-reset bark across
+// the reset tick.
+function freshRound(
+  rngState: number,
+  attempt: number,
+  events: readonly SplitEvent[],
+): SplitState {
   return {
-    phase: 'combat',
+    phase: 'retake',
     elapsedMs: 0,
-    rngState: seedRng(seed),
+    spikeTimerMs: SPLIT_CONFIG.spikeTimerMs,
+    detonationMs: 0,
+    attempt,
+    rngState,
     player: {
       pos: SPLIT_CONFIG.playerStart,
       hearts: SPLIT_CONFIG.player.maxHearts,
@@ -220,17 +289,17 @@ export function createSplitState(seed = 1): SplitState {
       pos: SPLIT_CONFIG.teammateStart,
       fireCooldownMs: SPLIT_CONFIG.teammate.fireCooldownMs,
     },
-    enemies: spawnWave(0, 0),
-    waveIndex: 0,
+    enemies: spawnReinforcement(0, 0),
+    reinforcementsSpawned: 1,
     holdFireMs: 0,
     firstBloodDone: false,
-    defuse: { progressMs: 0, checkpointReached: false },
-    events: [],
+    defuse: { progressMs: 0, checkpointReached: false, defusing: false },
+    events,
   };
 }
 
-function spawnWave(waveIndex: number, idOffset: number): EnemyState[] {
-  const spawns = SPLIT_CONFIG.enemySpawns[waveIndex];
+function spawnReinforcement(reinforcementIndex: number, idOffset: number): EnemyState[] {
+  const { spawns } = SPLIT_CONFIG.reinforcements[reinforcementIndex];
 
   return spawns.map((pos, index) => ({
     id: idOffset + index,
@@ -239,7 +308,7 @@ function spawnWave(waveIndex: number, idOffset: number): EnemyState[] {
     alive: true,
     ai: 'advancing' as EnemyAiState,
     stateTimerMs: SPLIT_CONFIG.enemy.advanceMs,
-    wave: waveIndex,
+    wave: reinforcementIndex,
   }));
 }
 
@@ -284,22 +353,58 @@ export function spikeRect(): Rect {
 // Geometry: ray/rect intersection + line of sight
 // ---------------------------------------------------------------------------
 
-interface RayHit {
+export interface RayHit {
   readonly t: number;
   readonly point: Vec2;
 }
 
-function rayRect(origin: Vec2, dir: Vec2, rect: Rect): RayHit | null {
-  const invDx = dir.x !== 0 ? 1 / dir.x : Number.POSITIVE_INFINITY;
-  const invDy = dir.y !== 0 ? 1 / dir.y : Number.POSITIVE_INFINITY;
+// Slab method for ray/AABB intersection. Each axis is handled explicitly so a
+// zero direction component never produces `0 * Infinity = NaN` (which slips
+// through `tmin > tmax` — NaN comparisons are always false — and yields phantom
+// hits or, worse, silently ignored cover for a ray that grazes a rect's exact
+// edge). A ray parallel to an axis simply misses unless its origin lies within
+// that slab. Exported for unit testing.
+export function rayRect(origin: Vec2, dir: Vec2, rect: Rect): RayHit | null {
+  const EPS = 1e-9;
+  const minX = rect.x;
+  const maxX = rect.x + rect.width;
+  const minY = rect.y;
+  const maxY = rect.y + rect.height;
 
-  const tx1 = (rect.x - origin.x) * invDx;
-  const tx2 = (rect.x + rect.width - origin.x) * invDx;
-  const ty1 = (rect.y - origin.y) * invDy;
-  const ty2 = (rect.y + rect.height - origin.y) * invDy;
+  let tmin = Number.NEGATIVE_INFINITY;
+  let tmax = Number.POSITIVE_INFINITY;
 
-  const tmin = Math.max(Math.min(tx1, tx2), Math.min(ty1, ty2));
-  const tmax = Math.min(Math.max(tx1, tx2), Math.max(ty1, ty2));
+  // X slab.
+  if (Math.abs(dir.x) < EPS) {
+    if (origin.x < minX || origin.x > maxX) {
+      return null;
+    }
+  } else {
+    const invDx = 1 / dir.x;
+    let tx1 = (minX - origin.x) * invDx;
+    let tx2 = (maxX - origin.x) * invDx;
+    if (tx1 > tx2) {
+      [tx1, tx2] = [tx2, tx1];
+    }
+    tmin = Math.max(tmin, tx1);
+    tmax = Math.min(tmax, tx2);
+  }
+
+  // Y slab.
+  if (Math.abs(dir.y) < EPS) {
+    if (origin.y < minY || origin.y > maxY) {
+      return null;
+    }
+  } else {
+    const invDy = 1 / dir.y;
+    let ty1 = (minY - origin.y) * invDy;
+    let ty2 = (maxY - origin.y) * invDy;
+    if (ty1 > ty2) {
+      [ty1, ty2] = [ty2, ty1];
+    }
+    tmin = Math.max(tmin, ty1);
+    tmax = Math.min(tmax, ty2);
+  }
 
   if (tmax < 0 || tmin > tmax) {
     return null;
@@ -491,7 +596,8 @@ export function fireTeammateShot(state: SplitState): {
 
 // Apply a single body hit to ____. Body only — one heart. Respects the revive
 // invulnerability window. At zero hearts there is no fail: she revives on site
-// with full hearts, brief invulnerability, and the bots hold fire.
+// with full hearts, brief invulnerability, and the bots hold fire. Any landed
+// hit also knocks her off the defuse (progress falls to the last checkpoint).
 export function damagePlayer(state: SplitState): SplitState {
   if (state.player.invulnMs > 0) {
     return state;
@@ -500,7 +606,7 @@ export function damagePlayer(state: SplitState): SplitState {
   const hearts = state.player.hearts - 1;
 
   if (hearts <= 0) {
-    const revived: SplitState = {
+    const revived: SplitState = knockOffDefuse({
       ...state,
       player: {
         ...state.player,
@@ -509,17 +615,35 @@ export function damagePlayer(state: SplitState): SplitState {
         reviving: true,
       },
       holdFireMs: Math.max(state.holdFireMs, SPLIT_CONFIG.revive.holdFireMs),
-    };
+    });
 
     return pushEvent(revived, { type: 'revive' });
   }
 
-  const damaged: SplitState = {
+  const damaged: SplitState = knockOffDefuse({
     ...state,
     player: { ...state.player, hearts },
-  };
+  });
 
   return pushEvent(damaged, { type: 'heart-lost', hearts });
+}
+
+// Knock ____ off the defuse: progress drops to the last checkpoint (0 if the
+// half-checkpoint hasn't been reached yet). Emits 'defuse-interrupted' only if
+// progress was actually above the floor.
+function knockOffDefuse(state: SplitState): SplitState {
+  const floor = state.defuse.checkpointReached ? SPLIT_CONFIG.defuse.checkpointMs : 0;
+
+  if (state.defuse.progressMs <= floor) {
+    return state;
+  }
+
+  const knocked: SplitState = {
+    ...state,
+    defuse: { ...state.defuse, progressMs: floor, defusing: false },
+  };
+
+  return pushEvent(knocked, { type: 'defuse-interrupted' });
 }
 
 // ---------------------------------------------------------------------------
@@ -532,7 +656,7 @@ export function tickSplit(state: SplitState, input: SplitInput, deltaMs: number)
   // Player shot resolves once per tick (edge-triggered click), gated by cadence.
   if (
     input.fire &&
-    next.phase === 'combat' &&
+    next.phase === 'retake' &&
     next.player.shotCooldownMs <= 0 &&
     !next.player.reviving
   ) {
@@ -545,20 +669,67 @@ export function tickSplit(state: SplitState, input: SplitInput, deltaMs: number)
 
   let remaining = Math.max(0, deltaMs);
 
-  while (remaining > 0) {
+  do {
     const step = Math.min(MAX_STEP_MS, remaining);
+    const before = next.phase;
     next = stepSplit(next, input, step);
     remaining -= step;
-  }
 
-  return resolvePhaseTransitions(next);
+    // A detonation soft-reset is a frame boundary: the fresh round starts on
+    // the next tick, not on this tick's leftover sub-steps.
+    if (before === 'detonated' && next.phase === 'retake') {
+      break;
+    }
+  } while (remaining > 0);
+
+  return next;
 }
 
 function stepSplit(state: SplitState, input: SplitInput, deltaMs: number): SplitState {
   const seconds = deltaMs / 1000;
   let next = state;
 
+  if (next.phase === 'detonated') {
+    const detonationMs = next.detonationMs - deltaMs;
+
+    if (detonationMs <= 0) {
+      // Soft-reset into a fresh round, carrying the RNG sequence, the attempt
+      // counter, and this tick's accumulated events (so the round-reset bark
+      // survives the swap).
+      const attempt = next.attempt;
+
+      return freshRound(next.rngState, attempt, [
+        ...next.events,
+        { type: 'round-reset', attempt },
+      ]);
+    }
+
+    return { ...next, detonationMs };
+  }
+
+  if (next.phase !== 'retake') {
+    return next;
+  }
+
   next = { ...next, elapsedMs: next.elapsedMs + deltaMs };
+
+  // Burn the fuse; detonate at zero.
+  const spikeTimerMs = next.spikeTimerMs - deltaMs;
+
+  if (spikeTimerMs <= 0) {
+    const attempt = next.attempt + 1;
+    const detonated: SplitState = {
+      ...next,
+      spikeTimerMs: 0,
+      phase: 'detonated',
+      detonationMs: SPLIT_CONFIG.detonation.holdMs,
+      attempt,
+    };
+
+    return pushEvent(detonated, { type: 'detonated', attempt });
+  }
+
+  next = { ...next, spikeTimerMs };
 
   // Timers.
   next = {
@@ -572,10 +743,34 @@ function stepSplit(state: SplitState, input: SplitInput, deltaMs: number): Split
     },
   };
 
+  next = spawnPendingReinforcements(next);
   next = movePlayer(next, input, seconds);
   next = updateTeammate(next, seconds, deltaMs);
   next = updateEnemies(next, seconds, deltaMs);
   next = updateDefuse(next, input, deltaMs);
+
+  return next;
+}
+
+function spawnPendingReinforcements(state: SplitState): SplitState {
+  let next = state;
+
+  while (
+    next.reinforcementsSpawned < SPLIT_CONFIG.reinforcements.length &&
+    next.elapsedMs >= SPLIT_CONFIG.reinforcements[next.reinforcementsSpawned].atElapsedMs
+  ) {
+    const index = next.reinforcementsSpawned;
+    const fresh = spawnReinforcement(index, next.enemies.length);
+
+    next = pushEvent(
+      {
+        ...next,
+        enemies: [...next.enemies, ...fresh],
+        reinforcementsSpawned: index + 1,
+      },
+      { type: 'reinforcement', index, count: fresh.length },
+    );
+  }
 
   return next;
 }
@@ -615,7 +810,7 @@ function updateTeammate(state: SplitState, seconds: number, deltaMs: number): Sp
   const fireCooldownMs = Math.max(0, state.teammate.fireCooldownMs - deltaMs);
   let next: SplitState = { ...state, teammate: { pos, fireCooldownMs } };
 
-  if (fireCooldownMs <= 0 && next.phase === 'combat') {
+  if (fireCooldownMs <= 0) {
     const shot = fireTeammateShot(next);
 
     if (shot.result.fired) {
@@ -715,22 +910,20 @@ function resolveEnemyFire(state: SplitState, index: number, enemyPos: Vec2): Spl
 }
 
 function updateDefuse(state: SplitState, input: SplitInput, deltaMs: number): SplitState {
-  if (state.phase !== 'defuse') {
-    return state;
-  }
+  const { totalMs, checkpointMs, radius, decayPerMs } = SPLIT_CONFIG.defuse;
+  const inRadius = distance(state.player.pos, SPLIT_CONFIG.spike) <= radius;
+  const defusing = input.holdDefuse && inRadius && !state.player.reviving;
 
-  const { totalMs, checkpointMs } = SPLIT_CONFIG.defuse;
   let progressMs = state.defuse.progressMs;
   let checkpointReached = state.defuse.checkpointReached;
+  const floor = checkpointReached ? checkpointMs : 0;
   let next = state;
 
-  if (input.holdDefuse) {
+  if (defusing) {
     progressMs = Math.min(totalMs, progressMs + deltaMs);
-  }
-
-  // Half-defuse checkpoint: once reached, progress never falls below it.
-  if (checkpointReached) {
-    progressMs = Math.max(progressMs, checkpointMs);
+  } else {
+    // Slow bleed back toward the last checkpoint when not actively holding.
+    progressMs = Math.max(floor, progressMs - deltaMs * decayPerMs);
   }
 
   if (!checkpointReached && progressMs >= checkpointMs) {
@@ -738,37 +931,13 @@ function updateDefuse(state: SplitState, input: SplitInput, deltaMs: number): Sp
     next = pushEvent(next, { type: 'defuse-checkpoint' });
   }
 
-  next = { ...next, defuse: { progressMs, checkpointReached } };
+  next = { ...next, defuse: { progressMs, checkpointReached, defusing } };
 
   if (progressMs >= totalMs) {
     next = pushEvent({ ...next, phase: 'won' }, { type: 'defuse-complete' });
   }
 
   return next;
-}
-
-function resolvePhaseTransitions(state: SplitState): SplitState {
-  if (state.phase !== 'combat') {
-    return state;
-  }
-
-  if (state.enemies.some((enemy) => enemy.alive)) {
-    return state;
-  }
-
-  if (state.waveIndex + 1 < SPLIT_CONFIG.waves.length) {
-    const nextWaveIndex = state.waveIndex + 1;
-    const idOffset = state.enemies.length;
-    const withWave: SplitState = {
-      ...state,
-      waveIndex: nextWaveIndex,
-      enemies: [...state.enemies, ...spawnWave(nextWaveIndex, idOffset)],
-    };
-
-    return pushEvent(withWave, { type: 'wave-start', wave: nextWaveIndex });
-  }
-
-  return pushEvent({ ...state, phase: 'defuse' }, { type: 'spike-active' });
 }
 
 // ---------------------------------------------------------------------------
@@ -851,10 +1020,6 @@ function rectsOverlap(a: Rect, b: Rect): boolean {
   );
 }
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
-
 // ---------------------------------------------------------------------------
 // Queries
 // ---------------------------------------------------------------------------
@@ -869,4 +1034,14 @@ export function aliveEnemyCount(state: SplitState): number {
 
 export function defuseProgress(state: SplitState): number {
   return state.defuse.progressMs / SPLIT_CONFIG.defuse.totalMs;
+}
+
+// Remaining fuse in ms, clamped to zero.
+export function spikeTimeRemainingMs(state: SplitState): number {
+  return Math.max(0, state.spikeTimerMs);
+}
+
+// Whether ____ is currently close enough to the spike to defuse.
+export function isInDefuseRadius(state: SplitState): boolean {
+  return distance(state.player.pos, SPLIT_CONFIG.spike) <= SPLIT_CONFIG.defuse.radius;
 }

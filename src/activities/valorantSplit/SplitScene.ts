@@ -5,7 +5,9 @@ import {
   createSplitState,
   defuseProgress,
   enemyRect,
+  isInDefuseRadius,
   isSplitWon,
+  spikeTimeRemainingMs,
   tickSplit,
   type EnemyState,
   type SplitEvent,
@@ -29,10 +31,16 @@ import {
 } from './splitArt';
 import { playSfx as playAudioSfx, type SfxKey } from '../../game/audio';
 
-const SFX_BY_EVENT: Readonly<Record<'shot' | 'heart' | 'beep' | 'clutch', SfxKey>> = {
+type SfxEvent = 'shot' | 'heart' | 'beep' | 'tick' | 'checkpoint' | 'complete' | 'detonate' | 'clutch';
+
+const SFX_BY_EVENT: Readonly<Record<SfxEvent, SfxKey>> = {
   shot: 'sfx-shot',
   heart: 'sfx-heart-loss',
   beep: 'sfx-spike-beep',
+  tick: 'sfx-defuse-tick',
+  checkpoint: 'sfx-defuse-checkpoint',
+  complete: 'sfx-defuse-complete',
+  detonate: 'sfx-detonate',
   clutch: 'sfx-clutch',
 };
 
@@ -56,10 +64,14 @@ const COVER_OVERHANG = 1.08;
 // ____-voice comms barks. Warm, personal, Valorant-flavored — the teammate is
 // ____, the player is ____, and this is a birthday gift.
 const BARKS = {
-  roundStart: "Comms up. I've got B with you, ____ — like always.",
+  roundStart: "Site's lost, spike's down — we're taking it back. On me, ____.",
   firstBlood: "That's the one. Knew you'd pop off.",
   revive: "I've got you. Get up — we're not done.",
-  spike: "I've got your back. Seven seconds. You've got this.",
+  reinforcement: "More inbound from Heaven. Hold the angle, I've got trades.",
+  onSite: "You're on it — plant your feet and hold E. I've got the site.",
+  interrupted: "They knocked you off it! Reset and get back on — go, go.",
+  detonate: "Spike's gone. Shake it off — we run it back. Same as always.",
+  runback: "Fresh round. Site's down again. Let's take it back.",
   clutch: "That's my Viper. Clutch.",
 } as const;
 
@@ -108,7 +120,6 @@ export class SplitScene extends Phaser.Scene {
 
   private firePressed = false;
   private pointer = { x: ARENA.width / 2, y: ARENA.height / 2 };
-  private lastHoldDefuse = false;
 
   private dynamic!: Phaser.GameObjects.Graphics;
   private groundFx!: Phaser.GameObjects.Graphics;
@@ -126,10 +137,14 @@ export class SplitScene extends Phaser.Scene {
   private statusText!: Phaser.GameObjects.Text;
   private barkText!: Phaser.GameObjects.Text;
   private popupText!: Phaser.GameObjects.Text;
+  private promptText!: Phaser.GameObjects.Text;
+  private warnText!: Phaser.GameObjects.Text;
 
   private tracers: Tracer[] = [];
   private muzzleUntil = 0;
   private nextBeepAt = 0;
+  private nextDefuseTickAt = 0;
+  private onSiteBarked = false;
   private playerFlashUntil = 0;
   private enemyFlashUntil = new Map<number, number>();
   private teammateFacingLeft = false;
@@ -211,6 +226,32 @@ export class SplitScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(820)
       .setVisible(false);
+    this.promptText = this.add
+      .text(SPLIT_CONFIG.spike.x, SPLIT_CONFIG.spike.y + 52, 'HOLD E TO DEFUSE', {
+        align: 'center',
+        color: '#2ee6c4',
+        fontFamily: 'Arial, sans-serif',
+        fontSize: '18px',
+        fontStyle: '700',
+        stroke: '#0c1220',
+        strokeThickness: 4,
+      })
+      .setOrigin(0.5, 0)
+      .setDepth(816)
+      .setVisible(false);
+    this.warnText = this.add
+      .text(ARENA.width / 2, 62, '', {
+        align: 'center',
+        color: '#ffb347',
+        fontFamily: 'Arial, sans-serif',
+        fontSize: '22px',
+        fontStyle: '800',
+        stroke: '#141414',
+        strokeThickness: 5,
+      })
+      .setOrigin(0.5, 0)
+      .setDepth(816)
+      .setVisible(false);
 
     this.crosshair = this.hasArt(ART_KEYS.ui)
       ? this.add
@@ -223,7 +264,7 @@ export class SplitScene extends Phaser.Scene {
     this.showBark(BARKS.roundStart);
   }
 
-  update(_time: number, delta: number): void {
+  update(_time: number, _delta: number): void {
     if (this.keys && Phaser.Input.Keyboard.JustDown(this.keys.escape) && !this.finalizing) {
       this.cancel();
       return;
@@ -231,9 +272,14 @@ export class SplitScene extends Phaser.Scene {
 
     const now = this.time.now;
 
+    // Drive the model from real elapsed time (clamped) rather than Phaser's
+    // smoothed per-frame delta, so the shot clock and aim feel are wall-clock
+    // consistent regardless of render FPS.
+    const modelDelta = Math.min(250, this.game.loop.rawDelta);
+
     if (!this.finalizing) {
       const input = this.readInput();
-      this.state = tickSplit(this.state, input, delta);
+      this.state = tickSplit(this.state, input, modelDelta);
       this.handleEvents(this.state.events, now);
 
       if (isSplitWon(this.state)) {
@@ -293,8 +339,7 @@ export class SplitScene extends Phaser.Scene {
 
     const player = this.state.player.pos;
     const aimAngle = Math.atan2(this.pointer.y - player.y, this.pointer.x - player.x);
-    const holdDefuse = held.has('KeyE') && this.state.phase === 'defuse';
-    this.lastHoldDefuse = holdDefuse;
+    const holdDefuse = held.has('KeyE') && this.state.phase === 'retake';
 
     return { move: { x, y }, aimAngle, fire: this.firePressed, holdDefuse };
   }
@@ -342,17 +387,52 @@ export class SplitScene extends Phaser.Scene {
         case 'enemy-killed':
           this.spawnSkull(event.enemyId);
           break;
-        case 'spike-active':
-          this.showBark(BARKS.spike);
-          this.spikeSprite.setVisible(true);
-          this.nextBeepAt = now;
+        case 'reinforcement':
+          this.showBark(BARKS.reinforcement);
+          this.showWarn('MORE INBOUND');
+          break;
+        case 'defuse-interrupted':
+          this.showBark(BARKS.interrupted);
+          this.showPopup('OFF THE SPIKE', '#ff5470');
+          break;
+        case 'defuse-checkpoint':
+          this.playSfx('checkpoint');
           break;
         case 'defuse-complete':
+          this.playSfx('complete');
+          break;
+        case 'detonated':
+          this.playSfx('detonate');
+          this.showBark(BARKS.detonate);
+          this.showPopup('RUN IT BACK.', '#ff5470');
+          this.cameras.main.flash(500, 220, 70, 40);
+          this.cameras.main.shake(600, 0.012);
+          break;
+        case 'round-reset':
+          this.onRoundReset(now);
           break;
         default:
           break;
       }
     }
+  }
+
+  // Wipe per-round view state so a soft-reset starts clean: fade out any lingering
+  // enemy sprites (ids restart at 0), reset the spike beep/defuse cadence, and
+  // clear the big detonation popup.
+  private onRoundReset(now: number): void {
+    for (const view of this.enemyViews.values()) {
+      view.img.destroy();
+    }
+    this.enemyViews.clear();
+    this.enemyFlashUntil.clear();
+    this.tracers = [];
+    this.nextBeepAt = now;
+    this.nextDefuseTickAt = now;
+    this.onSiteBarked = false;
+    this.popupText.setVisible(false);
+    this.tweens.killTweensOf(this.popupText);
+    this.showBark(BARKS.runback);
   }
 
   // ------------------------------------------------------------------
@@ -371,11 +451,13 @@ export class SplitScene extends Phaser.Scene {
     this.drawAimLine(player.pos, now);
     this.drawTelegraphs(now);
     this.drawTracers(now);
-    this.drawDefuse(now);
+    this.drawSpikeAndDefuse(now);
     this.drawHud();
 
     this.crosshair.setPosition(this.pointer.x, this.pointer.y);
     this.updateStatusText();
+    this.updateTimerText(now);
+    this.updatePrompt();
   }
 
   private renderPlayer(now: number): void {
@@ -532,43 +614,71 @@ export class SplitScene extends Phaser.Scene {
     }
   }
 
-  private drawDefuse(now: number): void {
-    if (this.state.phase !== 'defuse' && this.state.phase !== 'won') {
+  private drawSpikeAndDefuse(now: number): void {
+    const phase = this.state.phase;
+
+    // Freeze the spike FX during the detonation overlay.
+    if (phase === 'detonated') {
       return;
     }
 
-    // Accelerando beep: interval shrinks as the defuse nears completion.
+    const defusing = this.state.defuse.defusing;
     const progress = defuseProgress(this.state);
-    if (this.state.phase === 'defuse' && now >= this.nextBeepAt) {
-      this.playSfx('beep');
-      this.nextBeepAt = now + Math.max(90, 520 - progress * 420);
-    }
 
-    const defusing = this.state.phase === 'defuse' && this.lastHoldDefuse;
+    if (phase === 'retake') {
+      // Spike beep accelerates as the FUSE burns down (not the defuse): from a
+      // slow pulse at full time to a frantic ~90ms near zero.
+      if (now >= this.nextBeepAt) {
+        const frac = spikeTimeRemainingMs(this.state) / SPLIT_CONFIG.spikeTimerMs;
+        this.playSfx('beep');
+        this.nextBeepAt = now + Math.max(90, 90 + frac * 560);
+      }
+
+      // Defuse ticks while ____ is actively on the spike.
+      if (defusing && now >= this.nextDefuseTickAt) {
+        this.playSfx('tick');
+        this.nextDefuseTickAt = now + 450;
+      }
+    }
 
     if (this.spikeArt) {
       this.spikeSprite.setFrame(defusing ? 'spike-defusing' : 'spike-armed');
     }
 
-    // Pulsing ground glow layered UNDER the spike sprite so the core reads:
-    // teal while armed, warning red while the defuse is in progress.
-    const spikePulse = 0.5 + Math.abs(Math.sin(now / (this.state.phase === 'defuse' ? 130 : 400))) * 0.5;
+    // Pulsing ground glow under the spike: teal while armed, warning red while
+    // the defuse is actively advancing.
+    const spikePulse = 0.5 + Math.abs(Math.sin(now / (defusing ? 130 : 360))) * 0.5;
     this.spikeSprite.setScale(this.spikeBaseScale * (1 + spikePulse * 0.25));
     this.groundFx.fillStyle(defusing ? 0xff5470 : 0x2ee6c4, 0.18 + spikePulse * 0.2);
     this.groundFx.fillCircle(SPLIT_CONFIG.spike.x, SPLIT_CONFIG.spike.y, 24 + spikePulse * 10);
 
-    const barWidth = 280;
+    // Faint defuse-radius ring so the "get on the spike" zone reads.
+    if (phase === 'retake') {
+      this.groundFx.lineStyle(1.5, 0x2ee6c4, isInDefuseRadius(this.state) ? 0.5 : 0.22);
+      this.groundFx.strokeCircle(
+        SPLIT_CONFIG.spike.x,
+        SPLIT_CONFIG.spike.y,
+        SPLIT_CONFIG.defuse.radius,
+      );
+    }
+
+    const barWidth = 300;
     const barHeight = 16;
     const barX = ARENA.width / 2 - barWidth / 2;
-    const barY = ARENA.height / 2 + 70;
+    const barY = ARENA.height / 2 + 88;
 
     this.dynamic.fillStyle(0x0c1220, 0.85);
     this.dynamic.fillRoundedRect(barX - 3, barY - 3, barWidth + 6, barHeight + 6, 4);
-    this.dynamic.fillStyle(0x2ee6c4, 1);
+    this.dynamic.fillStyle(defusing ? 0x8affc1 : 0x2ee6c4, 1);
     this.dynamic.fillRoundedRect(barX, barY, barWidth * progress, barHeight, 3);
-    // Half-defuse checkpoint marker.
+    // Half-defuse checkpoint notch.
     this.dynamic.fillStyle(0xffd15c, 1);
-    this.dynamic.fillRect(barX + barWidth / 2 - 1, barY - 3, 2, barHeight + 6);
+    this.dynamic.fillRect(
+      barX + barWidth * (SPLIT_CONFIG.defuse.checkpointMs / SPLIT_CONFIG.defuse.totalMs) - 1,
+      barY - 3,
+      2,
+      barHeight + 6,
+    );
     this.dynamic.lineStyle(1, 0x8fb7ff, 0.7);
     this.dynamic.strokeRoundedRect(barX, barY, barWidth, barHeight, 3);
   }
@@ -632,18 +742,66 @@ export class SplitScene extends Phaser.Scene {
       return;
     }
 
-    if (this.state.phase === 'defuse') {
-      this.statusText.setText('THE SPIKE IS ACTIVE — hold E on the spike to defuse. Esc leaves.');
-      this.roundText.setText('DEFUSE');
+    if (this.state.phase === 'detonated') {
+      this.statusText.setText('The spike went off — resetting. Run it back.');
+      return;
+    }
+
+    this.statusText.setText(
+      `WASD move · aim mouse · click fire · hold E on the spike to defuse. ${aliveEnemyCount(this.state)} enemies. Esc leaves.`,
+    );
+  }
+
+  // The prominent top-center fuse countdown. Reuses the gold medallion as a
+  // backdrop; turns red and blinks under 15s.
+  private updateTimerText(now: number): void {
+    if (this.finalizing || this.state.phase === 'won') {
+      this.roundText.setText('');
       this.medalImage?.setVisible(false);
       return;
     }
 
-    this.roundText.setText(String(this.state.waveIndex + 1));
+    if (this.state.phase === 'detonated') {
+      this.roundText.setText('0');
+      this.roundText.setColor('#ff5470');
+      this.medalImage?.setVisible(true);
+      return;
+    }
+
+    const remaining = spikeTimeRemainingMs(this.state);
+    this.roundText.setText(String(Math.ceil(remaining / 1000)));
+    const low = remaining <= 15000;
+    const blink = low && Math.floor(now / 300) % 2 === 0;
+    this.roundText.setColor(low && !blink ? '#ff5470' : '#ffd15c');
     this.medalImage?.setVisible(true);
-    this.statusText.setText(
-      `WASD to move, aim with the mouse, click to fire. ${aliveEnemyCount(this.state)} left. Esc leaves.`,
-    );
+  }
+
+  private updatePrompt(): void {
+    const show = this.state.phase === 'retake' && !this.finalizing && isInDefuseRadius(this.state);
+    this.promptText.setVisible(show);
+
+    if (!show) {
+      return;
+    }
+
+    this.promptText.setText(this.state.defuse.defusing ? 'DEFUSING…' : 'HOLD E TO DEFUSE');
+
+    if (!this.onSiteBarked) {
+      this.onSiteBarked = true;
+      this.showBark(BARKS.onSite);
+    }
+  }
+
+  private showWarn(text: string): void {
+    this.warnText.setText(text).setVisible(true).setAlpha(1);
+    this.tweens.killTweensOf(this.warnText);
+    this.tweens.add({
+      targets: this.warnText,
+      alpha: 0,
+      delay: 1000,
+      duration: 500,
+      onComplete: () => this.warnText.setVisible(false),
+    });
   }
 
   // ------------------------------------------------------------------
@@ -693,6 +851,8 @@ export class SplitScene extends Phaser.Scene {
     this.finalizing = true;
     this.input.setDefaultCursor('default');
     this.crosshair.setVisible(false);
+    this.promptText.setVisible(false);
+    this.warnText.setVisible(false);
     this.showBark(BARKS.clutch);
     this.showPopup('CLUTCH.', '#2ee6c4');
     this.cameras.main.flash(400, 46, 230, 196);
@@ -719,7 +879,7 @@ export class SplitScene extends Phaser.Scene {
     this.callbacks.onCancel();
   }
 
-  private playSfx(key: 'shot' | 'heart' | 'beep' | 'clutch'): void {
+  private playSfx(key: SfxEvent): void {
     playAudioSfx(SFX_BY_EVENT[key]);
   }
 
@@ -785,7 +945,7 @@ export class SplitScene extends Phaser.Scene {
       )
       .setScale(this.spikeBaseScale)
       .setDepth(60)
-      .setVisible(false);
+      .setVisible(true);
   }
 
   // ------------------------------------------------------------------

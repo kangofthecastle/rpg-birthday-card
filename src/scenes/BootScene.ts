@@ -4,6 +4,7 @@ import { LOCATIONS } from '../content/locations';
 import { createTempTextures } from '../game/createTempTextures';
 import {
   createSeededRunState,
+  markEndingCompleted,
   REQUIRED_FINAL_KEEPSAKE_IDS,
   type RunState,
 } from '../game/runState';
@@ -96,6 +97,12 @@ export class BootScene extends Phaser.Scene {
           ? REQUIRED_FINAL_KEEPSAKE_IDS
           : seedParam.split(',').map((id) => id.trim()).filter(Boolean);
       state = createSeededRunState(locationId, ids);
+    }
+
+    // testMode-only: seed the ending as already completed, so a smoke can land in
+    // the post-ending world (e.g. ____'s room with the photo wall live).
+    if (testMode && params.get('seedEnding') === '1') {
+      state = markEndingCompleted(state ?? createSeededRunState(locationId, []));
     }
 
     this.scene.start(SceneKeys.Location, {

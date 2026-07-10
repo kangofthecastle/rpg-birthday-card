@@ -12,6 +12,7 @@ import {
   createRitualState,
   currentComponent,
   currentHullCrease,
+  currentHullShape,
   currentVerb,
   FOLD_COMPONENTS,
   HULL_CREASES,
@@ -181,6 +182,9 @@ export const foldTheLettersActivity: ActivityModule = {
       stage.setVerb(currentVerb(state) ?? 'fold');
       const component = currentComponent(state);
       stage.setCrease(component?.id === 'hull' ? currentHullCrease(state) : undefined);
+      if (component?.id === 'hull') {
+        stage.setHullShape(currentHullShape(state));
+      }
       stage.setHoist(state.hoistProgress, isCatchingWind(state.hoistProgress));
       stage.setRoll(rollProgress(state));
       stage.setKindle(kindleProgress(state));
@@ -220,7 +224,13 @@ export const foldTheLettersActivity: ActivityModule = {
         onComplete({
           locationId: 'clearing',
           activityId: 'fold-the-letters',
-          travelTo: { locationId: 'final-spot', spawnId: 'near-lantern' },
+          travelTo: {
+            locationId: 'final-spot',
+            spawnId: 'near-lantern',
+            // The boat lands IN the ending: final-spot auto-starts the reveal on
+            // arrival, no interim walk or E-press.
+            autoStartActivityId: 'final-keepsake-reveal',
+          },
         }),
       );
 

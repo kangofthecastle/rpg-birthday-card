@@ -78,6 +78,12 @@ interface BaseLocationInteraction {
    */
   readonly requiresAllKeepsakes?: boolean;
   readonly lockedDialogue?: readonly DialogueLine[];
+  /**
+   * After the ending is complete, this interaction opens the full-screen photo
+   * wall overlay instead of showing its dialogue. Before the ending it keeps its
+   * ordinary dialogue behaviour. Used by ____'s room photo wall.
+   */
+  readonly photoWallAfterEnding?: boolean;
 }
 
 export interface ActivityLocationInteraction extends BaseLocationInteraction {

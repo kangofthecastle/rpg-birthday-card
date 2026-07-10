@@ -66,7 +66,7 @@ function wait(ms: number): Promise<void> {
 export const finalKeepsakeActivity: ActivityModule = {
   id: 'final-keepsake-reveal',
   title: 'The Lantern Clearing',
-  async start({ mount, onComplete }) {
+  async start({ mount, onComplete, onGoHome }) {
     const timing = isTestMode() ? TEST_TIMING : REAL_TIMING;
     const { stage, keepsakeEls, lantern, ocean } = buildStage(mount);
 
@@ -105,7 +105,7 @@ export const finalKeepsakeActivity: ActivityModule = {
     // d. Back to the cold-open screen — now warm, lit, full of letters.
     //    Mount the persistent letters screen above the ocean, then let the
     //    scene mark the ending complete and remove the ocean beneath it.
-    showLettersScreen({ host: getUiRoot(), fadeIn: true });
+    showLettersScreen({ host: getUiRoot(), fadeIn: true, onGoHome });
     onComplete({ locationId: 'final-spot', keepsakeId: ENDING_KEEPSAKE_ID });
   },
 };

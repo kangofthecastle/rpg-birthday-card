@@ -36,6 +36,12 @@ export interface LettersScreenOptions {
   readonly openLetter?: OpenLetter;
   /** Start faded-out and let the caller fade in. Defaults to false. */
   readonly fadeIn?: boolean;
+  /**
+   * Optional quiet "go home" affordance, revealed once every letter is read.
+   * When provided, a gentle button appears beside the "happy birthday" line and
+   * calls this to dismiss the screen and return to ____'s room.
+   */
+  readonly onGoHome?: () => void;
 }
 
 export interface LettersScreenHandle {
@@ -109,7 +115,20 @@ export function showLettersScreen(
   birthday.textContent = HAPPY_BIRTHDAY_LINE;
   birthday.hidden = true;
 
-  crt.append(title, subtitle, grid, birthday);
+  // A quiet way back once every letter is read — the game's soft landing.
+  const goHome = document.createElement('button');
+  goHome.type = 'button';
+  goHome.className = 'letters-screen__go-home';
+  goHome.textContent = 'go home';
+  goHome.hidden = true;
+  if (options.onGoHome) {
+    goHome.addEventListener('click', () => {
+      overlay.remove();
+      options.onGoHome?.();
+    });
+  }
+
+  crt.append(title, subtitle, grid, birthday, goHome);
   overlay.append(crt);
 
   const setSelected = (index: number): void => {
@@ -149,6 +168,9 @@ export function showLettersScreen(
     if (allLettersRead(model)) {
       birthday.hidden = false;
       overlay.classList.add('letters-screen--complete');
+      if (options.onGoHome) {
+        goHome.hidden = false;
+      }
     }
 
     opening = false;

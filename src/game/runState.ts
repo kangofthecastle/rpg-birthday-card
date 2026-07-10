@@ -38,6 +38,13 @@ export type ActivityCompletionInput =
 export interface ActivityTravelTo {
   readonly locationId: string;
   readonly spawnId: string;
+  /**
+   * When set, the destination scene auto-starts this activity on arrival (after a
+   * brief settle on the arrival shot) instead of waiting for the player to walk
+   * to an interactable and press E. Used to sail the origami boat straight INTO
+   * the ending. Not persisted — consumed once by the scene's create().
+   */
+  readonly autoStartActivityId?: string;
 }
 
 export interface LocationKeepsakeCompletionInput {

@@ -617,6 +617,36 @@ body {
   }
 }
 
+.letters-screen__go-home {
+  margin: 1.6em auto 0;
+  display: inline-block;
+  padding: 0.7em 1.9em;
+  border: 1.5px solid rgba(111, 61, 39, 0.5);
+  border-radius: 999px;
+  background: rgba(255, 244, 222, 0.35);
+  color: #6f3d27;
+  font: inherit;
+  font-size: clamp(13px, 2vw, 16px);
+  letter-spacing: 0.16em;
+  text-transform: lowercase;
+  cursor: pointer;
+  opacity: 0.85;
+  transition: opacity 200ms ease, background 200ms ease, transform 200ms ease;
+  animation: letters-birthday-in 1600ms ease 600ms both;
+}
+
+.letters-screen__go-home:hover {
+  opacity: 1;
+  background: rgba(255, 244, 222, 0.6);
+  transform: translateY(-1px);
+}
+
+.letters-screen__go-home:focus-visible {
+  outline: 2px solid rgba(255, 247, 232, 0.9);
+  outline-offset: 3px;
+  opacity: 1;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .ending-clearing,
   .ending-ocean,
@@ -1196,5 +1226,210 @@ body {
   .dialogue-box__text {
     min-height: 44px;
     font-size: 16px;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Post-ending photo wall: a warm collage of framed photos/polaroids. */
+/* ------------------------------------------------------------------ */
+
+.photo-wall {
+  position: absolute;
+  inset: 0;
+  z-index: 300;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  pointer-events: auto;
+  color: #4a2f1c;
+  background:
+    radial-gradient(circle at 50% 22%, rgba(255, 221, 165, 0.4), transparent 62%),
+    repeating-linear-gradient(
+      116deg,
+      rgba(120, 78, 40, 0.05) 0 22px,
+      rgba(120, 78, 40, 0.09) 22px 44px
+    ),
+    linear-gradient(#e8cfa4, #cda772);
+  animation: photo-wall-in 420ms ease both;
+}
+
+@keyframes photo-wall-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.photo-wall__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: clamp(12px, 2.4vw, 26px) clamp(16px, 3vw, 40px);
+  flex: 0 0 auto;
+}
+
+.photo-wall__heading {
+  margin: 0;
+  color: #6f3d27;
+  font-family: "Courier New", ui-monospace, monospace;
+  font-size: clamp(16px, 2.6vw, 24px);
+  letter-spacing: 0.16em;
+  text-transform: lowercase;
+  text-shadow: 0 1px 0 rgba(255, 246, 226, 0.5);
+}
+
+.photo-wall__close {
+  width: 40px;
+  height: 40px;
+  border: 1.5px solid rgba(111, 61, 39, 0.45);
+  border-radius: 999px;
+  background: rgba(255, 244, 222, 0.4);
+  color: #6f3d27;
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 160ms ease, transform 160ms ease;
+}
+
+.photo-wall__close:hover {
+  background: rgba(255, 244, 222, 0.7);
+  transform: translateY(-1px);
+}
+
+.photo-wall__close:focus-visible {
+  outline: 2px solid rgba(255, 247, 232, 0.9);
+  outline-offset: 2px;
+}
+
+.photo-wall__board {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: clamp(10px, 2vw, 30px) clamp(16px, 4vw, 60px) clamp(28px, 5vw, 64px);
+  column-width: clamp(150px, 20vw, 230px);
+  column-gap: clamp(14px, 2.5vw, 30px);
+}
+
+.photo-wall__frame {
+  position: relative;
+  display: block;
+  width: 100%;
+  margin: 0 0 clamp(16px, 2.6vw, 32px);
+  padding: 10px 10px 34px;
+  border: 0;
+  background: #fffdf6;
+  box-shadow:
+    0 10px 22px rgba(60, 34, 14, 0.32),
+    0 2px 4px rgba(60, 34, 14, 0.24);
+  cursor: pointer;
+  break-inside: avoid;
+  transform: rotate(var(--rot, 0deg));
+  transition: transform 200ms ease, box-shadow 200ms ease;
+}
+
+.photo-wall__frame:hover,
+.photo-wall__frame:focus-visible {
+  transform: rotate(0deg) translateY(-3px) scale(1.02);
+  box-shadow:
+    0 16px 30px rgba(60, 34, 14, 0.4),
+    0 3px 6px rgba(60, 34, 14, 0.28);
+  outline: none;
+  z-index: 2;
+}
+
+.photo-wall__tape {
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  width: 64px;
+  height: 22px;
+  transform: translateX(-50%) rotate(-3deg);
+  background: rgba(228, 214, 176, 0.6);
+  box-shadow: 0 1px 2px rgba(60, 34, 14, 0.18);
+}
+
+.photo-wall__media {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: cover;
+  background: #efe4cd;
+}
+
+.photo-wall__media--placeholder {
+  aspect-ratio: 4 / 3;
+  background:
+    radial-gradient(
+      circle at 32% 28%,
+      hsl(calc(38 + var(--tone, 0) * 6), 66%, 82%),
+      hsl(calc(28 + var(--tone, 0) * 5), 52%, 66%)
+    );
+}
+
+.photo-wall__caption {
+  display: block;
+  margin-top: 10px;
+  color: #7a5433;
+  font-family: "Georgia", serif;
+  font-size: 13px;
+  font-style: italic;
+  text-align: center;
+  line-height: 1.3;
+}
+
+.photo-wall__frame--placeholder .photo-wall__caption {
+  opacity: 0.55;
+}
+
+/* Lightbox: enlarge a single photo over a dim scrim. */
+.photo-wall__lightbox {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  padding: clamp(20px, 5vw, 64px);
+  background: rgba(28, 16, 6, 0.72);
+  animation: photo-wall-in 220ms ease both;
+}
+
+.photo-wall__lightbox-figure {
+  margin: 0;
+  max-width: min(86vw, 900px);
+  max-height: 86vh;
+  padding: 14px 14px 20px;
+  background: #fffdf6;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+}
+
+.photo-wall__media--large {
+  max-width: 100%;
+  max-height: 70vh;
+  width: auto;
+}
+
+.photo-wall__media--large.photo-wall__media--placeholder {
+  width: min(70vw, 640px);
+}
+
+.photo-wall__lightbox-caption {
+  margin-top: 12px;
+  color: #7a5433;
+  font-family: "Georgia", serif;
+  font-size: clamp(14px, 2vw, 18px);
+  font-style: italic;
+  text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .photo-wall,
+  .photo-wall__lightbox {
+    animation-duration: 0.001ms;
+  }
+
+  .photo-wall__frame {
+    transition-duration: 0.001ms;
   }
 }

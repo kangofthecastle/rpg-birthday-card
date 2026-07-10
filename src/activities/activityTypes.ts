@@ -5,6 +5,12 @@ export interface ActivityContext {
   readonly mount: HTMLElement;
   readonly onComplete: (completion: ActivityCompletionInput) => void;
   readonly onCancel: () => void;
+  /**
+   * Optional: return the player home. The ending's terminal letters screen uses
+   * this for its quiet "go home" affordance — dismissing the overlay and
+   * restarting the world into ____'s awakened room with control restored.
+   */
+  readonly onGoHome?: () => void;
 }
 
 export interface ActivityModule {

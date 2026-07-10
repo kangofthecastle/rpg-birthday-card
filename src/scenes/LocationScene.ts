@@ -71,6 +71,7 @@ import { renderCollectionPanel } from '../ui/collectionPanel';
 import { showDialogue } from '../ui/dialogueBox';
 import { clearUiRoot, getUiRoot } from '../ui/domRoot';
 import { showLetterModal } from '../ui/letterModal';
+import { showPhotoWall } from '../ui/photoWall';
 import { fnv1a, mulberry32 } from '../game/rng';
 import { SceneKeys } from './sceneKeys';
 
@@ -83,6 +84,11 @@ interface LocationSceneData {
   /** True when arriving via an edge transition, so a re-trigger grace applies. */
   readonly arrivedViaEdge?: boolean;
   readonly state?: RunState;
+  /**
+   * When set, the scene auto-starts this activity on arrival after a brief settle
+   * (the boat sailing straight into the ending). Consumed once in create().
+   */
+  readonly autoStartActivityId?: string;
 }
 
 // Shown when the player reaches a final-unlock-gated way forward too early.
@@ -166,6 +172,7 @@ export class LocationScene extends Phaser.Scene {
   private debugMarkers = false;
   private mapDims: MapDims = { width: 0, height: 0, tileSize: 64 };
   private spawnOverride?: { x: number; y: number };
+  private autoStartActivityId?: string;
   private arrivedViaEdge = false;
   private edgeCooldownUntil = 0;
   private edgeTriggerBusy = false;
@@ -191,6 +198,7 @@ export class LocationScene extends Phaser.Scene {
         ? { x: data.spawnX, y: data.spawnY }
         : undefined;
     this.arrivedViaEdge = data.arrivedViaEdge ?? false;
+    this.autoStartActivityId = data.autoStartActivityId;
     this.edgeTriggerBusy = false;
     this.edgeCooldownUntil = 0;
     // scene.restart() reuses this instance, so reset the awakening guard here;
@@ -244,6 +252,28 @@ export class LocationScene extends Phaser.Scene {
 
     void this.runEnterBeats();
     this.maybeStartZoneEditor();
+    this.maybeAutoStartActivity();
+  }
+
+  // The boat sails straight into the ending: when the scene was entered with an
+  // auto-start activity (via the origami ritual's travelTo), hold the player on
+  // the arrival shot for a brief settle, then open the activity — no interim walk
+  // or E-press. Consumed once; a later restart of this scene won't re-trigger.
+  private maybeAutoStartActivity(): void {
+    const activityId = this.autoStartActivityId;
+    if (!activityId) {
+      return;
+    }
+    this.autoStartActivityId = undefined;
+    // Freeze control during the settle so the player rests at the arrival spot.
+    this.canMove = false;
+    this.promptText?.setText('');
+    const testMode =
+      new URLSearchParams(window.location.search).get('testMode') === '1';
+    const settleMs = testMode ? 60 : 1000;
+    this.time.delayedCall(settleMs, () => {
+      void this.startActivity(activityId);
+    });
   }
 
   // Dev-only in-game polygon editor, lazily imported so it is excluded from
@@ -1488,6 +1518,15 @@ export class LocationScene extends Phaser.Scene {
       return;
     }
 
+    // After the ending, the photo wall opens as a full-screen collage instead of
+    // its ordinary dialogue.
+    if (interaction.photoWallAfterEnding && this.state.endingCompleted) {
+      this.canMove = false;
+      await showPhotoWall();
+      this.canMove = true;
+      return;
+    }
+
     if (interaction.dialogue) {
       await this.pauseForDialogue(interaction.dialogue);
     }
@@ -1542,6 +1581,7 @@ export class LocationScene extends Phaser.Scene {
     await activity.start({
       state: this.state,
       mount: activityMount,
+      onGoHome: () => this.goHome(),
       onCancel: () => {
         activityMount.remove();
         wakeScene();
@@ -1604,6 +1644,7 @@ export class LocationScene extends Phaser.Scene {
           this.scene.restart({
             locationId: completion.travelTo.locationId,
             spawnId: completion.travelTo.spawnId,
+            autoStartActivityId: completion.travelTo.autoStartActivityId,
             state: this.state,
           } satisfies LocationSceneData);
           return;
@@ -1613,5 +1654,26 @@ export class LocationScene extends Phaser.Scene {
         this.canMove = true;
       },
     });
+  }
+
+  /**
+   * The quiet return from the ending's terminal letters screen. Dismisses the
+   * persistent overlay and restarts the world into ____'s awakened room with
+   * control restored — the game's soft landing. `endingCompleted` is already set,
+   * so the room comes up in its golden state and the photo wall reveals.
+   */
+  private goHome(): void {
+    // Re-arm this game's key capture (released while the terminal activity ran)
+    // and clear the persistent letters overlay before we leave.
+    this.input.keyboard?.enableGlobalCapture();
+    if (this.scene.isSleeping()) {
+      this.scene.wake();
+    }
+    clearUiRoot();
+    this.scene.restart({
+      locationId: 'recipient-house',
+      spawnId: 'near-pc',
+      state: this.state,
+    } satisfies LocationSceneData);
   }
 }

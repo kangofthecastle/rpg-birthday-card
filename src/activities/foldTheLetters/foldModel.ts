@@ -20,6 +20,21 @@
 export type ComponentId = 'hull' | 'sail' | 'lantern';
 export type Verb = 'fold' | 'hoist' | 'roll' | 'kindle';
 
+/**
+ * The intermediate silhouettes of the traditional "paper hat → boat" fold, in
+ * order. Each hull crease turns one shape into the next, so the player watches a
+ * real paper boat take shape step by step:
+ *
+ *   sheet   — the flat letter, her handwriting face up
+ *   book    — folded in half (top edge down to the bottom)
+ *   peak    — the two top corners folded in to the centre (a little house)
+ *   hat     — the brim folded up each side (the classic paper hat, a triangle)
+ *   diamond — the hat's pocket opened and pressed square (a diamond on its point)
+ *   kite    — the bottom corners folded up to the top point (a smaller triangle)
+ *   boat    — opened out and pulled from the sides — the finished hull
+ */
+export type HullShape = 'sheet' | 'book' | 'peak' | 'hat' | 'diamond' | 'kite' | 'boat';
+
 /** Which axis the finger travels along for a hull fold (perpendicular to the
  * crease line it must cross). Diagonal creases accept either dominant axis. */
 export type DragAxis = 'horizontal' | 'vertical' | 'diagonal';
@@ -43,6 +58,10 @@ export interface HullCrease {
   readonly dragAxis: DragAxis;
   /** Which half flips over (view). */
   readonly toward: FoldToward;
+  /** Hull only: the silhouette resting on the table BEFORE this crease. */
+  readonly fromShape?: HullShape;
+  /** Hull only: the silhouette this crease folds the paper INTO. */
+  readonly toShape?: HullShape;
 }
 
 export interface FoldComponent {
@@ -58,40 +77,75 @@ export interface FoldComponent {
 
 // --- content ---------------------------------------------------------------
 
-/** ____'s letter, compressing into the hull crease by crease. Snippets are
- * pulled from her kept letter so you are folding the words themselves. */
+/**
+ * ____'s letter, folded into the hull crease by crease along the traditional
+ * newspaper paper-boat sequence (the hat-to-boat method): fold in half, corners
+ * to the centre, brim up into a hat, open the pocket square into a diamond,
+ * bottom corners up, then open and pull the sides out into the boat. Each crease
+ * carries the intermediate SHAPE it produces, so the view can render a real boat
+ * taking form. Snippets are pulled from her kept letter, so you are folding the
+ * words themselves.
+ */
 export const HULL_CREASES: readonly HullCrease[] = [
   {
     id: 'hull-1',
-    hint: 'drag down across the crease — fold the sheet in half',
-    snippet: '',
+    hint: 'fold it in half — bring the top edge down to meet the bottom',
+    snippet: 'I liked sitting',
     line: 'horizontal',
     dragAxis: 'vertical',
-    toward: 'up',
+    toward: 'down',
+    fromShape: 'sheet',
+    toShape: 'book',
   },
   {
     id: 'hull-2',
-    hint: 'drag the corners inward — bring the top down to the centre',
-    snippet: '',
+    hint: 'fold both top corners in to the centre crease',
+    snippet: 'beside you there.',
     line: 'diagonal',
     dragAxis: 'diagonal',
     toward: 'down',
+    fromShape: 'book',
+    toShape: 'peak',
   },
   {
     id: 'hull-3',
-    hint: 'drag up across the base — fold the flap up',
+    hint: 'fold the brim up along the base — the peak becomes a hat',
+    snippet: 'Even inside',
+    line: 'horizontal',
+    dragAxis: 'vertical',
+    toward: 'up',
+    fromShape: 'peak',
+    toShape: 'hat',
+  },
+  {
+    id: 'hull-4',
+    hint: 'open the pocket and press it square — pull the hat into a diamond',
+    snippet: 'a tiny game,',
+    line: 'vertical',
+    dragAxis: 'horizontal',
+    toward: 'left',
+    fromShape: 'hat',
+    toShape: 'diamond',
+  },
+  {
+    id: 'hull-5',
+    hint: 'fold the bottom corners up to the top point',
     snippet: 'it felt like we had',
     line: 'horizontal',
     dragAxis: 'vertical',
     toward: 'up',
+    fromShape: 'diamond',
+    toShape: 'kite',
   },
   {
-    id: 'hull-4',
-    hint: 'drag across — open it out and press the hull flat',
+    id: 'hull-6',
+    hint: 'open it out and pull the sides — the boat takes shape',
     snippet: 'all the time in the world.',
     line: 'vertical',
     dragAxis: 'horizontal',
-    toward: 'left',
+    toward: 'right',
+    fromShape: 'kite',
+    toShape: 'boat',
   },
 ];
 
@@ -229,6 +283,16 @@ export function currentHullCrease(state: RitualState): HullCrease | undefined {
     return undefined;
   }
   return HULL_CREASES[state.hullCreaseIndex];
+}
+
+/**
+ * The silhouette the hull is resting in RIGHT NOW — the shape before the pending
+ * crease, or 'boat' once every crease is folded. Drives the authentic paper-boat
+ * rendering in the view.
+ */
+export function currentHullShape(state: RitualState): HullShape {
+  const crease = HULL_CREASES[state.hullCreaseIndex];
+  return crease?.fromShape ?? 'boat';
 }
 
 export function isComplete(state: RitualState): boolean {

@@ -16,11 +16,96 @@
 // procedural draw — and the assembled boat is their COMPOSITE, not one sprite.
 
 import { isImageUrl } from '../../game/assetProbe';
-import type { ComponentId, HullCrease, Verb } from './foldModel';
+import type { ComponentId, HullCrease, HullShape, Verb } from './foldModel';
 
 const LOGICAL_WIDTH = 640;
 const LOGICAL_HEIGHT = 400;
 const FOLD_DURATION_MS = 440;
+
+// Hull silhouette layout: the paper is centred in the stage and drawn as the
+// real intermediate origami shape for the current step (normalized [-1,1] coords
+// scaled by these half-extents), so a genuine paper boat forms fold by fold.
+const HULL_CX = 320;
+const HULL_CY = 176;
+const HULL_HX = 150;
+const HULL_HY = 120;
+
+type NPoint = readonly [number, number];
+
+// The traditional hat-to-boat silhouettes, in the order the hull creases produce
+// them. Each is a closed outline in normalized coordinates.
+const HULL_SHAPE_POLYS: Readonly<Record<HullShape, readonly NPoint[]>> = {
+  sheet: [
+    [-0.62, -0.95],
+    [0.62, -0.95],
+    [0.62, 0.95],
+    [-0.62, 0.95],
+  ],
+  book: [
+    [-0.92, -0.5],
+    [0.92, -0.5],
+    [0.92, 0.5],
+    [-0.92, 0.5],
+  ],
+  peak: [
+    [0, -0.95],
+    [0.78, -0.15],
+    [0.78, 0.5],
+    [-0.78, 0.5],
+    [-0.78, -0.15],
+  ],
+  hat: [
+    [0, -0.9],
+    [0.95, 0.55],
+    [-0.95, 0.55],
+  ],
+  diamond: [
+    [0, -0.95],
+    [0.9, 0],
+    [0, 0.95],
+    [-0.9, 0],
+  ],
+  kite: [
+    [0, -0.8],
+    [0.72, 0.5],
+    [-0.72, 0.5],
+  ],
+  boat: [
+    [0, -0.95],
+    [0.28, -0.12],
+    [0.98, -0.12],
+    [0.6, 0.72],
+    [-0.6, 0.72],
+    [-0.98, -0.12],
+    [-0.28, -0.12],
+  ],
+};
+
+// Faint interior fold marks that sell each shape as folded paper.
+const HULL_SHAPE_CREASES: Readonly<Record<HullShape, readonly (readonly [NPoint, NPoint])[]>> = {
+  sheet: [],
+  book: [[[0, -0.5], [0, 0.5]]],
+  peak: [
+    [[0, -0.95], [0, 0.5]],
+    [[-0.78, -0.15], [0.78, -0.15]],
+  ],
+  hat: [
+    [[0, -0.9], [0, 0.55]],
+    [[-0.62, 0.18], [0.62, 0.18]],
+  ],
+  diamond: [
+    [[0, -0.95], [0, 0.95]],
+    [[-0.9, 0], [0.9, 0]],
+  ],
+  kite: [
+    [[0, -0.8], [0, 0.5]],
+    [[-0.72, 0.12], [0.72, 0.12]],
+  ],
+  boat: [
+    [[0, -0.95], [0, 0.72]],
+    [[-0.6, 0.4], [0.6, 0.4]],
+  ],
+};
 
 const PAPER_LIGHT = '#f6ecd2';
 const PAPER_MID = '#eaddba';
@@ -75,6 +160,8 @@ export class FoldStage {
   private readonly callbacks: FoldStageCallbacks;
 
   private verb: Verb = 'fold';
+  private componentId: ComponentId = 'hull';
+  private hullShape: HullShape = 'sheet';
   private assembled = 0;
   private paper: Rect = { x: 176, y: 78, w: 300, h: 210 };
   private crease?: HullCrease;
@@ -87,7 +174,7 @@ export class FoldStage {
 
   private animating = false;
   private foldFlip = 0;
-  private foldGeo?: { a: Point; b: Point; flap: Point[]; next: Rect };
+  private foldGeo?: { a: Point; b: Point; flap: Point[]; next: Rect; toShape?: HullShape };
   private rafId?: number;
   private time = 0;
   private disposed = false;
@@ -123,8 +210,10 @@ export class FoldStage {
   // --- setup pushed by the activity ----------------------------------------
 
   /** Lays a fresh letter/sheet out for the given component + verb. */
-  setComponent(_componentId: ComponentId, verb: Verb, assembled: number, textLines: string[]): void {
+  setComponent(componentId: ComponentId, verb: Verb, assembled: number, textLines: string[]): void {
     this.verb = verb;
+    this.componentId = componentId;
+    this.hullShape = 'sheet';
     this.assembled = assembled;
     this.textLines = textLines;
     this.paper = { x: 176, y: 78, w: 300, h: 210 };
@@ -138,6 +227,11 @@ export class FoldStage {
 
   setVerb(verb: Verb): void {
     this.verb = verb;
+  }
+
+  /** The hull's current intermediate origami silhouette. */
+  setHullShape(shape: HullShape): void {
+    this.hullShape = shape;
   }
 
   setCrease(crease: HullCrease | undefined): void {
@@ -270,7 +364,9 @@ export class FoldStage {
 
   /** Plays the flip for a crease the model has already accepted. */
   playFold(crease: HullCrease, onDone: () => void): void {
-    const geo = this.creaseGeometry(crease);
+    const geo = crease.fromShape
+      ? this.hullFoldGeometry(crease.fromShape, crease)
+      : this.creaseGeometry(crease);
     if (!geo) {
       onDone();
       return;
@@ -288,7 +384,10 @@ export class FoldStage {
         requestAnimationFrame(step);
         return;
       }
-      this.paper = geo.next;
+      // Sail folds carry a real `next` rect; hull folds settle by shape instead.
+      if (geo.toShape === undefined) {
+        this.paper = geo.next;
+      }
       this.animating = false;
       this.foldGeo = undefined;
       this.crease = undefined;
@@ -297,7 +396,9 @@ export class FoldStage {
     requestAnimationFrame(step);
   }
 
-  private creaseGeometry(crease: HullCrease): { a: Point; b: Point; flap: Point[]; next: Rect } | undefined {
+  private creaseGeometry(
+    crease: HullCrease,
+  ): { a: Point; b: Point; flap: Point[]; next: Rect; toShape?: HullShape } | undefined {
     const { x, y, w, h } = this.paper;
     const cx = x + w / 2;
     const cy = y + h / 2;
@@ -335,6 +436,53 @@ export class FoldStage {
     }
   }
 
+  // --- hull silhouette geometry (authentic paper-boat shapes) --------------
+
+  private hullPolygon(shape: HullShape): Point[] {
+    return HULL_SHAPE_POLYS[shape].map(([nx, ny]) => ({
+      x: HULL_CX + nx * HULL_HX,
+      y: HULL_CY + ny * HULL_HY,
+    }));
+  }
+
+  /** The pending crease line drawn across the given hull shape. */
+  private hullCreaseLine(shape: HullShape, crease: HullCrease): { a: Point; b: Point } {
+    const poly = this.hullPolygon(shape);
+    const xs = poly.map((p) => p.x);
+    const ys = poly.map((p) => p.y);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
+    const midX = (minX + maxX) / 2;
+    const midY = (minY + maxY) / 2;
+    switch (crease.line) {
+      case 'horizontal':
+        return { a: { x: minX, y: midY }, b: { x: maxX, y: midY } };
+      case 'vertical':
+        return { a: { x: midX, y: minY }, b: { x: midX, y: maxY } };
+      case 'diagonal':
+      default:
+        return { a: { x: maxX, y: minY }, b: { x: minX, y: maxY } };
+    }
+  }
+
+  /** Geometry for a hull crease: the flap (moving region of the from-shape,
+   * clipped to the folding side) reflected across the crease line, and the shape
+   * it settles into. */
+  private hullFoldGeometry(
+    shape: HullShape,
+    crease: HullCrease,
+  ): { a: Point; b: Point; flap: Point[]; next: Rect; toShape?: HullShape } {
+    const { a, b } = this.hullCreaseLine(shape, crease);
+    const poly = this.hullPolygon(shape);
+    const keepSign = foldKeepSign(crease);
+    const flap = clipToHalfPlane(poly, a, b, keepSign);
+    // `next` is unused for hull folds (the shape drives redraw) but keeps the
+    // shared foldGeo shape; a zero rect is harmless.
+    return { a, b, flap, next: { x: 0, y: 0, w: 0, h: 0 }, toShape: crease.toShape };
+  }
+
   // --- rendering -----------------------------------------------------------
 
   private startLoop(): void {
@@ -370,8 +518,57 @@ export class FoldStage {
     }
   }
 
-  // FOLD: a paper sheet with the letter's real words + the pending crease.
+  // FOLD: the hull renders as the real intermediate origami silhouette; the sail
+  // crease keeps the plain-sheet look (____'s letter becoming a triangle).
   private drawFoldStage(): void {
+    if (this.componentId === 'hull') {
+      this.drawHullStage();
+      return;
+    }
+    this.drawSailFoldStage();
+  }
+
+  // The hull: draw the current paper-boat silhouette (handwriting compressing
+  // inside), animate the flap when a crease takes, then the pending crease.
+  private drawHullStage(): void {
+    const ctx = this.ctx;
+
+    if (this.animating && this.foldGeo) {
+      // The result shape underneath, then the moving flap folding across.
+      const to = this.foldGeo.toShape;
+      if (to) {
+        this.drawHullPaper(this.hullPolygon(to), this.textLines, 0.9);
+      }
+      this.drawFoldingFlap(this.foldGeo, this.foldFlip);
+      return;
+    }
+
+    const poly = this.hullPolygon(this.hullShape);
+    this.drawHullPaper(poly, this.textLines, 1);
+    this.drawHullCreaseMarks(this.hullShape);
+
+    const crease = this.crease;
+    if (!crease) {
+      return;
+    }
+    const geo = this.hullCreaseLine(this.hullShape, crease);
+    const glow = 0.55 + 0.35 * Math.sin(this.time);
+    ctx.save();
+    ctx.setLineDash([9, 8]);
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = CREASE;
+    ctx.globalAlpha = glow;
+    ctx.beginPath();
+    ctx.moveTo(geo.a.x, geo.a.y);
+    ctx.lineTo(geo.b.x, geo.b.y);
+    ctx.stroke();
+    ctx.restore();
+
+    this.drawDragHint(geo, crease);
+  }
+
+  // The sail's single triangle crease uses the original plain-sheet drawing.
+  private drawSailFoldStage(): void {
     const ctx = this.ctx;
     this.drawPaper(this.paper, this.textLines);
 
@@ -399,8 +596,74 @@ export class FoldStage {
     ctx.stroke();
     ctx.restore();
 
-    // A directional arrow hinting the drag axis across the crease.
     this.drawDragHint(geo, crease);
+  }
+
+  // Fills a hull silhouette polygon with paper, ____'s handwriting clipped
+  // inside (so it visibly compresses as the boat forms), and an outline.
+  private drawHullPaper(poly: Point[], lines: string[], alpha: number): void {
+    if (poly.length < 3) {
+      return;
+    }
+    const ctx = this.ctx;
+    const xs = poly.map((p) => p.x);
+    const ys = poly.map((p) => p.y);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    polygonPath(ctx, poly);
+    const grad = ctx.createLinearGradient(minX, minY, maxX, maxY);
+    grad.addColorStop(0, PAPER_LIGHT);
+    grad.addColorStop(1, PAPER_MID);
+    ctx.fillStyle = grad;
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+    ctx.shadowBlur = 16;
+    ctx.shadowOffsetY = 7;
+    ctx.fill();
+    ctx.restore();
+
+    // Handwriting clipped to the shape.
+    ctx.save();
+    polygonPath(ctx, poly);
+    ctx.clip();
+    ctx.fillStyle = INK;
+    ctx.font = 'italic 15px "Georgia", serif';
+    const wrapped = wrapLines(ctx, lines, maxX - minX - 24);
+    wrapped.forEach((line, i) => {
+      ctx.fillText(line, minX + 14, minY + 26 + i * 21);
+    });
+    ctx.restore();
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    polygonPath(ctx, poly);
+    ctx.strokeStyle = 'rgba(120, 84, 48, 0.5)';
+    ctx.lineWidth = 1.4;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  private drawHullCreaseMarks(shape: HullShape): void {
+    const marks = HULL_SHAPE_CREASES[shape];
+    if (marks.length === 0) {
+      return;
+    }
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(120, 84, 48, 0.28)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 5]);
+    for (const [a, b] of marks) {
+      ctx.beginPath();
+      ctx.moveTo(HULL_CX + a[0] * HULL_HX, HULL_CY + a[1] * HULL_HY);
+      ctx.lineTo(HULL_CX + b[0] * HULL_HX, HULL_CY + b[1] * HULL_HY);
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   private drawDragHint(geo: { a: Point; b: Point }, crease: HullCrease): void {
@@ -745,6 +1008,63 @@ function rectPoints(r: Rect): Point[] {
     { x: r.x + r.w, y: r.y + r.h },
     { x: r.x, y: r.y + r.h },
   ];
+}
+
+function polygonPath(ctx: CanvasRenderingContext2D, poly: Point[]): void {
+  ctx.beginPath();
+  ctx.moveTo(poly[0].x, poly[0].y);
+  for (let i = 1; i < poly.length; i += 1) {
+    ctx.lineTo(poly[i].x, poly[i].y);
+  }
+  ctx.closePath();
+}
+
+/** Which side of the crease line the moving flap lies on, as a sign for
+ * `clipToHalfPlane` against the line a→b that `hullCreaseLine` produces. */
+function foldKeepSign(crease: HullCrease): number {
+  switch (crease.line) {
+    case 'horizontal':
+      // a→b runs left→right; side>0 is BELOW the crease.
+      return crease.toward === 'up' ? 1 : -1;
+    case 'vertical':
+      // a→b runs top→bottom; side>0 is to the RIGHT... (cross is negative there),
+      // so the right half has side<0. toward 'left' folds the right half over.
+      return crease.toward === 'left' ? -1 : 1;
+    case 'diagonal':
+    default:
+      // a=(maxX,minY) → b=(minX,maxY): the top-right flap has side<0.
+      return -1;
+  }
+}
+
+/** Sutherland–Hodgman clip of a convex/simple polygon to the half-plane on the
+ * side of the infinite line a→b whose cross-product sign matches `keepSign`. */
+function clipToHalfPlane(poly: Point[], a: Point, b: Point, keepSign: number): Point[] {
+  const side = (p: Point): number =>
+    (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
+  const inside = (p: Point): boolean => side(p) * keepSign >= -1e-6;
+  const intersect = (p: Point, q: Point): Point => {
+    const sp = side(p);
+    const sq = side(q);
+    const t = sp / (sp - sq || 1e-9);
+    return { x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t };
+  };
+  const out: Point[] = [];
+  for (let i = 0; i < poly.length; i += 1) {
+    const cur = poly[i];
+    const prev = poly[(i + poly.length - 1) % poly.length];
+    const curIn = inside(cur);
+    const prevIn = inside(prev);
+    if (curIn) {
+      if (!prevIn) {
+        out.push(intersect(prev, cur));
+      }
+      out.push(cur);
+    } else if (prevIn) {
+      out.push(intersect(prev, cur));
+    }
+  }
+  return out;
 }
 
 function signedAngle(from: Point, to: Point, centre: Point): number {

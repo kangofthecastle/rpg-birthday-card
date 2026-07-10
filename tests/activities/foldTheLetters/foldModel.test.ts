@@ -10,6 +10,7 @@ import {
   createRitualState,
   currentComponent,
   currentHullCrease,
+  currentHullShape,
   currentVerb,
   FOLD_COMPONENTS,
   HULL_CREASES,
@@ -92,6 +93,57 @@ describe('keepsake ritual model — components & verbs', () => {
     expect(currentHullCrease(state)?.id).toBe('hull-1');
     expect(assembledComponentCount(state)).toBe(0);
     expect(ritualProgress(state)).toBe(0);
+  });
+});
+
+describe('hull — authentic paper-boat fold sequence', () => {
+  it('folds the traditional hat-to-boat sequence, one shape per crease', () => {
+    // Six creases, each turning one recognizable silhouette into the next:
+    // sheet → book → peak → hat → diamond → kite → boat.
+    expect(HULL_CREASES).toHaveLength(6);
+    expect(HULL_CREASES.map((c) => c.id)).toEqual([
+      'hull-1',
+      'hull-2',
+      'hull-3',
+      'hull-4',
+      'hull-5',
+      'hull-6',
+    ]);
+    expect(HULL_CREASES.map((c) => c.fromShape)).toEqual([
+      'sheet',
+      'book',
+      'peak',
+      'hat',
+      'diamond',
+      'kite',
+    ]);
+    expect(HULL_CREASES.map((c) => c.toShape)).toEqual([
+      'book',
+      'peak',
+      'hat',
+      'diamond',
+      'kite',
+      'boat',
+    ]);
+    // The chain is continuous: each crease's result is the next crease's start.
+    for (let i = 1; i < HULL_CREASES.length; i += 1) {
+      expect(HULL_CREASES[i].fromShape).toBe(HULL_CREASES[i - 1].toShape);
+    }
+  });
+
+  it('advances the rendered silhouette shape crease by crease to the boat', () => {
+    let state = createRitualState();
+    expect(currentHullShape(state)).toBe('sheet');
+    const seen = [currentHullShape(state)];
+    for (let i = 0; i < HULL_CREASES.length; i += 1) {
+      state = applyValidFold(state, currentHullCrease(state) ?? HULL_CREASES[i]);
+      seen.push(currentHullShape(state));
+    }
+    expect(seen).toEqual(['sheet', 'book', 'peak', 'hat', 'diamond', 'kite', 'boat']);
+    // Once every crease is folded the hull IS the boat, and it has clicked
+    // together (assembled).
+    expect(isAssembled(state)).toBe(true);
+    expect(currentHullShape(state)).toBe('boat');
   });
 });
 

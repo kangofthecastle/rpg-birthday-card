@@ -129,19 +129,10 @@ test('makes the boat with real gestures and arrives at the lantern clearing WITH
     timeout: 15000,
   });
 
-  // CONTROL restored: she can move + interact at final-spot (the stuck-state
-  // regression guard). Opening the ending here is only possible with control.
+  // The boat lands IN the ending: after a brief settle on the arrival shot the
+  // final-keepsake reveal AUTO-starts — no interim walk or E-press.
   const endingStage = page.locator('[data-ending-stage]');
-  const walkPattern = ['ArrowDown', 'ArrowLeft', 'ArrowUp', 'ArrowRight'] as const;
-  for (let step = 0; step < 40 && (await endingStage.count()) === 0; step += 1) {
-    await page.keyboard.press('E', { delay: 30 });
-    if ((await endingStage.count()) > 0) break;
-    const key = walkPattern[step % walkPattern.length];
-    await page.keyboard.down(key);
-    await page.waitForTimeout(90);
-    await page.keyboard.up(key);
-  }
-  await expect(endingStage).toBeVisible();
+  await expect(endingStage).toBeVisible({ timeout: 15000 });
 });
 
 test('folds the boat via the test-mode skip and arrives at the lantern clearing', async ({

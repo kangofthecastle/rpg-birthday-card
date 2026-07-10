@@ -820,6 +820,73 @@ function sfxDefuseTick(ctx: AudioContext, output: AudioNode, { rate, volume }: S
   return Math.max((end - start) * 1000, 30);
 }
 
+function sfxDefuseLoop(ctx: AudioContext, output: AudioNode, { rate, volume }: SfxSynthOptions): number {
+  // A sustained, rising electronic hum meant to be RETRIGGERED continuously
+  // while ____ holds the defuse (the scene calls it on a short interval, and
+  // raises `rate` with defuse progress so the pitch climbs toward the finish).
+  // Two slightly detuned saw voices plus a square "fizz" partial through a
+  // gently-opening lowpass give it an unmistakable "working on it" texture that
+  // sits under the faster ticks. Deliberately longer than the retrigger gap so
+  // successive calls overlap into one continuous bed.
+  const start = ctx.currentTime;
+  const holdSeconds = 0.34;
+  const attack = 0.03;
+  const release = 0.09;
+  const attackEnd = start + attack;
+  const holdEnd = attackEnd + holdSeconds;
+  const releaseEnd = holdEnd + release;
+  const base = 150 * rate;
+
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'lowpass';
+  // Cutoff opens with rate so higher-progress loops sound brighter/tenser.
+  filter.frequency.setValueAtTime(700 + rate * 500, start);
+  filter.frequency.linearRampToValueAtTime(1100 + rate * 700, holdEnd);
+  filter.Q.value = 3;
+  filter.connect(output);
+
+  const envelope = ctx.createGain();
+  envelope.gain.value = 0;
+  envelope.gain.setValueAtTime(0, start);
+  envelope.gain.linearRampToValueAtTime(0.16 * volume, attackEnd);
+  envelope.gain.setValueAtTime(0.16 * volume, holdEnd);
+  envelope.gain.linearRampToValueAtTime(0.0001, releaseEnd);
+  envelope.connect(filter);
+
+  const voices: Array<{ type: OscillatorType; freq: number; gain: number }> = [
+    { type: 'sawtooth', freq: base, gain: 0.6 },
+    { type: 'sawtooth', freq: base * 1.006, gain: 0.5 },
+    { type: 'square', freq: base * 2, gain: 0.18 },
+  ];
+  const oscillators = voices.map((voice) => {
+    const osc = ctx.createOscillator();
+    osc.type = voice.type;
+    osc.frequency.value = voice.freq;
+    const voiceGain = ctx.createGain();
+    voiceGain.gain.value = voice.gain;
+    osc.connect(voiceGain);
+    voiceGain.connect(envelope);
+    osc.start(start);
+    osc.stop(releaseEnd + 0.02);
+    osc.onended = () => {
+      osc.disconnect();
+      voiceGain.disconnect();
+    };
+    return osc;
+  });
+
+  const last = oscillators[oscillators.length - 1];
+  if (last) {
+    last.onended = () => {
+      oscillators.forEach((osc) => osc.disconnect());
+      envelope.disconnect();
+      filter.disconnect();
+    };
+  }
+
+  return (releaseEnd - start) * 1000;
+}
+
 function sfxDefuseCheckpoint(ctx: AudioContext, output: AudioNode, { rate, volume }: SfxSynthOptions): number {
   // Chunky mechanical "clunk" — the half-defuse latching home. A short low
   // thunk with a click of noise on top.
@@ -1297,6 +1364,7 @@ export const SFX_SYNTHS: Record<SfxKey, SfxSynthFactory> = {
   'sfx-heart-loss': sfxHeartLoss,
   'sfx-spike-beep': sfxSpikeBeep,
   'sfx-defuse-tick': sfxDefuseTick,
+  'sfx-defuse-loop': sfxDefuseLoop,
   'sfx-defuse-checkpoint': sfxDefuseCheckpoint,
   'sfx-defuse-complete': sfxDefuseComplete,
   'sfx-detonate': sfxDetonate,

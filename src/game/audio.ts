@@ -53,6 +53,7 @@ export const SFX_KEYS = [
   'sfx-heart-loss',
   'sfx-spike-beep',
   'sfx-defuse-tick',
+  'sfx-defuse-loop',
   'sfx-defuse-checkpoint',
   'sfx-defuse-complete',
   'sfx-detonate',

@@ -61,6 +61,25 @@ const HIT_FLASH_MS = 90;
 const DEATH_FADE_MS = 260;
 const COVER_OVERHANG = 1.08;
 
+// Every combatant carries a little low-bit pixel gun that rotates toward its
+// aim/target. Muzzle flashes pop at the barrel tip on each shot.
+const GUN_TEX = 'split-gun';
+const GUN_SCALE = 0.92;
+const GUN_HAND_OFFSET = 4;
+const GUN_HAND_RISE = 3;
+const MUZZLE_DIST = 17;
+const MUZZLE_MS = 80;
+const GUN_TINT = {
+  player: 0xdff7ea,
+  teammate: 0xd8ccff,
+  enemy: 0xf3c4c4,
+} as const;
+const MUZZLE_COLOR = {
+  player: 0xfff2a8,
+  teammate: 0xcbb8ff,
+  enemy: 0xff8a5c,
+} as const;
+
 // ____-voice comms barks. Warm, personal, Valorant-flavored — the teammate is
 // ____, the player is ____, and this is a birthday gift.
 const BARKS = {
@@ -84,9 +103,17 @@ interface Tracer {
 
 interface CharacterView {
   readonly img: Phaser.GameObjects.Image;
+  readonly gun: Phaser.GameObjects.Image;
   readonly art: boolean;
   readonly offsetY: number;
   readonly originY: number;
+}
+
+interface MuzzleFlash {
+  readonly x: number;
+  readonly y: number;
+  readonly color: number;
+  readonly bornAt: number;
 }
 
 interface EnemyView extends CharacterView {
@@ -141,9 +168,11 @@ export class SplitScene extends Phaser.Scene {
   private warnText!: Phaser.GameObjects.Text;
 
   private tracers: Tracer[] = [];
+  private muzzles: MuzzleFlash[] = [];
   private muzzleUntil = 0;
   private nextBeepAt = 0;
   private nextDefuseTickAt = 0;
+  private nextDefuseLoopAt = 0;
   private onSiteBarked = false;
   private playerFlashUntil = 0;
   private enemyFlashUntil = new Map<number, number>();
@@ -354,6 +383,7 @@ export class SplitScene extends Phaser.Scene {
         case 'player-shot':
           this.tracers.push({ from: event.from, to: event.to, color: 0x8affc1, bornAt: now });
           this.muzzleUntil = now + 70;
+          this.addMuzzle(event.from, event.to, MUZZLE_COLOR.player, now);
           this.playSfx('shot');
           if (event.hitEnemyId !== null) {
             this.enemyFlashUntil.set(event.hitEnemyId, now + HIT_FLASH_MS);
@@ -365,12 +395,14 @@ export class SplitScene extends Phaser.Scene {
           break;
         case 'teammate-shot':
           this.tracers.push({ from: event.from, to: event.to, color: 0x9a7bff, bornAt: now });
+          this.addMuzzle(event.from, event.to, MUZZLE_COLOR.teammate, now);
           if (event.hitEnemyId !== null) {
             this.enemyFlashUntil.set(event.hitEnemyId, now + HIT_FLASH_MS);
           }
           break;
         case 'enemy-shot':
           this.tracers.push({ from: event.from, to: event.to, color: 0xff6b6b, bornAt: now });
+          this.addMuzzle(event.from, event.to, MUZZLE_COLOR.enemy, now);
           break;
         case 'heart-lost':
           this.playSfx('heart');
@@ -422,13 +454,16 @@ export class SplitScene extends Phaser.Scene {
   // clear the big detonation popup.
   private onRoundReset(now: number): void {
     for (const view of this.enemyViews.values()) {
+      view.gun.destroy();
       view.img.destroy();
     }
     this.enemyViews.clear();
     this.enemyFlashUntil.clear();
     this.tracers = [];
+    this.muzzles = [];
     this.nextBeepAt = now;
     this.nextDefuseTickAt = now;
+    this.nextDefuseLoopAt = now;
     this.onSiteBarked = false;
     this.popupText.setVisible(false);
     this.tweens.killTweensOf(this.popupText);
@@ -451,6 +486,7 @@ export class SplitScene extends Phaser.Scene {
     this.drawAimLine(player.pos, now);
     this.drawTelegraphs(now);
     this.drawTracers(now);
+    this.drawMuzzles(now);
     this.drawSpikeAndDefuse(now);
     this.drawHud();
 
@@ -473,6 +509,10 @@ export class SplitScene extends Phaser.Scene {
     } else {
       this.playerView.img.clearTint();
     }
+
+    // The player's gun tracks the mouse crosshair angle exactly.
+    const aimAngle = Math.atan2(this.pointer.y - player.pos.y, this.pointer.x - player.pos.x);
+    this.aimGun(this.playerView, player.pos, aimAngle);
   }
 
   private renderTeammate(now: number, pos: { x: number; y: number }): void {
@@ -486,6 +526,34 @@ export class SplitScene extends Phaser.Scene {
     this.teammatePrevX = pos.x;
     this.positionCharacter(this.teammateView, pos, SPLIT_CONFIG.teammate.height, bob);
     this.teammateView.img.setFlipX(this.teammateFacingLeft);
+
+    // Omen's gun tracks the nearest live bot (his auto-fire target); with none
+    // in play it just rests along his facing direction.
+    const target = this.nearestEnemyPos(pos);
+    const aimAngle = target
+      ? Math.atan2(target.y - pos.y, target.x - pos.x)
+      : this.teammateFacingLeft
+        ? Math.PI
+        : 0;
+    this.aimGun(this.teammateView, pos, aimAngle);
+  }
+
+  private nearestEnemyPos(from: { x: number; y: number }): { x: number; y: number } | null {
+    let best: { x: number; y: number } | null = null;
+    let bestDist = Number.POSITIVE_INFINITY;
+
+    for (const enemy of this.state.enemies) {
+      if (!enemy.alive) {
+        continue;
+      }
+      const dist = Math.hypot(enemy.pos.x - from.x, enemy.pos.y - from.y);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = enemy.pos;
+      }
+    }
+
+    return best;
   }
 
   // Characters are foot-planted: art sprites anchor to the bottom (or top for
@@ -503,6 +571,56 @@ export class SplitScene extends Phaser.Scene {
     view.img.setDepth(footY);
   }
 
+  // Point a character's gun toward `angle`, holding it at hand height and
+  // flipping it upright when it swings to the left half so it never appears
+  // upside-down. Renders just above the body.
+  private aimGun(view: CharacterView, pos: { x: number; y: number }, angle: number): void {
+    const gun = view.gun;
+    const handY = pos.y - GUN_HAND_RISE;
+    gun.setPosition(
+      pos.x + Math.cos(angle) * GUN_HAND_OFFSET,
+      handY + Math.sin(angle) * GUN_HAND_OFFSET,
+    );
+    gun.setRotation(angle);
+    gun.setFlipY(Math.cos(angle) < 0);
+    gun.setDepth(view.img.depth + 1);
+    gun.setVisible(true);
+  }
+
+  // Queue a muzzle flash at the barrel tip, derived from a shot's from→to
+  // direction so it lines up with whichever combatant fired.
+  private addMuzzle(
+    from: { x: number; y: number },
+    to: { x: number; y: number },
+    color: number,
+    now: number,
+  ): void {
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    this.muzzles.push({
+      x: from.x + (dx / dist) * MUZZLE_DIST,
+      y: from.y - GUN_HAND_RISE + (dy / dist) * MUZZLE_DIST,
+      color,
+      bornAt: now,
+    });
+  }
+
+  private drawMuzzles(now: number): void {
+    this.muzzles = this.muzzles.filter((flash) => now - flash.bornAt < MUZZLE_MS);
+
+    for (const flash of this.muzzles) {
+      const age = (now - flash.bornAt) / MUZZLE_MS;
+      const fade = 1 - age;
+      const radius = 2 + 6 * fade;
+      this.dynamic.fillStyle(flash.color, 0.9 * fade);
+      this.dynamic.fillCircle(flash.x, flash.y, radius);
+      this.dynamic.lineStyle(1.5, flash.color, 0.85 * fade);
+      this.dynamic.lineBetween(flash.x - radius, flash.y, flash.x + radius, flash.y);
+      this.dynamic.lineBetween(flash.x, flash.y - radius, flash.x, flash.y + radius);
+    }
+  }
+
   private syncEnemySprites(now: number): void {
     for (const enemy of this.state.enemies) {
       let view = this.enemyViews.get(enemy.id);
@@ -513,6 +631,7 @@ export class SplitScene extends Phaser.Scene {
       }
 
       if (!enemy.alive) {
+        view.gun.setVisible(false);
         this.playDeath(view);
         continue;
       }
@@ -521,6 +640,13 @@ export class SplitScene extends Phaser.Scene {
       view.img.setVisible(true);
       this.positionCharacter(view, enemy.pos, SPLIT_CONFIG.enemy.height, bob);
       view.img.setFlipX(this.state.player.pos.x < enemy.pos.x);
+
+      // Each bot levels its gun at ____.
+      const aimAngle = Math.atan2(
+        this.state.player.pos.y - enemy.pos.y,
+        this.state.player.pos.x - enemy.pos.x,
+      );
+      this.aimGun(view, enemy.pos, aimAngle);
 
       const flashUntil = this.enemyFlashUntil.get(enemy.id) ?? 0;
       const telegraphing = enemy.ai === 'telegraphing';
@@ -627,17 +753,32 @@ export class SplitScene extends Phaser.Scene {
 
     if (phase === 'retake') {
       // Spike beep accelerates as the FUSE burns down (not the defuse): from a
-      // slow pulse at full time to a frantic ~90ms near zero.
+      // slow pulse at full time to a frantic ~90ms near zero. Ducked while
+      // defusing so the defuse bed reads clearly over it.
       if (now >= this.nextBeepAt) {
         const frac = spikeTimeRemainingMs(this.state) / SPLIT_CONFIG.spikeTimerMs;
-        this.playSfx('beep');
+        playAudioSfx('sfx-spike-beep', { volume: defusing ? 0.35 : 1 });
         this.nextBeepAt = now + Math.max(90, 90 + frac * 560);
       }
 
-      // Defuse ticks while ____ is actively on the spike.
-      if (defusing && now >= this.nextDefuseTickAt) {
-        this.playSfx('tick');
-        this.nextDefuseTickAt = now + 450;
+      if (defusing) {
+        // Sustained rising hum, retriggered on a short interval so successive
+        // (longer) voices overlap into one continuous bed; its pitch/brightness
+        // climb with defuse progress.
+        if (now >= this.nextDefuseLoopAt) {
+          playAudioSfx('sfx-defuse-loop', { rate: 1 + progress * 0.7, volume: 1 });
+          this.nextDefuseLoopAt = now + 300;
+        }
+        // Faster, louder, climbing ticks layered on top of the hum (was a lone
+        // quiet tick every 450ms — that didn't read).
+        if (now >= this.nextDefuseTickAt) {
+          playAudioSfx('sfx-defuse-tick', { rate: 1 + progress * 0.5, volume: 1 });
+          this.nextDefuseTickAt = now + 220;
+        }
+      } else {
+        // Reset cadence so the next hold starts the bed immediately.
+        this.nextDefuseLoopAt = now;
+        this.nextDefuseTickAt = now;
       }
     }
 
@@ -930,7 +1071,16 @@ export class SplitScene extends Phaser.Scene {
       img.setScale(spec.scale);
     }
 
-    return { img, art, offsetY: art ? spec.offsetY : 0, originY: spec.originY };
+    // The held weapon: origin at the grip so it pivots around the hand and the
+    // barrel swings out toward the aim direction.
+    const gun = this.add
+      .image(0, 0, GUN_TEX)
+      .setOrigin(0.24, 0.5)
+      .setScale(GUN_SCALE)
+      .setTint(GUN_TINT[role])
+      .setVisible(false);
+
+    return { img, gun, art, offsetY: art ? spec.offsetY : 0, originY: spec.originY };
   }
 
   private createSpike(): void {
@@ -962,6 +1112,7 @@ export class SplitScene extends Phaser.Scene {
     this.makeUprightBody(TEX.player, 0x2fae6b, 0x8affc1);
     this.makeUprightBody(TEX.teammate, 0x5a4fae, 0xb7a7ff);
     this.makeEnemy();
+    this.makeGun();
     this.makeTexture(TEX.spike, 30, 30, (g) => {
       g.fillStyle(0x3a4250, 1);
       g.fillRoundedRect(2, 2, 26, 26, 5);
@@ -993,6 +1144,25 @@ export class SplitScene extends Phaser.Scene {
       g.fillCircle(width / 2, height * 0.24, width * 0.28);
       g.lineStyle(2, 0x101418, 0.85);
       g.strokeRoundedRect(1, 1, width - 2, height - 2, 6);
+    });
+  }
+
+  // A tiny low-bit sidearm: dark slide + grip with a bright muzzle tip, sized
+  // to the character proportions. Tinted per team by the character view.
+  private makeGun(): void {
+    this.makeTexture(GUN_TEX, 22, 12, (g) => {
+      // Slide / barrel.
+      g.fillStyle(0x3c424e, 1);
+      g.fillRect(3, 3, 16, 4);
+      // Grip.
+      g.fillStyle(0x2b3038, 1);
+      g.fillRect(4, 6, 5, 5);
+      // Bright muzzle tip so the barrel end reads.
+      g.fillStyle(0xc8d0da, 1);
+      g.fillRect(18, 3, 3, 4);
+      // Dark outline for the low-bit pop.
+      g.lineStyle(1, 0x11151b, 0.9);
+      g.strokeRect(3, 3, 16, 4);
     });
   }
 

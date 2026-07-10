@@ -260,26 +260,31 @@ describe('enemy accuracy is poor and seed-deterministic', () => {
 });
 
 describe('timed reinforcements', () => {
-  it('bleeds in the scheduled groups as the fuse burns down', () => {
+  it('bleeds in a single mid-round wave and caps at five bots', () => {
     // No starting enemies so the schedule is the only thing that spawns.
     let state = withState({ enemies: [], reinforcementsSpawned: 1 });
 
     expect(state.reinforcementsSpawned).toBe(1);
 
-    // Past the ~T-40s reinforcement.
-    state = tickSplit(state, IDLE_INPUT, 20050);
+    // Before the ~T-35s wave: nothing new yet.
+    state = tickSplit(state, IDLE_INPUT, 20000);
+    expect(state.reinforcementsSpawned).toBe(1);
+    expect(state.enemies).toHaveLength(0);
+
+    // Past the ~T-35s reinforcement (the only extra wave).
+    state = tickSplit(state, IDLE_INPUT, 6000);
     expect(state.reinforcementsSpawned).toBe(2);
     expect(state.enemies).toHaveLength(2);
-    const first = collect(state.events, 'reinforcement');
-    expect(first).toHaveLength(1);
-    expect((first[0] as { index: number; count: number }).index).toBe(1);
-    expect((first[0] as { index: number; count: number }).count).toBe(2);
+    const wave = collect(state.events, 'reinforcement');
+    expect(wave).toHaveLength(1);
+    expect((wave[0] as { index: number; count: number }).index).toBe(1);
+    expect((wave[0] as { index: number; count: number }).count).toBe(2);
 
-    // Past the ~T-20s reinforcement.
-    state = tickSplit(state, IDLE_INPUT, 20050);
-    expect(state.reinforcementsSpawned).toBe(3);
-    expect(state.enemies).toHaveLength(4);
-    expect(collect(state.events, 'reinforcement')).toHaveLength(1);
+    // No third wave: the schedule is exhausted at two groups (5 bots total).
+    state = tickSplit(state, IDLE_INPUT, 20000);
+    expect(state.reinforcementsSpawned).toBe(2);
+    expect(state.enemies).toHaveLength(2);
+    expect(collect(state.events, 'reinforcement')).toHaveLength(0);
   });
 
   it('does not require killing everyone — the win is the defuse', () => {
@@ -291,6 +296,37 @@ describe('timed reinforcements', () => {
 
     expect(isSplitWon(state)).toBe(true);
     expect(aliveEnemyCount(state)).toBeGreaterThan(0);
+  });
+});
+
+describe('difficulty tuning (max five meaner bots)', () => {
+  it('caps reinforcements at five bots across two waves', () => {
+    const total = SPLIT_CONFIG.reinforcements.reduce((n, wave) => n + wave.spawns.length, 0);
+
+    expect(SPLIT_CONFIG.reinforcements).toHaveLength(2);
+    expect(total).toBe(5);
+  });
+
+  it('makes each bot meaner than the old baseline', () => {
+    expect(SPLIT_CONFIG.enemy.hitChance).toBeGreaterThan(0.26);
+    expect(SPLIT_CONFIG.enemy.telegraphMs).toBeLessThan(540);
+    expect(SPLIT_CONFIG.enemy.pauseMs).toBeLessThan(480);
+    expect(SPLIT_CONFIG.enemy.speed).toBeGreaterThan(52);
+    expect(SPLIT_CONFIG.enemy.strafeSpeed).toBeGreaterThan(0);
+    expect(SPLIT_CONFIG.enemy.strafePeriodMs).toBeGreaterThan(0);
+  });
+
+  it('never exceeds five alive bots across a full un-fought round', () => {
+    let state = withState({ enemies: createSplitState(7).enemies });
+    let maxAlive = aliveEnemyCount(state);
+
+    // Ride most of the fuse without shooting; the only growth is the one wave.
+    for (let t = 0; t < 55000; t += 250) {
+      state = tickSplit(state, IDLE_INPUT, 250);
+      maxAlive = Math.max(maxAlive, aliveEnemyCount(state));
+    }
+
+    expect(maxAlive).toBe(5);
   });
 });
 
@@ -324,31 +360,32 @@ describe('contested defuse', () => {
     expect(next.defuse.defusing).toBe(false);
   });
 
-  it('decays progress slowly back toward the last checkpoint on release', () => {
-    // Before the checkpoint the floor is zero, so a release bleeds toward zero
-    // (slowly — decayPerMs < 1) but never below it.
+  it('snaps progress instantly back to zero on release (pre-checkpoint)', () => {
+    // Before the checkpoint the floor is zero, so releasing E snaps straight to
+    // zero on the very next tick — there is no slow drain.
     let state = hold(atSpike(), 1000, true);
     expect(state.defuse.progressMs).toBeCloseTo(1000, 0);
 
-    state = hold(state, 1000, false);
+    state = hold(state, 32, false);
 
-    expect(state.defuse.progressMs).toBeLessThan(1000);
-    expect(state.defuse.progressMs).toBeGreaterThanOrEqual(0);
-    // decayPerMs = 0.4 -> loses ~400ms over 1000ms.
-    expect(state.defuse.progressMs).toBeCloseTo(600, -1);
+    expect(state.defuse.progressMs).toBe(0);
+    expect(state.defuse.defusing).toBe(false);
   });
 
-  it('never falls below the half-defuse checkpoint once reached', () => {
+  it('snaps back to the half-defuse checkpoint (never below) once reached', () => {
     let state = hold(atSpike(), 3500, true);
 
     expect(state.defuse.checkpointReached).toBe(true);
     expect(collect(state.events, 'defuse-checkpoint')).toHaveLength(1);
     expect(defuseProgress(state)).toBeCloseTo(0.5, 1);
 
-    // Long release: decay is clamped at the checkpoint.
-    state = hold(state, 8000, false);
+    // A single release tick snaps exactly to the banked checkpoint, and a long
+    // release holds there.
+    state = hold(state, 32, false);
+    expect(state.defuse.progressMs).toBe(SPLIT_CONFIG.defuse.checkpointMs);
 
-    expect(state.defuse.progressMs).toBeGreaterThanOrEqual(SPLIT_CONFIG.defuse.checkpointMs);
+    state = hold(state, 8000, false);
+    expect(state.defuse.progressMs).toBe(SPLIT_CONFIG.defuse.checkpointMs);
   });
 
   it('knocks ____ off the defuse (back to the checkpoint floor) when she takes a hit', () => {

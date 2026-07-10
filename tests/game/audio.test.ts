@@ -193,6 +193,7 @@ describe('key registry', () => {
       'sfx-heart-loss',
       'sfx-spike-beep',
       'sfx-defuse-tick',
+      'sfx-defuse-loop',
       'sfx-defuse-checkpoint',
       'sfx-defuse-complete',
       'sfx-detonate',
@@ -480,6 +481,31 @@ describe('music crossfades', () => {
 
     // Calling stopMusic again with nothing playing is a safe no-op.
     expect(() => audio.stopMusic()).not.toThrow();
+  });
+});
+
+describe('defuse loop', () => {
+  it('builds a sustained multi-oscillator hum (incl. sawtooth voices) on the sfx bus', async () => {
+    stubAudioContext();
+    stubFetchAlwaysFails();
+    const audio = await import('../../src/game/audio');
+
+    audio.initAudio();
+    const ctx = createdContexts[0];
+    const before = ctx.oscillators.length;
+
+    // Rate climbs with defuse progress; the scene drives it this way.
+    audio.playSfx('sfx-defuse-loop', { rate: 1.4, volume: 1 });
+    await flushAsync();
+
+    const built = ctx.oscillators.slice(before);
+    // Two detuned saws + a square partial => at least 3 voices.
+    expect(built.length).toBeGreaterThanOrEqual(3);
+    expect(built.some((osc) => osc.type === 'sawtooth')).toBe(true);
+    // Pitch tracks the rate (base 150Hz * 1.4 ~ 210Hz on the saw body).
+    const saw = built.find((osc) => osc.type === 'sawtooth');
+    expect(saw?.frequency.value).toBeCloseTo(150 * 1.4, 0);
+    built.forEach((osc) => expect(osc.start).toHaveBeenCalled());
   });
 });
 

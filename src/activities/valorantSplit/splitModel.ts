@@ -59,12 +59,18 @@ export const SPLIT_CONFIG = {
     height: 34,
     headFraction: 0.22,
     bodyHp: 4,
-    speed: 52,
+    speed: 62,
     advanceMs: 850,
-    pauseMs: 480,
-    telegraphMs: 540,
-    hitChance: 0.26,
+    pauseMs: 280,
+    telegraphMs: 300,
+    hitChance: 0.38,
     range: 560,
+    // While advancing, each bot weaves side-to-side (perpendicular to its
+    // approach vector) so it's harder to line up a clean headshot. This is a
+    // pure deterministic sway from elapsed time + the bot's id — no RNG. Peak
+    // perpendicular speed in px/s and the full weave period in ms.
+    strafeSpeed: 48,
+    strafePeriodMs: 500,
   },
   revive: { holdFireMs: 2000 },
   // The spike is live from the first frame. spikeTimerMs is the total fuse; a
@@ -76,9 +82,9 @@ export const SPLIT_CONFIG = {
     // ____ must stand within this radius of the spike (centre-to-centre) to
     // make defuse progress.
     radius: 74,
-    // When not actively defusing, progress bleeds back toward the last
-    // checkpoint at this fraction of real time (slow — a lull is recoverable).
-    decayPerMs: 0.4,
+    // No slow drain: the moment ____ stops actively defusing (releases E,
+    // leaves the radius, or takes a hit) progress SNAPS instantly back to the
+    // last banked checkpoint — the half-mark once reached, otherwise zero.
   },
   // When the fuse hits zero the round soft-resets. This is the "RUN IT BACK."
   // beat: screen flash/shake, then a fresh round. No keepsake loss, no exit.
@@ -87,9 +93,10 @@ export const SPLIT_CONFIG = {
   spike: { x: 480, y: 290, size: 26 },
   playerStart: { x: 480, y: 415 },
   teammateStart: { x: 426, y: 422 },
-  // Timed reinforcements: the first group is live at spawn; the rest bleed in
-  // as the fuse burns down so there's never a long dead stretch. Killing every
-  // bot is NOT the win condition — completing the defuse under fire is.
+  // Timed reinforcements: the first group is live at spawn; one more wave bleeds
+  // in mid-round so there's never a long dead stretch. Capped at FIVE bots total
+  // (3 + 2, no third wave) — the bots are individually meaner instead. Killing
+  // every bot is NOT the win condition — completing the defuse under fire is.
   reinforcements: [
     {
       atElapsedMs: 0,
@@ -100,19 +107,11 @@ export const SPLIT_CONFIG = {
       ],
     },
     {
-      // ~T-40s (40s left on a 60s fuse).
-      atElapsedMs: 20000,
+      // ~T-35s (35s left on a 60s fuse).
+      atElapsedMs: 25000,
       spawns: [
-        { x: 360, y: 150 },
-        { x: 600, y: 150 },
-      ],
-    },
-    {
-      // ~T-20s (20s left).
-      atElapsedMs: 40000,
-      spawns: [
-        { x: 430, y: 145 },
-        { x: 540, y: 145 },
+        { x: 372, y: 150 },
+        { x: 588, y: 150 },
       ],
     },
   ] as const,
@@ -846,9 +845,18 @@ function updateEnemies(state: SplitState, seconds: number, deltaMs: number): Spl
 
       if (dist > 1) {
         const dir = { x: toPlayer.x / dist, y: toPlayer.y / dist };
+        // Perpendicular weave: deterministic sway from elapsed time + id, so
+        // the bot doesn't walk a straight line into a headshot.
+        const perp = { x: -dir.y, y: dir.x };
+        const swaySpeed =
+          config.strafeSpeed *
+          Math.sin(((next.elapsedMs + enemy.id * 260) * Math.PI * 2) / config.strafePeriodMs);
         pos = moveEntity(
           pos,
-          { x: dir.x * config.speed * seconds, y: dir.y * config.speed * seconds },
+          {
+            x: (dir.x * config.speed + perp.x * swaySpeed) * seconds,
+            y: (dir.y * config.speed + perp.y * swaySpeed) * seconds,
+          },
           config.width,
           config.height,
         );
@@ -910,7 +918,7 @@ function resolveEnemyFire(state: SplitState, index: number, enemyPos: Vec2): Spl
 }
 
 function updateDefuse(state: SplitState, input: SplitInput, deltaMs: number): SplitState {
-  const { totalMs, checkpointMs, radius, decayPerMs } = SPLIT_CONFIG.defuse;
+  const { totalMs, checkpointMs, radius } = SPLIT_CONFIG.defuse;
   const inRadius = distance(state.player.pos, SPLIT_CONFIG.spike) <= radius;
   const defusing = input.holdDefuse && inRadius && !state.player.reviving;
 
@@ -922,8 +930,9 @@ function updateDefuse(state: SplitState, input: SplitInput, deltaMs: number): Sp
   if (defusing) {
     progressMs = Math.min(totalMs, progressMs + deltaMs);
   } else {
-    // Slow bleed back toward the last checkpoint when not actively holding.
-    progressMs = Math.max(floor, progressMs - deltaMs * decayPerMs);
+    // No drain: releasing E / leaving the radius snaps instantly back to the
+    // last banked checkpoint (the half-mark once reached, otherwise zero).
+    progressMs = floor;
   }
 
   if (!checkpointReached && progressMs >= checkpointMs) {

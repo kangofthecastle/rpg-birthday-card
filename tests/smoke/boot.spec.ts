@@ -43,7 +43,6 @@ test('cold open plays, then lands in ____’s room with the dark PC', async ({ p
 
   const eggPhrases = [
     'already in tune',
-    "how many times it's been seen",
     'Mango sticky rice',
     'the next good day',
     'rest easy here',

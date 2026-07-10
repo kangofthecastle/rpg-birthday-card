@@ -259,7 +259,7 @@ export const ASSET_MANIFEST: readonly GameAsset[] = [
     status: 'review',
     locationIds: ['recipient-house'],
     notes:
-      'Bed, desk/PC, violin, playbills, camera and photo wall, mango sticky rice table, rug, plants, and window at public/assets/props/recipient-room-props.png; crops and world footprints defined in roomDressing.ts.',
+      'Bed, desk/PC, violin, camera and photo wall, mango sticky rice table, rug, plants, and window at public/assets/props/recipient-room-props.png; crops and world footprints defined in roomDressing.ts.',
     qaChecks: ['transparent background', 'scale vs player height', 'collision readability'],
   },
   {

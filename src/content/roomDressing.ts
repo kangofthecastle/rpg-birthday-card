@@ -105,7 +105,6 @@ const RECIPIENT_PROP_FRAMES = {
   desk: { x: 353, y: 71, w: 340, h: 352 },
   violin: { x: 725, y: 74, w: 120, h: 301 },
   musicStand: { x: 840, y: 104, w: 135, h: 271 },
-  playbills: { x: 34, y: 500, w: 284, h: 174 },
   camera: { x: 389, y: 466, w: 116, h: 235 },
   photoWall: { x: 586, y: 445, w: 358, h: 228 },
   kitchen: { x: 26, y: 728, w: 219, h: 217 },
@@ -193,15 +192,6 @@ const RECIPIENT_HOUSE_DRESSING: RoomDressing = {
       mapY: 388,
       heightRatio: 1.0,
       note: 'sheet-music stand (dressing beside violin; no collider)',
-    },
-    // recipient-playbills rect: 560,280 160x140 -> center 640,350
-    {
-      frame: 'playbills',
-      mapX: 640,
-      mapY: 372,
-      heightRatio: 1.0,
-      footprint: { w: 150, d: 36 },
-      note: 'playbill shelf -> recipient-playbills',
     },
     // recipient-mango-rice rect: 960,300 160x140 -> center 1040,370
     {

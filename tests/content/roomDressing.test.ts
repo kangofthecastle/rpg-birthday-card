@@ -62,7 +62,6 @@ describe('getRoomDressing', () => {
       ['recipient-bed', 'bed'],
       ['recipient-pc', 'desk'],
       ['recipient-violin', 'violin'],
-      ['recipient-playbills', 'playbills'],
       ['recipient-mango-rice', 'kitchen'],
       ['recipient-photo-wall', 'photoWall'],
     ];
@@ -90,7 +89,7 @@ describe('getRoomDressing', () => {
 
     // Solid floor props are sized by heightRatio (player-relative), not by an
     // ad-hoc scale, so they read consistently against ____.
-    for (const frame of ['bed', 'desk', 'kitchen', 'playbills', 'monstera', 'pothos']) {
+    for (const frame of ['bed', 'desk', 'kitchen', 'monstera', 'pothos']) {
       expect(byFrame(frame).heightRatio, frame).toBeGreaterThan(0);
       expect(byFrame(frame).scale, frame).toBeUndefined();
     }
@@ -98,7 +97,7 @@ describe('getRoomDressing', () => {
     // Cozy-RPG canon: the bed towers over everything; the desk cluster is next.
     expect(byFrame('bed').heightRatio!).toBeGreaterThan(byFrame('desk').heightRatio!);
     expect(byFrame('bed').heightRatio!).toBeCloseTo(2.0, 1);
-    expect(byFrame('desk').heightRatio!).toBeGreaterThan(byFrame('playbills').heightRatio!);
+    expect(byFrame('desk').heightRatio!).toBeGreaterThan(byFrame('kitchen').heightRatio!);
 
     // The flat rug is not height-sized; it keeps an explicit scale.
     expect(byFrame('rug').scale).toBeGreaterThan(0);

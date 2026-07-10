@@ -46,7 +46,6 @@ const maps = [
     exits: [rect(3, 'step-outside', 'exit', 640, 864, 128, 80)],
     interactables: [
       rect(4, 'recipient-violin', 'easterEgg', 240, 300, 160, 140),
-      rect(5, 'recipient-playbills', 'easterEgg', 560, 280, 160, 140),
       rect(6, 'recipient-mango-rice', 'easterEgg', 960, 300, 160, 140),
       rect(7, 'recipient-photo-wall', 'easterEgg', 1080, 64, 160, 140),
       rect(8, 'recipient-bed', 'easterEgg', 300, 600, 180, 150),

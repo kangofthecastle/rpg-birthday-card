@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 360" width="320" height="360">
+  <!-- Placeholder cottage: bottom-center anchored, cool-slate accent (____). -->
+  <ellipse cx="160" cy="348" rx="118" ry="16" fill="#000000" opacity="0.16"/>
+  <!-- Chimney -->
+  <rect x="206" y="86" width="30" height="60" fill="#5f7183" stroke="#33414f" stroke-width="4"/>
+  <!-- Roof -->
+  <polygon points="160,44 268,148 52,148" fill="#4f6b86" stroke="#2c3d4d" stroke-width="6" stroke-linejoin="round"/>
+  <polygon points="160,44 160,148 52,148" fill="#6b87a2" opacity="0.55"/>
+  <rect x="46" y="146" width="228" height="12" rx="4" fill="#3f566c"/>
+  <!-- Walls -->
+  <rect x="70" y="158" width="180" height="182" rx="6" fill="#e6ecf1" stroke="#8ba0b2" stroke-width="6"/>
+  <g opacity="0.5" stroke="#cdd8e1" stroke-width="3">
+    <line x1="76" y1="192" x2="244" y2="192"/>
+    <line x1="76" y1="228" x2="244" y2="228"/>
+    <line x1="76" y1="264" x2="244" y2="264"/>
+    <line x1="76" y1="300" x2="244" y2="300"/>
+  </g>
+  <!-- Windows -->
+  <g>
+    <rect x="92" y="192" width="46" height="46" rx="4" fill="#d6e6f2" stroke="#43607a" stroke-width="5"/>
+    <line x1="115" y1="192" x2="115" y2="238" stroke="#43607a" stroke-width="4"/>
+    <line x1="92" y1="215" x2="138" y2="215" stroke="#43607a" stroke-width="4"/>
+    <rect x="182" y="192" width="46" height="46" rx="4" fill="#d6e6f2" stroke="#43607a" stroke-width="5"/>
+    <line x1="205" y1="192" x2="205" y2="238" stroke="#43607a" stroke-width="4"/>
+    <line x1="182" y1="215" x2="228" y2="215" stroke="#43607a" stroke-width="4"/>
+  </g>
+  <!-- Door -->
+  <rect x="136" y="256" width="48" height="84" rx="6" fill="#43607a" stroke="#25384a" stroke-width="6"/>
+  <circle cx="174" cy="300" r="4" fill="#cfe0ee"/>
+  <rect x="126" y="336" width="68" height="10" rx="3" fill="#8ba0b2"/>
+</svg>

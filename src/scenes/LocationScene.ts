@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { getActivity } from '../activities/activityRegistry';
+import { ENDING_KEEPSAKE_ID } from '../activities/finalKeepsake/endingModel';
 import {
   RECIPIENT_ANIMATION_SOURCE_FACING,
   RECIPIENT_FLIP_X_BY_FACING,
@@ -20,14 +21,40 @@ import { getLocation } from '../content/locations';
 import { getRoomDressing, type RoomDressing } from '../content/roomDressing';
 import {
   renderExitDoormat,
+  renderInteriorAwakening,
   renderRoomDressing,
+  growBoundsFromObject,
   type PropColliderRect,
+  type ScreenBounds,
 } from '../game/roomRenderer';
-import type { DialogueLine, LocationDefinition, LocationInteraction } from '../content/types';
+import { getCollisionZones, type CollisionZonesFile } from '../content/collisionZones';
+import { rasterizePolygonsToRects, type Polygon } from '../game/collisionGeometry';
+import type {
+  DialogueLine,
+  LocationDefinition,
+  LocationEdgeExit,
+  LocationInteraction,
+} from '../content/types';
+import {
+  EDGE_ARRIVAL_COOLDOWN_MS,
+  edgeProportion,
+  edgeSpawnPoint,
+  isBodyAtEdge,
+  type BodyRect,
+  type MapDims,
+} from '../game/edgeTransitions';
+import {
+  getExteriors,
+  getOutdoorPalette,
+  exteriorTextureKey,
+  type ExteriorPlacement,
+  type OutdoorPalette,
+} from '../content/outdoorScenery';
 import {
   completeLocation,
   createInitialRunState,
   hasAllFriendKeepsakes,
+  isBoatFolded,
   isFinalSpotUnlocked,
   markBeatSeen,
   markEndingCompleted,
@@ -35,14 +62,8 @@ import {
   type RunState,
 } from '../game/runState';
 import { isInteractionLocked, shouldPlayEnterBeat } from '../game/interactionState';
-import {
-  getIsoBounds,
-  getIsoRectCorners,
-  getIsoTileCorners,
-  projectToIso,
-  type IsoOrigin,
-  type IsoPoint,
-} from '../game/isometricProjection';
+import { type IsoOrigin, type IsoPoint } from '../game/isometricProjection';
+import { createProjection, type Projection } from '../game/projection';
 import { playMusic, playSfx, type MusicKey } from '../game/audio';
 import { getPointObject, getRectObjects, type RectObject, type TiledMapJson } from '../game/mapHelpers';
 import { getPlayerFacingFromScreenMovement, PlayerController } from '../game/playerController';
@@ -50,19 +71,57 @@ import { renderCollectionPanel } from '../ui/collectionPanel';
 import { showDialogue } from '../ui/dialogueBox';
 import { clearUiRoot, getUiRoot } from '../ui/domRoot';
 import { showLetterModal } from '../ui/letterModal';
+import { fnv1a, mulberry32 } from '../game/rng';
 import { SceneKeys } from './sceneKeys';
 
 interface LocationSceneData {
   readonly locationId: string;
   readonly spawnId?: string;
+  /** Explicit map-space spawn coords (edge arrivals), overriding spawnId. */
+  readonly spawnX?: number;
+  readonly spawnY?: number;
+  /** True when arriving via an edge transition, so a re-trigger grace applies. */
+  readonly arrivedViaEdge?: boolean;
   readonly state?: RunState;
+}
+
+// Shown when the player reaches a final-unlock-gated way forward too early.
+const FINAL_LOCKED_LINE =
+  'The clearing feels close, but some keepsakes are still missing.';
+
+// Shown at the gated south edge once every letter is held but the boat hasn't
+// been folded yet — the ritual, not the edge, is the way across.
+const FINAL_WAITING_LINE = 'not like this. the water is waiting for something.';
+
+// Player yardstick (mirrors roomRenderer): ____ reads ~0.88 of her frame.
+const PLAYER_VISUAL_HEIGHT_PX = RECIPIENT_SPRITE.frameHeight * RECIPIENT_SPRITE.scale * 0.88;
+
+function colorToHex(color: number): string {
+  return `#${color.toString(16).padStart(6, '0')}`;
+}
+
+/** Linear blend of two 0xRRGGBB colours (t=0 -> a, t=1 -> b). */
+function mixColor(a: number, b: number, t: number): number {
+  const ar = (a >> 16) & 0xff;
+  const ag = (a >> 8) & 0xff;
+  const ab = a & 0xff;
+  const br = (b >> 16) & 0xff;
+  const bg = (b >> 8) & 0xff;
+  const bb = b & 0xff;
+  const r = Math.round(ar + (br - ar) * t);
+  const g = Math.round(ag + (bg - ag) * t);
+  const bl = Math.round(ab + (bb - ab) * t);
+  return (r << 16) | (g << 8) | bl;
 }
 
 // Ambient bed per location; activities layer their own bed on top and the
 // location bed resumes when they end. The ending swaps beds itself.
 const MUSIC_BY_LOCATION_ID: Readonly<Record<string, MusicKey>> = {
   'recipient-house': 'music-home',
-  entry: 'music-path',
+  'main-outside': 'music-path',
+  'friendtwo-yard': 'music-path',
+  'friendone-yard': 'music-path',
+  clearing: 'music-home',
   'friend-a': 'music-home',
   'friend-b': 'music-home',
   'final-spot': 'music-path',
@@ -79,7 +138,7 @@ function locationMusicKey(locationId: string): MusicKey {
 
 export class LocationScene extends Phaser.Scene {
   private location!: LocationDefinition;
-  private state: RunState = createInitialRunState('entry');
+  private state: RunState = createInitialRunState('recipient-house');
   private player!: Phaser.Physics.Arcade.Sprite;
   private playerVisual?: Phaser.GameObjects.Sprite;
   private playerFacing: PlayerFacing = 'down';
@@ -98,11 +157,22 @@ export class LocationScene extends Phaser.Scene {
   private promptText?: Phaser.GameObjects.Text;
   private activeObject?: RectObject;
   private walls?: Phaser.Tilemaps.TilemapLayer;
-  private isoOrigin?: IsoOrigin;
+  private projection?: Projection;
   private dressing?: RoomDressing;
   private propColliders: PropColliderRect[] = [];
   private propColliderBodies: Phaser.GameObjects.Rectangle[] = [];
+  private zonesFile?: CollisionZonesFile;
+  private showColliderDebug = false;
   private debugMarkers = false;
+  private mapDims: MapDims = { width: 0, height: 0, tileSize: 64 };
+  private spawnOverride?: { x: number; y: number };
+  private arrivedViaEdge = false;
+  private edgeCooldownUntil = 0;
+  private edgeTriggerBusy = false;
+  private interiorAwakened = false;
+
+  // 8px grid for rasterising polygon collision zones into strip rectangles.
+  private static readonly ZONE_CELL_SIZE = 8;
 
   constructor() {
     super(SceneKeys.Location);
@@ -110,22 +180,51 @@ export class LocationScene extends Phaser.Scene {
 
   init(data: LocationSceneData): void {
     this.location = getLocation(data.locationId);
-    this.state = setCurrentLocation(data.state ?? createInitialRunState('entry'), data.locationId);
+    this.state = setCurrentLocation(
+      data.state ?? createInitialRunState('recipient-house'),
+      data.locationId,
+    );
     this.registry.set('runState', this.state);
     this.registry.set('spawnId', data.spawnId ?? this.location.defaultSpawnId);
+    this.spawnOverride =
+      data.spawnX !== undefined && data.spawnY !== undefined
+        ? { x: data.spawnX, y: data.spawnY }
+        : undefined;
+    this.arrivedViaEdge = data.arrivedViaEdge ?? false;
+    this.edgeTriggerBusy = false;
+    this.edgeCooldownUntil = 0;
+    // scene.restart() reuses this instance, so reset the awakening guard here;
+    // create() re-applies it statically when the room is entered already awakened.
+    this.interiorAwakened = false;
+    // scene.restart() reuses this instance, so class field initializers (like
+    // `canMove = true`) do NOT re-run. Reset control on every (re)start here, so
+    // a scene entered via a travelTo restart — which restarts while canMove is
+    // still false from startActivity() and returns before the normal
+    // `canMove = true` — comes up controllable rather than frozen.
+    this.canMove = true;
   }
 
   create(): void {
     clearUiRoot();
-    this.debugMarkers = new URLSearchParams(window.location.search).has('dressDebug');
+    const params = new URLSearchParams(window.location.search);
+    // The zone editor forces the collider/zone debug overlay on so the author
+    // always sees current collision truth while editing.
+    this.showColliderDebug =
+      params.has('dressDebug') || (import.meta.env.DEV && params.has('editZones'));
+    this.debugMarkers = this.showColliderDebug;
     // Mirror the current location onto the DOM so the on-screen location label
     // change is observable to smoke tests (Phaser canvas text is not queryable).
     document.body.dataset.locationId = this.location.id;
+    delete document.body.dataset.interiorAwakened;
     this.createMap();
     this.createPlayer();
     this.createHud();
     this.createLocationLabel();
     this.applyWarmLightingTint();
+    this.applyOutdoorAwakening();
+    // Statically awaken a dressed interior already entered post-violin (later
+    // room entries); the completion seam applies it dynamically the first time.
+    this.applyInteriorAwakening({ animate: false });
     playMusic(locationMusicKey(this.location.id), { fadeMs: 1200 });
 
     this.interactKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.E);
@@ -139,7 +238,37 @@ export class LocationScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(1000);
 
+    if (this.arrivedViaEdge) {
+      this.edgeCooldownUntil = this.time.now + EDGE_ARRIVAL_COOLDOWN_MS;
+    }
+
     void this.runEnterBeats();
+    this.maybeStartZoneEditor();
+  }
+
+  // Dev-only in-game polygon editor, lazily imported so it is excluded from
+  // production bundles. Keeps the player controllable but detaches strict camera
+  // follow (the editor manages pan/zoom).
+  private maybeStartZoneEditor(): void {
+    if (!import.meta.env.DEV) {
+      return;
+    }
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('editZones') || !this.projection || !this.playerVisual) {
+      return;
+    }
+
+    const projection = this.projection;
+    const playerVisual = this.playerVisual;
+    void import('../game/zoneEditor').then(({ startZoneEditor }) => {
+      startZoneEditor(this, {
+        locationId: this.location.id,
+        projection,
+        playerVisual,
+        dressing: this.dressing,
+        initial: this.zonesFile,
+      });
+    });
   }
 
   private applyWarmLightingTint(): void {
@@ -186,12 +315,113 @@ export class LocationScene extends Phaser.Scene {
       return;
     }
 
+    if (this.checkEdgeTransitions()) {
+      this.activeObject = undefined;
+      this.promptText?.setText('');
+      return;
+    }
+
     this.activeObject = this.findActiveObject();
     this.promptText?.setText(this.activeObject ? `E - ${this.getObjectLabel(this.activeObject)}` : '');
 
     if (this.activeObject && this.interactKey && Phaser.Input.Keyboard.JustDown(this.interactKey)) {
       void this.activateObject(this.activeObject);
     }
+  }
+
+  // Auto edge-to-edge transitions: when the player's body reaches an open world
+  // edge that carries an edge exit, swap areas (or, for the gated final edge,
+  // show the blocked line and nudge them back). Returns true when an edge is
+  // being handled this frame, so the caller suppresses the interact prompt.
+  private checkEdgeTransitions(): boolean {
+    if (this.edgeTriggerBusy) {
+      return true;
+    }
+    const edgeExits = this.location.edgeExits;
+    if (!edgeExits || edgeExits.length === 0 || this.time.now < this.edgeCooldownUntil) {
+      return false;
+    }
+
+    const body = this.player.body;
+    if (!body) {
+      return false;
+    }
+
+    const rect: BodyRect = { x: body.x, y: body.y, width: body.width, height: body.height };
+    for (const edgeExit of edgeExits) {
+      if (isBodyAtEdge(edgeExit.edge, rect, this.mapDims)) {
+        void this.activateEdgeExit(edgeExit, rect);
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  private async activateEdgeExit(edgeExit: LocationEdgeExit, body: BodyRect): Promise<void> {
+    this.edgeTriggerBusy = true;
+
+    // The gated south edge opens only once the boat is folded (the ritual is the
+    // real way across). Before that: if the letters aren't all held yet, the old
+    // "still missing" line; if they are, the water is waiting for the ritual.
+    if (edgeExit.requiresFinalUnlock && !isBoatFolded(this.state)) {
+      this.nudgeAwayFromEdge(edgeExit.edge);
+      const line = isFinalSpotUnlocked(this.state) ? FINAL_WAITING_LINE : FINAL_LOCKED_LINE;
+      await this.pauseForDialogue([{ text: line }]);
+      this.edgeCooldownUntil = this.time.now + EDGE_ARRIVAL_COOLDOWN_MS;
+      this.edgeTriggerBusy = false;
+      return;
+    }
+
+    const destination = getLocation(edgeExit.destinationLocationId);
+    const destDims = this.readMapDims(destination.mapKey);
+    const proportion = edgeProportion(edgeExit.edge, body, this.mapDims);
+    const spawn = edgeSpawnPoint(edgeExit.destinationEdge, proportion, destDims);
+
+    this.scene.restart({
+      locationId: destination.id,
+      spawnX: spawn.x,
+      spawnY: spawn.y,
+      arrivedViaEdge: true,
+      state: this.state,
+    } satisfies LocationSceneData);
+  }
+
+  // Push the player one tile back from a blocked edge so they end up clear of it
+  // after the dialogue (and so the cooldown isn't racing an on-edge body).
+  private nudgeAwayFromEdge(edge: LocationEdgeExit['edge']): void {
+    const tile = this.mapDims.tileSize;
+    let { x, y } = this.player;
+
+    switch (edge) {
+      case 'south':
+        y -= tile;
+        break;
+      case 'north':
+        y += tile;
+        break;
+      case 'east':
+        x -= tile;
+        break;
+      case 'west':
+        x += tile;
+        break;
+    }
+
+    this.player.setPosition(x, y);
+    this.player.body?.reset(x, y);
+  }
+
+  private readMapDims(mapKey: string): MapDims {
+    const data = this.cache.tilemap.get(mapKey)?.data as TiledMapJson | undefined;
+    if (!data) {
+      throw new Error(`Missing cached tilemap for ${mapKey}`);
+    }
+    return {
+      width: data.width * data.tilewidth,
+      height: data.height * data.tileheight,
+      tileSize: data.tilewidth,
+    };
   }
 
   private createMap(): void {
@@ -203,19 +433,48 @@ export class LocationScene extends Phaser.Scene {
       throw new Error(`Missing tileset for ${this.location.id}`);
     }
 
-    this.isoOrigin = this.createIsoOrigin(tilemap);
+    this.projection = createProjection(this.location.projection, this.createIsoOrigin(tilemap));
+    this.mapDims = {
+      width: tilemap.widthInPixels,
+      height: tilemap.heightInPixels,
+      tileSize: tilemap.tileWidth,
+    };
     this.dressing = getRoomDressing(this.location.id);
+    this.zonesFile = getCollisionZones(this.location.id);
 
     this.propColliders = [];
     this.propColliderBodies = [];
+    let contentBounds: ScreenBounds | undefined;
 
     if (this.dressing) {
       this.cameras.main.setBackgroundColor(this.dressing.backgroundColor);
-      const rendered = renderRoomDressing(this, this.dressing, tilemap, this.isoOrigin);
-      this.propColliders = [...rendered.colliders];
+      const rendered = renderRoomDressing(
+        this,
+        this.dressing,
+        tilemap,
+        this.getProjection().movementOrigin ?? this.createIsoOrigin(tilemap),
+        this.zonesFile?.propDepthOverrides ?? {},
+      );
+      contentBounds = { ...rendered.contentBounds };
+      // Polygon zones, when present, REPLACE the footprint-based prop colliders;
+      // otherwise fall back to the roomDressing footprints.
+      this.propColliders = this.zonesFile
+        ? this.rasterizeZones(this.zonesFile)
+        : [...rendered.colliders];
+    } else if (this.getProjection().mode === 'flat') {
+      const palette = getOutdoorPalette(this.location.id);
+      // Full-bleed grass: let any overscan blend with the ground rather than a
+      // dark void, since flat camera bounds are the exact map rect.
+      this.cameras.main.setBackgroundColor(colorToHex(palette?.floorB ?? 0x7fa46b));
+      this.createFlatGround(tilemap, palette);
+      this.propColliders = [...this.propColliders, ...this.renderOutdoorExteriors()];
     } else {
-      this.cameras.main.setBackgroundColor('#17211b');
-      this.createDevBackdrop(tilemap);
+      const palette = getOutdoorPalette(this.location.id);
+      this.cameras.main.setBackgroundColor(
+        palette ? colorToHex(palette.background) : '#17211b',
+      );
+      this.createDevBackdrop(tilemap, palette);
+      this.propColliders = [...this.propColliders, ...this.renderOutdoorExteriors()];
     }
 
     const ground = tilemap.createLayer('Ground', [floorTileset, wallTileset], 0, 0);
@@ -233,35 +492,103 @@ export class LocationScene extends Phaser.Scene {
     this.interactions = getRectObjects(mapJson, 'Interactables');
     this.physics.world.setBounds(0, 0, tilemap.widthInPixels, tilemap.heightInPixels);
 
-    const isoBounds = getIsoBounds(tilemap.widthInPixels, tilemap.heightInPixels, this.isoOrigin);
-    this.cameras.main.setBounds(0, 0, isoBounds.maxX + 192, isoBounds.maxY + 224);
     this.createWorldMarkers();
-    this.createDressedExitMarkers();
+    this.createDressedExitMarkers(contentBounds);
+    this.createOutdoorDoorMarkers();
     this.createPropColliderBodies();
+    this.applyCameraBounds(tilemap, contentBounds);
+  }
+
+  // Camera bounds from real content extents (dressed rooms), so the room art is
+  // never clipped at the bottom and the back-wall tops (at negative screen Y)
+  // stay reachable. Undressed rooms keep the legacy constant padding.
+  private applyCameraBounds(
+    tilemap: Phaser.Tilemaps.Tilemap,
+    contentBounds: ScreenBounds | undefined,
+  ): void {
+    if (contentBounds && Number.isFinite(contentBounds.minX)) {
+      const margin = 32;
+      this.cameras.main.setBounds(
+        Math.floor(contentBounds.minX - margin),
+        Math.floor(contentBounds.minY - margin),
+        Math.ceil(contentBounds.maxX - contentBounds.minX + margin * 2),
+        Math.ceil(contentBounds.maxY - contentBounds.minY + margin * 2),
+      );
+      return;
+    }
+
+    // Flat top-down: camera bounds are EXACTLY the map rect, so the ground fills
+    // the view edge-to-edge with no iso padding void when the camera hits a side.
+    if (this.getProjection().mode === 'flat') {
+      this.cameras.main.setBounds(0, 0, tilemap.widthInPixels, tilemap.heightInPixels);
+      return;
+    }
+
+    const isoBounds = this.getProjection().bounds(tilemap.widthInPixels, tilemap.heightInPixels);
+    this.cameras.main.setBounds(0, 0, isoBounds.maxX + 192, isoBounds.maxY + 224);
   }
 
   // Dressed rooms hide the debug rects, so render a diegetic doormat + glow at
   // each exit as the visible "way out". Undressed rooms keep the dev markers.
-  private createDressedExitMarkers(): void {
-    if (!this.dressing || !this.isoOrigin) {
+  // Unions each doormat's bounds into contentBounds so the camera includes them.
+  private createDressedExitMarkers(contentBounds?: ScreenBounds): void {
+    if (!this.dressing || !this.projection?.movementOrigin) {
       return;
     }
 
     for (const exit of this.exits) {
-      renderExitDoormat(
+      const result = renderExitDoormat(
         this,
         this.dressing,
         { x: exit.x, y: exit.y, width: exit.width, height: exit.height },
-        this.isoOrigin,
+        this.projection.movementOrigin,
       );
+      if (contentBounds) {
+        for (const object of result.objects) {
+          growBoundsFromObject(
+            contentBounds,
+            object as Phaser.GameObjects.GameObject & { getBounds?: () => Phaser.Geom.Rectangle },
+          );
+        }
+      }
     }
+  }
+
+  // Rasterises polygon collision zones into map-space strip rectangles.
+  private rasterizeZones(zonesFile: CollisionZonesFile): PropColliderRect[] {
+    const polygons: Polygon[] = zonesFile.zones
+      .filter((zone) => zone.points.length >= 3)
+      .map((zone) => zone.points);
+    const rects = rasterizePolygonsToRects(polygons, LocationScene.ZONE_CELL_SIZE);
+    return rects.map((rect) => ({
+      x: rect.x,
+      y: rect.y,
+      width: rect.width,
+      height: rect.height,
+    }));
   }
 
   // Static physics bodies (map space) for solid props' floor footprints. The
   // bodies are invisible; ?dressDebug=1 overlays their projected outlines.
   private createPropColliderBodies(): void {
-    const debug = new URLSearchParams(window.location.search).has('dressDebug');
-    const origin = this.getIsoOrigin();
+    const debug = this.showColliderDebug;
+    const projection = this.getProjection();
+
+    // With debug on, also outline the authored zone polygons (map->screen) so
+    // the author sees source polygons alongside the rasterised collision rects.
+    if (debug && this.zonesFile) {
+      for (const zone of this.zonesFile.zones) {
+        if (zone.points.length < 3) {
+          continue;
+        }
+        const outline = this.add.graphics().setDepth(7);
+        const polygon = this.toPhaserPoints(
+          zone.points.map(([x, y]) => projection.project(x, y)),
+        );
+        outline.lineStyle(2, 0x8b5cf6, 0.95);
+        outline.strokePoints(polygon, true);
+      }
+    }
 
     for (const collider of this.propColliders) {
       const body = this.add
@@ -278,7 +605,7 @@ export class LocationScene extends Phaser.Scene {
       if (debug) {
         const outline = this.add.graphics().setDepth(6);
         const polygon = this.toPhaserPoints(
-          getIsoRectCorners(collider.x, collider.y, collider.width, collider.height, origin),
+          projection.rectCorners(collider.x, collider.y, collider.width, collider.height),
         );
         outline.fillStyle(0xff3366, 0.18);
         outline.fillPoints(polygon, true);
@@ -288,56 +615,406 @@ export class LocationScene extends Phaser.Scene {
     }
   }
 
-  private createDevBackdrop(tilemap: Phaser.Tilemaps.Tilemap): void {
-    const origin = this.getIsoOrigin();
+  private createDevBackdrop(
+    tilemap: Phaser.Tilemaps.Tilemap,
+    palette?: OutdoorPalette,
+  ): void {
+    const projection = this.getProjection();
     const width = tilemap.widthInPixels;
     const height = tilemap.heightInPixels;
-    const isoBounds = getIsoBounds(width, height, origin);
+    const isoBounds = projection.bounds(width, height);
     const graphics = this.add.graphics().setDepth(-20);
 
-    graphics.fillStyle(0x17211b, 1);
+    const pal: OutdoorPalette = palette ?? {
+      background: 0x17211b,
+      floorA: 0x88ad70,
+      floorB: 0x7fa46b,
+      stroke: 0x5f8050,
+      border: 0x8a6a4f,
+      borderStroke: 0x5d4334,
+      path: 0xb9a06b,
+    };
+    // Which border sides are walkable openings (drawn as floor, not framing).
+    const openEdges = new Set((this.location.edgeExits ?? []).map((exit) => exit.edge));
+
+    graphics.fillStyle(pal.background, 1);
     graphics.fillRect(0, 0, isoBounds.maxX + 192, isoBounds.maxY + 224);
 
     this.drawIsoSideFace(
       graphics,
-      [projectToIso(0, height, origin), projectToIso(width, height, origin)],
+      [projection.project(0, height), projection.project(width, height)],
       48,
       0x5d4a36,
     );
     this.drawIsoSideFace(
       graphics,
-      [projectToIso(width, 0, origin), projectToIso(width, height, origin)],
+      [projection.project(width, 0), projection.project(width, height)],
       48,
       0x6b523c,
     );
 
     for (let row = 0; row < tilemap.height; row += 1) {
       for (let column = 0; column < tilemap.width; column += 1) {
-        const isBorder =
-          row === 0 || column === 0 || row === tilemap.height - 1 || column === tilemap.width - 1;
+        const onCorner =
+          (column === 0 || column === tilemap.width - 1) &&
+          (row === 0 || row === tilemap.height - 1);
+        const isFramedBorder =
+          !onCorner &&
+          ((column === 0 && !openEdges.has('west')) ||
+            (column === tilemap.width - 1 && !openEdges.has('east')) ||
+            (row === 0 && !openEdges.has('north')) ||
+            (row === tilemap.height - 1 && !openEdges.has('south'))) ||
+          onCorner;
         const isAlternate = (row + column) % 2 === 0;
-        const color = isBorder ? 0x8a6a4f : isAlternate ? 0x88ad70 : 0x7fa46b;
-        const strokeColor = isBorder ? 0x5d4334 : 0x5f8050;
+        const color = isFramedBorder ? pal.border : isAlternate ? pal.floorA : pal.floorB;
+        const strokeColor = isFramedBorder ? pal.borderStroke : pal.stroke;
         const polygon = this.toPhaserPoints(
-          getIsoTileCorners(
+          projection.tileCorners(
             column * tilemap.tileWidth,
             row * tilemap.tileHeight,
             tilemap.tileWidth,
-            origin,
           ),
         );
 
         graphics.fillStyle(color, 1);
         graphics.fillPoints(polygon, true);
-        graphics.lineStyle(1, strokeColor, isBorder ? 0.85 : 0.45);
+        graphics.lineStyle(1, strokeColor, isFramedBorder ? 0.85 : 0.45);
         graphics.strokePoints(polygon, true);
       }
     }
   }
 
+  // Top-down full-bleed ground for a flat outdoor area. Covers the whole map
+  // rect exactly: tinted grass with a soft organic checker + scattered tufts,
+  // worn dirt paths from the centre toward each open edge and each door, and a
+  // ~1-tile hedge/tree band on every CLOSED edge (matching the border collision).
+  // Procedural + seeded, so it is stable across reloads/screenshots.
+  private createFlatGround(tilemap: Phaser.Tilemaps.Tilemap, palette?: OutdoorPalette): void {
+    const width = tilemap.widthInPixels;
+    const height = tilemap.heightInPixels;
+    const tile = tilemap.tileWidth;
+    const cols = tilemap.width;
+    const rows = tilemap.height;
+    const pal: OutdoorPalette = palette ?? {
+      background: 0x17211b,
+      floorA: 0x88ad70,
+      floorB: 0x7fa46b,
+      stroke: 0x5f8050,
+      border: 0x6f8f58,
+      borderStroke: 0x4e6a40,
+      path: 0xb9a06b,
+    };
+    const openEdges = new Set((this.location.edgeExits ?? []).map((exit) => exit.edge));
+    const rng = mulberry32(fnv1a(this.location.id));
+
+    // 1. Grass base + subtle per-tile checker + scattered darker tufts.
+    //    This is ~800+ primitive fills. Baking it once and drawing a single
+    //    textured quad instead of re-tessellating a retained Graphics EVERY
+    //    frame is the win. We bake into a GPU RenderTexture rather than
+    //    Graphics.generateTexture: generateTexture does a synchronous
+    //    gl.readPixels back to the CPU (a visible startup stall), whereas
+    //    RenderTexture.draw stays entirely GPU-side. The off-display-list stamp
+    //    Graphics is drawn once then destroyed; the tuft/checker rng draws still
+    //    run every create() so the downstream hedge PRNG stream (which shares
+    //    `rng`) is unchanged.
+    const ground = this.make.graphics({}, false);
+    ground.fillStyle(pal.floorA, 1);
+    ground.fillRect(0, 0, width, height);
+    for (let row = 0; row < rows; row += 1) {
+      for (let column = 0; column < cols; column += 1) {
+        const checker = (row + column) % 2 === 0;
+        // Occasionally flip a tile so the grid reads organic, not a hard board.
+        if (checker !== (rng() < 0.18)) {
+          ground.fillStyle(pal.floorB, 0.55);
+          ground.fillRect(column * tile, row * tile, tile, tile);
+        }
+      }
+    }
+    const tuftCount = Math.round(cols * rows * 0.6);
+    for (let i = 0; i < tuftCount; i += 1) {
+      const x = rng() * width;
+      const y = rng() * height;
+      const r = 2 + rng() * 3;
+      ground.fillStyle(pal.stroke, 0.18 + rng() * 0.16);
+      ground.fillEllipse(x, y, r * 2.4, r * 1.4);
+      ground.fillEllipse(x + r, y - r * 0.4, r * 1.6, r);
+    }
+    const groundTexture = this.add
+      .renderTexture(0, 0, width, height)
+      .setOrigin(0, 0)
+      .setDepth(-20);
+    groundTexture.draw(ground);
+    ground.destroy();
+
+    // 2. Worn paths from the map centre toward each open edge and each door.
+    const paths = this.add.graphics().setDepth(-19);
+    const center = { x: width / 2, y: height / 2 };
+    const targets: Array<{ x: number; y: number }> = [];
+    if (openEdges.has('west')) targets.push({ x: 0, y: height / 2 });
+    if (openEdges.has('east')) targets.push({ x: width, y: height / 2 });
+    if (openEdges.has('north')) targets.push({ x: width / 2, y: 0 });
+    if (openEdges.has('south')) targets.push({ x: width / 2, y: height });
+    for (const exit of this.exits) {
+      targets.push({ x: exit.x + exit.width / 2, y: exit.y + exit.height / 2 });
+    }
+    const pathEdge = mixColor(pal.path, 0x000000, 0.28);
+    for (const target of targets) {
+      this.stampPath(paths, center, target, pathEdge, tile * 0.44);
+      this.stampPath(paths, center, target, pal.path, tile * 0.27);
+    }
+    paths.setAlpha(0.72);
+
+    // 3. Boundary read: hedge/tree band ~1 tile thick on each CLOSED edge.
+    const hedges = this.add.graphics().setDepth(-18);
+    for (const edge of ['north', 'south', 'east', 'west'] as const) {
+      if (openEdges.has(edge)) {
+        continue;
+      }
+      this.drawHedgeBand(hedges, edge, width, height, tile, pal, rng);
+    }
+
+    // 4. The clearing's southern boundary is a SHORE: a dark-water band that
+    // always reads as water, and glows with light from beyond once the world
+    // has awakened (every letter collected).
+    if (this.location.id === 'clearing') {
+      this.drawClearingShore(width, height, tile);
+    }
+  }
+
+  // A dark-water band along the clearing's south edge (~2 tiles). Always present;
+  // once the world awakens (all letters held), a warm-cool light blooms from
+  // beneath and beyond the water — the ending, close now.
+  private drawClearingShore(width: number, height: number, tile: number): void {
+    const awakened = isFinalSpotUnlocked(this.state);
+    const bandHeight = tile * 2;
+    const top = height - bandHeight;
+
+    const water = this.add.graphics().setDepth(-17);
+    // Wet sand / shoreline seam.
+    water.fillStyle(0x2e2f3a, 1);
+    water.fillRect(0, top - tile * 0.35, width, tile * 0.4);
+    // Deep water, darkening toward the edge.
+    water.fillStyle(0x12233a, 1);
+    water.fillRect(0, top, width, bandHeight);
+    water.fillStyle(0x0b1626, 1);
+    water.fillRect(0, top + bandHeight * 0.55, width, bandHeight * 0.45);
+
+    // Gentle ripple striations.
+    const rippleColor = awakened ? 0x8fd0e6 : 0x35506a;
+    water.lineStyle(2, rippleColor, awakened ? 0.5 : 0.32);
+    for (let i = 0; i < 5; i += 1) {
+      const y = top + (bandHeight * (i + 0.5)) / 5;
+      water.beginPath();
+      water.moveTo(0, y);
+      for (let x = 0; x <= width; x += tile) {
+        water.lineTo(x, y + Math.sin((x / width) * Math.PI * 6 + i) * 3);
+      }
+      water.strokePath();
+    }
+
+    if (!awakened) {
+      return;
+    }
+
+    // Awakened: a bloom of light along the shore and beneath the water.
+    const glow = this.add.graphics().setDepth(-16);
+    glow.fillStyle(0xffe1a1, 0.22);
+    glow.fillRect(0, top - tile * 0.5, width, tile * 0.8);
+    glow.fillStyle(0x7fd8ff, 0.14);
+    glow.fillRect(0, top + tile * 0.6, width, bandHeight);
+    this.tweens.add({
+      targets: glow,
+      alpha: { from: 0.7, to: 1 },
+      duration: 2200,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+  }
+
+  // Once every letter is held the outdoor world subtly awakens: a warm golden
+  // wash pulls over the scene and drifting light-motes rise across the area.
+  // Gentle by design — a change in the air, not a filter slammed on top.
+  private applyOutdoorAwakening(): void {
+    if (!this.isOutdoor() || this.getProjection().mode !== 'flat') {
+      return;
+    }
+    if (!isFinalSpotUnlocked(this.state)) {
+      return;
+    }
+
+    // Warm tint pull, camera-fixed and low, layered under the HUD.
+    const tint = this.add
+      .rectangle(0, 0, this.cameras.main.width, this.cameras.main.height, 0xffcf7a, 0.1)
+      .setOrigin(0, 0)
+      .setScrollFactor(0)
+      .setDepth(895);
+    this.tweens.add({
+      targets: tint,
+      alpha: { from: 0.06, to: 0.13 },
+      duration: 4200,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+
+    this.spawnLightMotes();
+  }
+
+  // Post-violin awakening for a dressed interior (recipient-house): golden light
+  // shafts stream through the window and the exit doormat shines, once every
+  // keepsake is held. Applied statically on entry (animate:false) and
+  // dynamically the instant the violin completes (animate:true, a ~1.5s fade-in
+  // so the beat lands while ____ is still at the stand). Idempotent per scene
+  // life via `interiorAwakened`; scoped to dressed rooms and the final unlock.
+  private applyInteriorAwakening(options: { animate: boolean }): void {
+    if (this.interiorAwakened) {
+      return;
+    }
+    if (!this.dressing || !this.projection?.movementOrigin) {
+      return;
+    }
+    if (!isFinalSpotUnlocked(this.state)) {
+      return;
+    }
+
+    this.interiorAwakened = true;
+    renderInteriorAwakening(
+      this,
+      this.dressing,
+      this.exits.map((exit) => ({
+        x: exit.x,
+        y: exit.y,
+        width: exit.width,
+        height: exit.height,
+      })),
+      this.projection.movementOrigin,
+      { fadeInMs: options.animate ? 1500 : 0 },
+    );
+    // Mirror onto the DOM so smoke tests can assert the awakening appeared
+    // (Phaser objects are not queryable from Playwright).
+    document.body.dataset.interiorAwakened = 'true';
+  }
+
+  private spawnLightMotes(): void {
+    this.createMoteTexture();
+    // Seeded like the outdoor ground so the mote field is stable across reloads.
+    const rng = mulberry32(fnv1a(`${this.location.id}:motes`));
+    const count = 16;
+    for (let i = 0; i < count; i += 1) {
+      const x = rng() * this.mapDims.width;
+      const y = rng() * this.mapDims.height;
+      const mote = this.add
+        .image(x, y, 'awaken-mote')
+        .setDepth(y + 6)
+        .setAlpha(0)
+        .setScale(0.5 + rng() * 0.9);
+      const drift = 24 + rng() * 40;
+      this.tweens.add({
+        targets: mote,
+        alpha: { from: 0, to: 0.5 + rng() * 0.3 },
+        duration: 1400 + rng() * 1200,
+        yoyo: true,
+        hold: 400 + rng() * 800,
+        repeat: -1,
+        repeatDelay: rng() * 1600,
+        delay: rng() * 2400,
+        ease: 'Sine.easeInOut',
+      });
+      this.tweens.add({
+        targets: mote,
+        y: y - drift,
+        x: x + (rng() - 0.5) * drift,
+        duration: 5000 + rng() * 4000,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+      });
+    }
+  }
+
+  private createMoteTexture(): void {
+    if (this.textures.exists('awaken-mote')) {
+      return;
+    }
+    const graphics = this.add.graphics();
+    graphics.fillStyle(0xfff2c8, 0.9);
+    graphics.fillCircle(8, 8, 3);
+    graphics.fillStyle(0xffe1a1, 0.35);
+    graphics.fillCircle(8, 8, 7);
+    graphics.generateTexture('awaken-mote', 16, 16);
+    graphics.destroy();
+  }
+
+  // Stamps overlapping circles from `from` to `to` — a soft, round-capped worn
+  // trail. All fills use alpha 1 (the caller sets the graphics' overall alpha),
+  // so overlaps never darken unevenly.
+  private stampPath(
+    graphics: Phaser.GameObjects.Graphics,
+    from: { x: number; y: number },
+    to: { x: number; y: number },
+    color: number,
+    halfWidth: number,
+  ): void {
+    const distance = Math.hypot(to.x - from.x, to.y - from.y);
+    const steps = Math.max(2, Math.round(distance / (halfWidth * 0.7)));
+    graphics.fillStyle(color, 1);
+    for (let i = 0; i <= steps; i += 1) {
+      const t = i / steps;
+      graphics.fillCircle(from.x + (to.x - from.x) * t, from.y + (to.y - from.y) * t, halfWidth);
+    }
+  }
+
+  private drawHedgeBand(
+    graphics: Phaser.GameObjects.Graphics,
+    edge: 'north' | 'south' | 'east' | 'west',
+    width: number,
+    height: number,
+    tile: number,
+    pal: OutdoorPalette,
+    rng: () => number,
+  ): void {
+    const horizontal = edge === 'north' || edge === 'south';
+    let x = 0;
+    let y = 0;
+    let w = width;
+    let h = height;
+    if (edge === 'north') h = tile;
+    if (edge === 'south') {
+      y = height - tile;
+      h = tile;
+    }
+    if (edge === 'west') w = tile;
+    if (edge === 'east') {
+      x = width - tile;
+      w = tile;
+    }
+
+    graphics.fillStyle(pal.border, 1);
+    graphics.fillRect(x, y, w, h);
+
+    const span = horizontal ? width : height;
+    const blobs = Math.max(3, Math.round(span / (tile * 0.55)));
+    for (let i = 0; i < blobs; i += 1) {
+      const along = ((i + 0.5) / blobs) * span;
+      const jitter = (rng() - 0.5) * tile * 0.3;
+      const bx = horizontal ? along + jitter : x + tile * 0.5;
+      const by = horizontal ? y + tile * 0.5 : along + jitter;
+      const r = tile * (0.34 + rng() * 0.14);
+      graphics.fillStyle(pal.borderStroke, 1);
+      graphics.fillCircle(bx, by, r);
+      graphics.fillStyle(pal.border, 1);
+      graphics.fillCircle(bx - 2, by - 2, r * 0.68);
+    }
+  }
+
   private createPlayer(): void {
     const mapJson = this.getMapJson();
-    const spawn = getPointObject(mapJson, 'Spawns', this.registry.get('spawnId') as string);
+    // Edge arrivals pass explicit map-space coords; doors/testMode use a named
+    // spawn point on the destination map's Spawns layer.
+    const spawn =
+      this.spawnOverride ??
+      getPointObject(mapJson, 'Spawns', this.registry.get('spawnId') as string);
 
     this.createRecipientAnimations();
     this.player = this.physics.add.sprite(spawn.x, spawn.y, 'player-temp');
@@ -362,7 +1039,9 @@ export class LocationScene extends Phaser.Scene {
     }
 
     this.controller = new PlayerController(this, this.player, {
-      movementProjection: this.getIsoOrigin(),
+      // Flat locations have no movement origin, so input drives the body straight
+      // along map axes; iso locations skew it into the diamond plane.
+      movementProjection: this.getProjection().movementOrigin,
     });
     this.cameras.main.startFollow(this.playerVisual, true, 0.12, 0.12);
     this.cameras.main.setDeadzone(240, 180);
@@ -387,13 +1066,17 @@ export class LocationScene extends Phaser.Scene {
 
   private createWorldMarkers(): void {
     // Dressed rooms show art props instead of the debug interact rects. Pass
-    // ?dressDebug=1 to overlay the rects again for alignment checks.
-    if (this.dressing && !new URLSearchParams(window.location.search).has('dressDebug')) {
+    // ?dressDebug=1 (or ?editZones=1) to overlay the rects again for alignment.
+    if (this.dressing && !this.showColliderDebug) {
       return;
     }
 
-    for (const exit of this.exits) {
-      this.createWorldMarker(exit, 0x74c7ec, this.getObjectLabel(exit));
+    // Outdoor door exits are shown as a glowing doormat (createOutdoorDoorMarkers)
+    // instead of a debug rect, unless the collider debug overlay is on.
+    if (!this.isOutdoor() || this.showColliderDebug) {
+      for (const exit of this.exits) {
+        this.createWorldMarker(exit, 0x74c7ec, this.getObjectLabel(exit));
+      }
     }
 
     for (const interaction of this.interactions) {
@@ -401,12 +1084,78 @@ export class LocationScene extends Phaser.Scene {
     }
   }
 
+  private isOutdoor(): boolean {
+    return this.location.kind === 'outdoor';
+  }
+
+  // Renders house-exterior billboards for an outdoor area: bottom-center
+  // anchored at their map position, y-sorted against the player so ____ can
+  // walk behind them. Returns solid base footprints (map px) to collide.
+  private renderOutdoorExteriors(): PropColliderRect[] {
+    const colliders: PropColliderRect[] = [];
+
+    for (const exterior of getExteriors(this.location.id)) {
+      this.renderExterior(exterior);
+      colliders.push({
+        x: exterior.mapX - exterior.footprint.w / 2,
+        y: exterior.mapY - exterior.footprint.d,
+        width: exterior.footprint.w,
+        height: exterior.footprint.d,
+      });
+    }
+
+    return colliders;
+  }
+
+  private renderExterior(exterior: ExteriorPlacement): void {
+    const key = exteriorTextureKey(exterior.asset);
+    const anchor = this.getProjection().project(exterior.mapX, exterior.mapY);
+    const texture = this.textures.get(key);
+    const sourceHeight = texture.getSourceImage().height || 360;
+    const scale = (PLAYER_VISUAL_HEIGHT_PX * exterior.heightRatio) / sourceHeight;
+
+    this.add
+      .image(anchor.x, anchor.y, key)
+      .setOrigin(0.5, 1)
+      .setScale(scale)
+      .setDepth(anchor.y);
+  }
+
+  // A soft pulsing glow doormat, laid flat in the floor plane at each door exit
+  // rect, so doorways on the (undressed) outdoor maps are findable.
+  private createOutdoorDoorMarkers(): void {
+    if (!this.isOutdoor()) {
+      return;
+    }
+
+    const projection = this.getProjection();
+    for (const exit of this.exits) {
+      const polygon = this.toPhaserPoints(
+        projection.rectCorners(exit.x, exit.y, exit.width, exit.height),
+      );
+      const glow = this.add.graphics().setDepth(-8);
+      glow.fillStyle(0xffca74, 0.3);
+      glow.fillPoints(polygon, true);
+      glow.lineStyle(3, 0xffe1a1, 0.85);
+      glow.strokePoints(polygon, true);
+
+      this.tweens.add({
+        targets: glow,
+        alpha: { from: 0.55, to: 1 },
+        duration: 1100,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+      });
+    }
+  }
+
   private createWorldMarker(object: RectObject, color: number, label: string): void {
-    const origin = this.getIsoOrigin();
-    const center = projectToIso(object.x + object.width / 2, object.y + object.height / 2, origin);
+    const projection = this.getProjection();
+    const center = projection.project(object.x + object.width / 2, object.y + object.height / 2);
     const marker = this.add.graphics().setDepth(4);
     const polygon = this.toPhaserPoints(
-      getIsoRectCorners(object.x, object.y, object.width, object.height, origin),
+      projection.rectCorners(object.x, object.y, object.width, object.height),
     );
 
     marker.fillStyle(color, 0.28);
@@ -458,7 +1207,7 @@ export class LocationScene extends Phaser.Scene {
       return;
     }
 
-    const position = projectToIso(this.player.x, this.player.y, this.getIsoOrigin());
+    const position = this.getProjection().project(this.player.x, this.player.y);
     const idleOffset = this.getIdleOffset();
     this.playerVisual.setPosition(position.x, position.y + idleOffset);
     this.playerVisual.setDepth(position.y + 10);
@@ -542,7 +1291,7 @@ export class LocationScene extends Phaser.Scene {
     }
 
     const previousFacing = this.playerFacing;
-    const screenVelocity = this.projectMapVelocityToScreen(velocity.x, velocity.y);
+    const screenVelocity = this.getProjection().mapVelocityToScreen(velocity.x, velocity.y);
     this.playerFacing = getPlayerFacingFromScreenMovement(screenVelocity, this.playerFacing);
     this.syncPlayerVisualFlip();
 
@@ -570,7 +1319,7 @@ export class LocationScene extends Phaser.Scene {
     this.lastWalkDustAt = this.time.now;
     this.walkDustFootSide *= -1;
 
-    const screenVelocity = this.projectMapVelocityToScreen(velocity.x, velocity.y);
+    const screenVelocity = this.getProjection().mapVelocityToScreen(velocity.x, velocity.y);
     const screenDirection = new Phaser.Math.Vector2(screenVelocity.x, screenVelocity.y).normalize();
     const sideOffset = this.walkDustFootSide * RECIPIENT_WALK_DUST.sideOffsetPixels;
     const trailingOffsetX = -screenDirection.x * 7;
@@ -638,21 +1387,12 @@ export class LocationScene extends Phaser.Scene {
     );
   }
 
-  private projectMapVelocityToScreen(x: number, y: number): IsoPoint {
-    const verticalScale = this.getIsoOrigin().verticalScale ?? 0.5;
-
-    return {
-      x: (x - y) / 2,
-      y: ((x + y) * verticalScale) / 2,
-    };
-  }
-
-  private getIsoOrigin(): IsoOrigin {
-    if (!this.isoOrigin) {
-      throw new Error('Isometric origin is unavailable before map creation');
+  private getProjection(): Projection {
+    if (!this.projection) {
+      throw new Error('Projection is unavailable before map creation');
     }
 
-    return this.isoOrigin;
+    return this.projection;
   }
 
   private toPhaserPoints(points: readonly IsoPoint[]): Phaser.Geom.Point[] {
@@ -718,9 +1458,7 @@ export class LocationScene extends Phaser.Scene {
 
     if (exit) {
       if (exit.requiresFinalUnlock && !isFinalSpotUnlocked(this.state)) {
-        await this.pauseForDialogue([
-          { text: 'The clearing feels close, but some keepsakes are still missing.' },
-        ]);
+        await this.pauseForDialogue([{ text: FINAL_LOCKED_LINE }]);
         return;
       }
 
@@ -767,6 +1505,25 @@ export class LocationScene extends Phaser.Scene {
 
   private async startActivity(activityId: string): Promise<void> {
     this.canMove = false;
+    // Activities are full-screen modals running in their OWN Phaser game. Put
+    // this heavy room scene to sleep (no update, no render) while one is mounted,
+    // so only one WebGL scene draws at a time — this roughly halves the render
+    // load for EVERY activity (and lets the activity's own game hit frame). The
+    // completion/cancel callbacks are DOM/other-game driven and wake it again.
+    this.scene.sleep();
+    // Release this game's global key-capture while the modal is up. The activity
+    // runs in a SEPARATE Phaser game; once THIS game's window keydown listener
+    // preventDefaults a captured key (e.g. A/S/D from WASD movement), the other
+    // game's listener bails on `event.defaultPrevented` and never sees the key.
+    // Dropping preventDefault here lets the activity read shared keys (the room
+    // is asleep and needs none). Re-enabled on wake.
+    this.input.keyboard?.disableGlobalCapture();
+    const wakeScene = () => {
+      this.input.keyboard?.enableGlobalCapture();
+      if (this.scene.isSleeping()) {
+        this.scene.wake();
+      }
+    };
     const activity = getActivity(activityId);
     const root = getUiRoot();
     const activityMount = document.createElement('div');
@@ -787,27 +1544,69 @@ export class LocationScene extends Phaser.Scene {
       mount: activityMount,
       onCancel: () => {
         activityMount.remove();
+        wakeScene();
         resumeLocationMusic();
         this.canMove = true;
       },
       onComplete: async (completion) => {
         activityMount.remove();
-        resumeLocationMusic();
+
+        // The terminal ending is the ONLY completion that mounts the persistent
+        // letters screen and must leave the scene asleep with input released. Key
+        // that on the ending activity's OWN identity (its 'ending-light'
+        // keepsake), NOT on locationId 'final-spot' — otherwise any activity that
+        // merely wants to travel INTO final-spot (the origami ritual's travelTo)
+        // would be mistaken for the ending and stranded asleep.
+        const isEndingCompletion = completion.keepsakeId === ENDING_KEEPSAKE_ID;
+
+        // The ending is terminal: the final activity mounts the persistent
+        // letters screen over everything and this room is never returned to.
+        // Keep the scene ASLEEP with global key-capture released and movement
+        // disabled so keys held under the (non-capturing) letters overlay can't
+        // drive the still-live player into a north edge transition — which would
+        // reload into 'clearing' and stomp the ending's 'music-ending' bed. Only
+        // the normal completion path restores control.
+        if (!isEndingCompletion) {
+          wakeScene();
+          resumeLocationMusic();
+        }
         if (this.location.keepsake) {
           playSfx('sfx-keepsake');
         }
         this.state = completeLocation(this.state, completion);
 
-        if (completion.locationId === 'final-spot') {
+        if (isEndingCompletion) {
           this.state = markEndingCompleted(this.state);
+          this.registry.set('runState', this.state);
+          // Terminal: do not wake, do not restore control. Scene stays asleep.
+          return;
         }
 
         this.registry.set('runState', this.state);
+
+        // The awakening is the emotional beat: apply it the instant the violin
+        // completes (the scene woke without re-running create()), fading the
+        // golden shafts + doormat shine in over ~1.5s while ____ is still at
+        // the stand — before the reward letter and any travel. Gated internally
+        // on the final unlock, so only the run-completing keepsake triggers it.
+        this.applyInteriorAwakening({ animate: true });
 
         if (this.location.rewardMessage && this.location.rewardPresentation === 'letter') {
           await showLetterModal(this.location.rewardMessage);
         } else if (this.location.rewardMessage) {
           await this.pauseForDialogue(this.location.rewardMessage);
+        }
+
+        // Some activities deliver the player elsewhere on completion (the origami
+        // ritual carries her INTO the lantern clearing). Restart into that
+        // destination instead of resuming the current location.
+        if (completion.travelTo) {
+          this.scene.restart({
+            locationId: completion.travelTo.locationId,
+            spawnId: completion.travelTo.spawnId,
+            state: this.state,
+          } satisfies LocationSceneData);
+          return;
         }
 
         this.refreshCollectionPanel();

@@ -29,11 +29,23 @@ export type ActivityCompletionInput =
   | LocationKeepsakeCompletionInput
   | OptionalActivityCompletionInput;
 
+/**
+ * Optional transport hint: after an activity completes, deliver the player into
+ * another location/spawn instead of returning them to where they started. Used
+ * by the origami ritual to carry ____ INTO the lantern clearing. Not persisted
+ * — it's consumed by the scene, never by the run-state reducer.
+ */
+export interface ActivityTravelTo {
+  readonly locationId: string;
+  readonly spawnId: string;
+}
+
 export interface LocationKeepsakeCompletionInput {
   readonly locationId: string;
   readonly activityId?: string;
   readonly keepsakeId: string;
   readonly won?: boolean;
+  readonly travelTo?: ActivityTravelTo;
 }
 
 export interface OptionalActivityCompletionInput {
@@ -41,6 +53,7 @@ export interface OptionalActivityCompletionInput {
   readonly activityId: string;
   readonly keepsakeId?: never;
   readonly won?: boolean;
+  readonly travelTo?: ActivityTravelTo;
 }
 
 export type CompletionInput = LocationKeepsakeCompletionInput;
@@ -158,6 +171,18 @@ export function isFinalSpotUnlocked(state: RunState): boolean {
   return REQUIRED_FINAL_KEEPSAKE_IDS.every((keepsakeId) =>
     hasKeepsake(state, keepsakeId),
   );
+}
+
+/** The origami ritual that folds the three letters into the boat. */
+export const FOLD_RITUAL_ACTIVITY_ID = 'fold-the-letters';
+
+/**
+ * True once ____ has folded the boat at the clearing shore. The primary way to
+ * the ending is the ritual; once it's done the clearing's gated south edge also
+ * opens as a fallback path.
+ */
+export function isBoatFolded(state: RunState): boolean {
+  return hasActivityCompleted(state, FOLD_RITUAL_ACTIVITY_ID);
 }
 
 export function markEndingCompleted(state: RunState): RunState {

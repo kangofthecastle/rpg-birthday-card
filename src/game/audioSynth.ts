@@ -820,6 +820,80 @@ function sfxDefuseTick(ctx: AudioContext, output: AudioNode, { rate, volume }: S
   return Math.max((end - start) * 1000, 30);
 }
 
+function sfxDefuseCheckpoint(ctx: AudioContext, output: AudioNode, { rate, volume }: SfxSynthOptions): number {
+  // Chunky mechanical "clunk" — the half-defuse latching home. A short low
+  // thunk with a click of noise on top.
+  const start = ctx.currentTime;
+  playNoiseBurst(ctx, output, {
+    seconds: 0.03,
+    filterType: 'bandpass',
+    filterFreq: 1400,
+    filterQ: 1.4,
+    gain: 0.16 * volume,
+    attackMs: 1,
+    releaseMs: 40,
+    startAt: start,
+  });
+  const end = playTone(ctx, output, {
+    type: 'square',
+    frequency: 300 * rate,
+    endFrequency: 180 * rate,
+    gain: 0.22 * volume,
+    attackMs: 2,
+    holdMs: 30,
+    releaseMs: 90,
+    startAt: start,
+  });
+  return (end - start) * 1000;
+}
+
+function sfxDefuseComplete(ctx: AudioContext, output: AudioNode, { rate, volume }: SfxSynthOptions): number {
+  // Rising resolve sting — three notes climbing to a bright, held top.
+  const start = ctx.currentTime;
+  const notes = [440.0, 587.33, 880.0];
+  let latestEnd = start;
+  notes.forEach((frequency, index) => {
+    const noteStart = start + index * 0.08;
+    const last = index === notes.length - 1;
+    const end = playTone(ctx, output, {
+      type: 'triangle',
+      frequency: frequency * rate,
+      gain: 0.3 * volume,
+      attackMs: 3,
+      holdMs: last ? 160 : 60,
+      releaseMs: last ? 320 : 120,
+      startAt: noteStart,
+    });
+    latestEnd = Math.max(latestEnd, end);
+  });
+  return (latestEnd - start) * 1000;
+}
+
+function sfxDetonate(ctx: AudioContext, output: AudioNode, { rate, volume }: SfxSynthOptions): number {
+  // Brief low boom — a pitch-dropping sine thud under a filtered noise blast.
+  const start = ctx.currentTime;
+  playNoiseBurst(ctx, output, {
+    seconds: 0.22,
+    filterType: 'lowpass',
+    filterFreq: 700,
+    gain: 0.32 * volume,
+    attackMs: 2,
+    releaseMs: 220,
+    startAt: start,
+  });
+  const end = playTone(ctx, output, {
+    type: 'sine',
+    frequency: 150 * rate,
+    endFrequency: 40 * rate,
+    gain: 0.4 * volume,
+    attackMs: 2,
+    holdMs: 40,
+    releaseMs: 260,
+    startAt: start,
+  });
+  return (end - start) * 1000;
+}
+
 function sfxClutch(ctx: AudioContext, output: AudioNode, { rate, volume }: SfxSynthOptions): number {
   // Bigger, brighter ascending run than the keepsake chime.
   const start = ctx.currentTime;
@@ -885,6 +959,333 @@ function sfxEndingSwell(ctx: AudioContext, output: AudioNode, { rate, volume }: 
   return (latestEnd - start) * 1000;
 }
 
+function sfxDevelopLock(ctx: AudioContext, output: AudioNode, { rate, volume }: SfxSynthOptions): number {
+  // Soft two-note "settle" chime for a successful develop lock — warmer and
+  // gentler than the keepsake fanfare: a perfect fifth, E5 → B5.
+  const start = ctx.currentTime;
+  const notes = [659.25, 987.77];
+  let latestEnd = start;
+  notes.forEach((frequency, index) => {
+    const end = playTone(ctx, output, {
+      type: 'sine',
+      frequency: frequency * rate,
+      gain: 0.24 * volume,
+      attackMs: 5,
+      holdMs: 70,
+      releaseMs: 300,
+      startAt: start + index * 0.08,
+    });
+    latestEnd = Math.max(latestEnd, end);
+  });
+  return (latestEnd - start) * 1000;
+}
+
+function sfxDevelopMiss(ctx: AudioContext, output: AudioNode, { rate, volume }: SfxSynthOptions): number {
+  // Gentle, non-punishing "almost" — a single soft muted triangle blip that
+  // eases down a whole tone, deliberately quiet.
+  const start = ctx.currentTime;
+  const end = playTone(ctx, output, {
+    type: 'triangle',
+    frequency: 392.0 * rate,
+    endFrequency: 349.23 * rate,
+    gain: 0.16 * volume,
+    attackMs: 6,
+    holdMs: 40,
+    releaseMs: 150,
+    startAt: start,
+  });
+  return (end - start) * 1000;
+}
+
+// ---------------------------------------------------------------------------
+// Violin tones — the voice of "the piece on the stand" activity
+// ---------------------------------------------------------------------------
+
+export interface ViolinToneOptions {
+  /** Pitch in Hz. */
+  frequency: number;
+  /** How long the note sustains before its release tail, in ms. */
+  durationMs: number;
+  /** Peak gain (0..1-ish); defaults to a warm, unobtrusive level. */
+  gain?: number;
+  startAt?: number;
+}
+
+const VIOLIN_ATTACK_MS = 55;
+const VIOLIN_RELEASE_MS = 380;
+const VIOLIN_VIBRATO_HZ = 5.4;
+const VIOLIN_VIBRATO_CENTS = 7;
+
+/** A warm, singing violin-ish note: a sawtooth body blended with a triangle for
+ * roundness, gentle vibrato, a soft bowed attack and a ringing release, run
+ * through a lowpass so it never gets scratchy. Returns the note's approximate
+ * total duration in ms (sustain + release) so the caller can schedule cleanup.
+ * This carries the whole scene, so it's tuned to be pleasant on repeat. */
+export function playViolinTone(
+  ctx: AudioContext,
+  output: AudioNode,
+  options: ViolinToneOptions,
+): number {
+  const {
+    frequency,
+    durationMs,
+    gain = 0.26,
+    startAt = ctx.currentTime,
+  } = options;
+
+  const safeFrequency = Math.max(frequency, 1);
+  const sustainSeconds = Math.max(durationMs, 60) / 1000;
+  const attackEnd = startAt + VIOLIN_ATTACK_MS / 1000;
+  const sustainEnd = startAt + sustainSeconds;
+  const releaseEnd = sustainEnd + VIOLIN_RELEASE_MS / 1000;
+
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.value = Math.min(6000, safeFrequency * 6);
+  filter.Q.value = 0.7;
+  filter.connect(output);
+
+  const envelope = ctx.createGain();
+  envelope.gain.value = 0;
+  envelope.connect(filter);
+  envelope.gain.setValueAtTime(0, startAt);
+  envelope.gain.linearRampToValueAtTime(gain, attackEnd);
+  // A touch of natural decay into the sustain, then a long ring-out.
+  envelope.gain.linearRampToValueAtTime(gain * 0.82, sustainEnd);
+  envelope.gain.linearRampToValueAtTime(0.0001, releaseEnd);
+
+  // Gentle vibrato shared by both voices.
+  const vibrato = ctx.createOscillator();
+  vibrato.type = 'sine';
+  vibrato.frequency.value = VIOLIN_VIBRATO_HZ;
+  const vibratoDepth = ctx.createGain();
+  // Depth in Hz for a small cents-based wobble, ramping in after the attack so
+  // the onset is clean.
+  const depthHz = safeFrequency * (Math.pow(2, VIOLIN_VIBRATO_CENTS / 1200) - 1);
+  vibratoDepth.gain.value = 0;
+  vibratoDepth.gain.setValueAtTime(0, startAt);
+  vibratoDepth.gain.linearRampToValueAtTime(depthHz, attackEnd + 0.12);
+  vibrato.connect(vibratoDepth);
+  vibrato.start(startAt);
+  vibrato.stop(releaseEnd + 0.02);
+
+  const body = ctx.createOscillator();
+  body.type = 'sawtooth';
+  body.frequency.value = safeFrequency;
+  const bodyGain = ctx.createGain();
+  bodyGain.gain.value = 0.55;
+  body.connect(bodyGain);
+  bodyGain.connect(envelope);
+  vibratoDepth.connect(body.frequency);
+
+  const sweet = ctx.createOscillator();
+  sweet.type = 'triangle';
+  sweet.frequency.value = safeFrequency;
+  const sweetGain = ctx.createGain();
+  sweetGain.gain.value = 0.6;
+  sweet.connect(sweetGain);
+  sweetGain.connect(envelope);
+  vibratoDepth.connect(sweet.frequency);
+
+  body.start(startAt);
+  sweet.start(startAt);
+  body.stop(releaseEnd + 0.02);
+  sweet.stop(releaseEnd + 0.02);
+
+  const cleanup = () => {
+    body.disconnect();
+    sweet.disconnect();
+    bodyGain.disconnect();
+    sweetGain.disconnect();
+    vibrato.disconnect();
+    vibratoDepth.disconnect();
+    envelope.disconnect();
+    filter.disconnect();
+  };
+  body.onended = cleanup;
+
+  return (releaseEnd - startAt) * 1000;
+}
+
+function sfxViolinWaver(ctx: AudioContext, output: AudioNode, { rate, volume }: SfxSynthOptions): number {
+  // The "not quite" — a soft, breathy detuned wobble that sags a semitone and
+  // fades. Deliberately gentle and unpunishing; the phrase just waits.
+  const start = ctx.currentTime;
+  const base = 349.23 * rate; // F4-ish
+  const end = playTone(ctx, output, {
+    type: 'triangle',
+    frequency: base,
+    endFrequency: base * Math.pow(2, -1 / 12),
+    gain: 0.14 * volume,
+    attackMs: 12,
+    holdMs: 90,
+    releaseMs: 220,
+    startAt: start,
+  });
+  // A quiet, slightly detuned partner gives the wavering, out-of-tune feel.
+  playTone(ctx, output, {
+    type: 'sine',
+    frequency: base * 1.012,
+    endFrequency: base * Math.pow(2, -1 / 12) * 1.012,
+    gain: 0.08 * volume,
+    attackMs: 12,
+    holdMs: 90,
+    releaseMs: 220,
+    startAt: start,
+  });
+  return (end - start) * 1000;
+}
+
+function sfxViolinSwell(ctx: AudioContext, output: AudioNode, { rate, volume }: SfxSynthOptions): number {
+  // The full arrangement pouring in at the finale: a warm D-major chord that
+  // blooms and holds under ____'s last notes (root, fifth, octave, third, and
+  // a high shimmer), each swelling on its own long attack. A one-shot flourish,
+  // distinct from any looping bed.
+  const start = ctx.currentTime;
+  const notes = [146.83, 220.0, 293.66, 369.99, 587.33]; // D3 A3 D4 F#4 D5
+  let latestEnd = start;
+  notes.forEach((frequency, index) => {
+    const end = playTone(ctx, output, {
+      type: index % 2 === 0 ? 'triangle' : 'sine',
+      frequency: frequency * rate,
+      gain: (0.16 - index * 0.015) * volume,
+      attackMs: 900 + index * 340,
+      holdMs: 1500,
+      releaseMs: 1700,
+      startAt: start + index * 0.05,
+    });
+    latestEnd = Math.max(latestEnd, end);
+  });
+  return (latestEnd - start) * 1000;
+}
+
+function sfxPaperFold(ctx: AudioContext, output: AudioNode, { rate, volume }: SfxSynthOptions): number {
+  // A soft, crisp crease: a very short bandpassed noise "shff" with a tiny
+  // low click underneath. Deliberately gentle and papery.
+  const start = ctx.currentTime;
+  playNoiseBurst(ctx, output, {
+    seconds: 0.14,
+    filterType: 'bandpass',
+    filterFreq: 2600 * rate,
+    filterQ: 0.8,
+    gain: 0.13 * volume,
+    attackMs: 3,
+    releaseMs: 120,
+    startAt: start,
+  });
+  const end = playTone(ctx, output, {
+    type: 'triangle',
+    frequency: 220 * rate,
+    endFrequency: 150 * rate,
+    gain: 0.05 * volume,
+    attackMs: 2,
+    holdMs: 8,
+    releaseMs: 50,
+    startAt: start,
+  });
+  return Math.max((end - start) * 1000, 140);
+}
+
+function sfxBoatExpand(ctx: AudioContext, output: AudioNode, { rate, volume }: SfxSynthOptions): number {
+  // A gentle pop that blooms: a soft rising sine "whoomp" plus a warm two-note
+  // chime opening up, as the flat boat pops into shape and the lantern catches.
+  const start = ctx.currentTime;
+  const bloom = playTone(ctx, output, {
+    type: 'sine',
+    frequency: 180 * rate,
+    endFrequency: 340 * rate,
+    gain: 0.2 * volume,
+    attackMs: 30,
+    holdMs: 60,
+    releaseMs: 320,
+    startAt: start,
+  });
+  const notes = [523.25, 784.0]; // C5, G5
+  let latestEnd = bloom;
+  notes.forEach((frequency, index) => {
+    const end = playTone(ctx, output, {
+      type: 'sine',
+      frequency: frequency * rate,
+      gain: 0.16 * volume,
+      attackMs: 6,
+      holdMs: 70,
+      releaseMs: 340,
+      startAt: start + 0.06 + index * 0.1,
+    });
+    latestEnd = Math.max(latestEnd, end);
+  });
+  return (latestEnd - start) * 1000;
+}
+
+function sfxSailHoist(ctx: AudioContext, output: AudioNode, { rate, volume }: SfxSynthOptions): number {
+  // Cloth catching air + a rope creak: a short lowpassed noise "fwoomp" that
+  // swells (canvas filling) with a faint low wooden creak beneath.
+  const start = ctx.currentTime;
+  playNoiseBurst(ctx, output, {
+    seconds: 0.5,
+    filterType: 'lowpass',
+    filterFreq: 900 * rate,
+    filterQ: 0.9,
+    gain: 0.12 * volume,
+    attackMs: 90,
+    releaseMs: 340,
+    startAt: start,
+  });
+  const creak = playTone(ctx, output, {
+    type: 'sawtooth',
+    frequency: 150 * rate,
+    endFrequency: 116 * rate,
+    gain: 0.04 * volume,
+    attackMs: 30,
+    holdMs: 40,
+    releaseMs: 180,
+    startAt: start + 0.02,
+  });
+  return Math.max((creak - start) * 1000, 500);
+}
+function sfxLanternKindle(ctx: AudioContext, output: AudioNode, { rate, volume }: SfxSynthOptions): number {
+  // A warm bloom of light: a soft rising sine that opens up, plus a gentle
+  // filtered noise "breath" as the glow catches through the rolled paper.
+  const start = ctx.currentTime;
+  const bloom = playTone(ctx, output, {
+    type: 'sine',
+    frequency: 196 * rate,
+    endFrequency: 392 * rate,
+    gain: 0.16 * volume,
+    attackMs: 120,
+    holdMs: 120,
+    releaseMs: 520,
+    startAt: start,
+  });
+  playNoiseBurst(ctx, output, {
+    seconds: 0.7,
+    filterType: 'bandpass',
+    filterFreq: 1400 * rate,
+    filterQ: 0.6,
+    gain: 0.05 * volume,
+    attackMs: 200,
+    releaseMs: 460,
+    startAt: start,
+  });
+  return (bloom - start) * 1000;
+}
+function sfxWaterLap(ctx: AudioContext, output: AudioNode, { rate, volume }: SfxSynthOptions): number {
+  // A short, soft lap of water: a lowpassed noise swell that rises and falls,
+  // used during the sail-away. Short enough to retrigger for a loose lapping.
+  const start = ctx.currentTime;
+  playNoiseBurst(ctx, output, {
+    seconds: 0.9,
+    filterType: 'lowpass',
+    filterFreq: 620 * rate,
+    filterQ: 0.7,
+    gain: 0.12 * volume,
+    attackMs: 320,
+    releaseMs: 520,
+    startAt: start,
+  });
+  return 900;
+}
+
 export const SFX_SYNTHS: Record<SfxKey, SfxSynthFactory> = {
   'sfx-interact': sfxInteract,
   'sfx-dialogue-advance': sfxDialogueAdvance,
@@ -896,7 +1297,19 @@ export const SFX_SYNTHS: Record<SfxKey, SfxSynthFactory> = {
   'sfx-heart-loss': sfxHeartLoss,
   'sfx-spike-beep': sfxSpikeBeep,
   'sfx-defuse-tick': sfxDefuseTick,
+  'sfx-defuse-checkpoint': sfxDefuseCheckpoint,
+  'sfx-defuse-complete': sfxDefuseComplete,
+  'sfx-detonate': sfxDetonate,
   'sfx-clutch': sfxClutch,
   'sfx-boot-key': sfxBootKey,
   'sfx-ending-swell': sfxEndingSwell,
+  'sfx-develop-lock': sfxDevelopLock,
+  'sfx-develop-miss': sfxDevelopMiss,
+  'sfx-violin-waver': sfxViolinWaver,
+  'sfx-violin-swell': sfxViolinSwell,
+  'sfx-paper-fold': sfxPaperFold,
+  'sfx-sail-hoist': sfxSailHoist,
+  'sfx-boat-expand': sfxBoatExpand,
+  'sfx-lantern-kindle': sfxLanternKindle,
+  'sfx-water-lap': sfxWaterLap,
 };

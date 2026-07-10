@@ -2,8 +2,8 @@ import { expect, test } from '@playwright/test';
 
 // Dressed rooms hide the debug rects, so the exit is shown as a diegetic
 // doormat. This walks ____ from her spawn to that doormat and out to the
-// Starting Path, proving the exit is findable and the E-prompt transitions.
-test('walks from spawn to the doormat and steps outside to the Starting Path', async ({
+// neighbourhood, proving the exit is findable and the E-prompt transitions.
+test('walks from spawn to the doormat and steps outside to the neighbourhood', async ({
   page,
 }) => {
   await page.goto('/?testMode=1&locationId=recipient-house&spawnId=front-door');
@@ -41,7 +41,7 @@ test('walks from spawn to the doormat and steps outside to the Starting Path', a
     await page.keyboard.press('E', { delay: 30 });
     await page.waitForTimeout(120);
 
-    if ((await page.locator('body').getAttribute('data-location-id')) === 'entry') {
+    if ((await page.locator('body').getAttribute('data-location-id')) === 'main-outside') {
       exited = true;
       break;
     }
@@ -55,6 +55,6 @@ test('walks from spawn to the doormat and steps outside to the Starting Path', a
   }
 
   expect(exited).toBe(true);
-  // The location label has changed: we are now on the Starting Path.
-  await expect(page.locator('body')).toHaveAttribute('data-location-id', 'entry');
+  // The location label has changed: we are now outside.
+  await expect(page.locator('body')).toHaveAttribute('data-location-id', 'main-outside');
 });

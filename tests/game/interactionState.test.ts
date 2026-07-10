@@ -8,6 +8,7 @@ import {
   createInitialRunState,
   markBeatSeen,
   FRIEND_KEEPSAKE_IDS,
+  REQUIRED_FINAL_KEEPSAKE_IDS,
   type RunState,
 } from '../../src/game/runState';
 import type { LocationEnterBeat } from '../../src/content/types';
@@ -33,6 +34,19 @@ describe('isInteractionLocked', () => {
 
     expect(isInteractionLocked(gated, createInitialRunState('recipient-house'))).toBe(true);
     expect(isInteractionLocked(gated, withAllFriendKeepsakes())).toBe(false);
+  });
+
+  it('requiresAllKeepsakes stays locked until EVERY letter is held', () => {
+    const gated = { requiresAllKeepsakes: true } as const;
+
+    // Both friend letters, but not ____'s own → still locked (needs all three).
+    expect(isInteractionLocked(gated, withAllFriendKeepsakes())).toBe(true);
+
+    let state = createInitialRunState('clearing');
+    for (const keepsakeId of REQUIRED_FINAL_KEEPSAKE_IDS) {
+      state = completeLocation(state, { locationId: `loc-${keepsakeId}`, keepsakeId });
+    }
+    expect(isInteractionLocked(gated, state)).toBe(false);
   });
 });
 

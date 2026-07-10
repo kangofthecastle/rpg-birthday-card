@@ -1,4 +1,10 @@
-export type LocationKind = 'entry' | 'friend' | 'final' | 'home';
+export type LocationKind = 'outdoor' | 'friend' | 'final' | 'home';
+/**
+ * How a location's map space is drawn to the screen. `iso` is the 2.5D diamond
+ * projection used by interiors; `flat` is a plain top-down orthogonal view
+ * (screen coords == map coords) used by the outdoor areas. Defaults to `iso`.
+ */
+export type ProjectionMode = 'iso' | 'flat';
 export type InteractionKind = 'dialogue' | 'activity' | 'easterEgg' | 'lockedExit';
 export type RewardPresentation = 'dialogue' | 'letter';
 
@@ -37,6 +43,24 @@ export interface LocationExit {
   readonly requiresFinalUnlock?: boolean;
 }
 
+/** Which side of the map an edge exit lives on. */
+export type MapEdge = 'north' | 'south' | 'east' | 'west';
+
+/**
+ * An edge-to-edge outdoor transition: walking off `edge` of this map arrives on
+ * `destinationEdge` of the destination area, at the same proportional position
+ * along that edge. No E-press; triggered automatically by proximity. When
+ * `requiresFinalUnlock` is set the edge stays blocked (with a nudge back) until
+ * every keepsake is collected.
+ */
+export interface LocationEdgeExit {
+  readonly id: string;
+  readonly edge: MapEdge;
+  readonly destinationLocationId: string;
+  readonly destinationEdge: MapEdge;
+  readonly requiresFinalUnlock?: boolean;
+}
+
 interface BaseLocationInteraction {
   readonly id: string;
   readonly label: string;
@@ -47,6 +71,12 @@ interface BaseLocationInteraction {
    * PC is dark until both friend keepsakes are in hand).
    */
   readonly requiresAllFriendKeepsakes?: boolean;
+  /**
+   * Gate on EVERY collected letter (both friends' plus ____'s own), not just
+   * the two friend letters. Used by the clearing shore's origami ritual, which
+   * needs all three letters in hand. Until then it shows `lockedDialogue`.
+   */
+  readonly requiresAllKeepsakes?: boolean;
   readonly lockedDialogue?: readonly DialogueLine[];
 }
 
@@ -67,6 +97,8 @@ export type LocationInteraction = ActivityLocationInteraction | DialogueLocation
 export interface LocationDefinition {
   readonly id: string;
   readonly kind: LocationKind;
+  /** Screen projection for this map. Defaults to 'iso' when omitted. */
+  readonly projection?: ProjectionMode;
   readonly title: string;
   readonly mapKey: string;
   readonly mapUrl: string;
@@ -76,6 +108,8 @@ export interface LocationDefinition {
   readonly rewardMessage?: readonly DialogueLine[];
   readonly keepsake?: KeepsakeDefinition;
   readonly exits: readonly LocationExit[];
+  /** Edge-to-edge transitions to adjacent outdoor areas (walk off the side). */
+  readonly edgeExits?: readonly LocationEdgeExit[];
   readonly interactions: readonly LocationInteraction[];
   /** One-time entry dialogues (cold-open intro, warm return-home beat). */
   readonly enterBeats?: readonly LocationEnterBeat[];

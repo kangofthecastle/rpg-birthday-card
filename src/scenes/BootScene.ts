@@ -8,6 +8,13 @@ import {
   type RunState,
 } from '../game/runState';
 import { SceneKeys } from './sceneKeys';
+import {
+  EXTERIOR_ASSET_NAMES,
+  EXTERIOR_SOURCE_HEIGHT,
+  EXTERIOR_SOURCE_WIDTH,
+  exteriorTextureKey,
+} from '../content/outdoorScenery';
+import { isImageUrl } from '../game/assetProbe';
 
 export class BootScene extends Phaser.Scene {
   constructor() {
@@ -38,7 +45,42 @@ export class BootScene extends Phaser.Scene {
 
   create(): void {
     createTempTextures(this);
+    // Resolve house exteriors (PNG-preferred, SVG fallback) before entering the
+    // world, so an outdoor scene always has its textures ready.
+    void this.loadExteriors().then(() => this.startWorld());
+  }
 
+  // House exteriors: prefer a Codex-generated PNG, fall back to the hand-authored
+  // placeholder SVG. Probing existence up front (rather than letting a missing
+  // PNG error in the loader) keeps the console clean; dropping a <name>.png into
+  // public/assets/exteriors/ later is picked up with zero code changes.
+  private async loadExteriors(): Promise<void> {
+    const resolved = await Promise.all(
+      EXTERIOR_ASSET_NAMES.map(async (name) => {
+        const png = `/assets/exteriors/${name}.png`;
+        const usePng = await isImageUrl(png);
+        return { name, url: usePng ? png : `/assets/exteriors/${name}.svg` };
+      }),
+    );
+
+    await new Promise<void>((resolve) => {
+      for (const { name, url } of resolved) {
+        const key = exteriorTextureKey(name);
+        if (url.endsWith('.svg')) {
+          this.load.svg(key, url, {
+            width: EXTERIOR_SOURCE_WIDTH,
+            height: EXTERIOR_SOURCE_HEIGHT,
+          });
+        } else {
+          this.load.image(key, url);
+        }
+      }
+      this.load.once(Phaser.Loader.Events.COMPLETE, () => resolve());
+      this.load.start();
+    });
+  }
+
+  private startWorld(): void {
     const params = new URLSearchParams(window.location.search);
     const testMode = params.get('testMode') === '1';
     const locationId = testMode ? params.get('locationId') ?? 'recipient-house' : 'recipient-house';

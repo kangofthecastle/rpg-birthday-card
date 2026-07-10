@@ -30,7 +30,10 @@ interface TiledLayer {
 }
 
 const mapFiles = [
-  'entry.tmj',
+  'main-outside.tmj',
+  'friendtwo-yard.tmj',
+  'friendone-yard.tmj',
+  'clearing.tmj',
   'recipient-house.tmj',
   'friend-a.tmj',
   'friend-b.tmj',
@@ -134,26 +137,75 @@ describe('dev maps', () => {
     );
   });
 
-  it('gives entry a matching return-home exit and spawn', () => {
-    const map = JSON.parse(
-      readFileSync(join(process.cwd(), 'public', 'maps', 'entry.tmj'), 'utf8'),
-    ) as DevMap;
-    const spawns = map.layers.find(
-      (layer) => layer.type === 'objectgroup' && layer.name === 'Spawns',
-    );
-    const exits = map.layers.find(
-      (layer) => layer.type === 'objectgroup' && layer.name === 'Exits',
-    );
+  it('gives main-outside the ____ door, its return spawn, and the signpost', () => {
+    const map = readMap('main-outside.tmj');
+    const spawns = objectLayer(map, 'Spawns');
+    const exits = objectLayer(map, 'Exits');
+    const interactables = objectLayer(map, 'Interactables');
 
-    expect(spawns?.objects).toEqual(
+    expect(map.width).toBe(30);
+    expect(map.height).toBe(18);
+    expect(spawns).toEqual(
       expect.arrayContaining([
+        expect.objectContaining({ name: 'start', type: 'spawn' }),
         expect.objectContaining({ name: 'from-recipient-house', type: 'spawn' }),
       ]),
     );
-    expect(exits?.objects).toEqual(
+    expect(exits).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ name: 'to-recipient-house', type: 'exit' }),
       ]),
     );
+    expect(interactables).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'main-signpost', type: 'dialogue' }),
+      ]),
+    );
+  });
+
+  it('carves the border wall along every open edge and keeps closed sides solid', () => {
+    // main-outside opens west, east and south (not north).
+    const map = readMap('main-outside.tmj');
+    const collision = collisionLayer(map);
+    const at = (x: number, y: number) => collision[y * map.width + x];
+    const midY = Math.floor(map.height / 2);
+    const midX = Math.floor(map.width / 2);
+
+    expect(at(0, midY)).toBe(0); // west open
+    expect(at(map.width - 1, midY)).toBe(0); // east open
+    expect(at(midX, map.height - 1)).toBe(0); // south open
+    expect(at(midX, 0)).not.toBe(0); // north closed
+    expect(at(0, 0)).not.toBe(0); // corner stays solid
+  });
+
+  it('opens both the clearing north and south edges (the gated way down)', () => {
+    const map = readMap('clearing.tmj');
+    const collision = collisionLayer(map);
+    const at = (x: number, y: number) => collision[y * map.width + x];
+    const midX = Math.floor(map.width / 2);
+
+    expect(at(midX, 0)).toBe(0); // north open (to main-outside)
+    expect(at(midX, map.height - 1)).toBe(0); // south open (gated, to final-spot)
   });
 });
+
+function readMap(file: string): DevMap {
+  return JSON.parse(
+    readFileSync(join(process.cwd(), 'public', 'maps', file), 'utf8'),
+  ) as DevMap;
+}
+
+function objectLayer(map: DevMap, name: string): readonly TiledObject[] | undefined {
+  return map.layers.find((layer) => layer.type === 'objectgroup' && layer.name === name)
+    ?.objects;
+}
+
+function collisionLayer(map: DevMap): readonly number[] {
+  const layer = map.layers.find(
+    (layer) => layer.type === 'tilelayer' && layer.name === 'Collision',
+  ) as (TiledLayer & { data?: readonly number[] }) | undefined;
+  if (!layer?.data) {
+    throw new Error('Missing Collision layer');
+  }
+  return layer.data;
+}

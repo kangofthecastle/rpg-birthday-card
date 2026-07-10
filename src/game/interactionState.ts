@@ -1,11 +1,26 @@
 import type { LocationEnterBeat } from '../content/types';
-import { hasAllFriendKeepsakes, hasSeenBeat, type RunState } from './runState';
+import {
+  hasAllFriendKeepsakes,
+  hasSeenBeat,
+  isFinalSpotUnlocked,
+  type RunState,
+} from './runState';
 
-/** A friend-keepsake-gated interaction (e.g. ____'s PC) that isn't unlocked yet. */
+/**
+ * A keepsake-gated interaction that isn't unlocked yet. `requiresAllKeepsakes`
+ * needs every letter (the clearing shore ritual); `requiresAllFriendKeepsakes`
+ * needs only the two friend letters (e.g. ____'s PC / violin).
+ */
 export function isInteractionLocked(
-  interaction: { readonly requiresAllFriendKeepsakes?: boolean },
+  interaction: {
+    readonly requiresAllFriendKeepsakes?: boolean;
+    readonly requiresAllKeepsakes?: boolean;
+  },
   state: RunState,
 ): boolean {
+  if (interaction.requiresAllKeepsakes && !isFinalSpotUnlocked(state)) {
+    return true;
+  }
   return Boolean(interaction.requiresAllFriendKeepsakes) && !hasAllFriendKeepsakes(state);
 }
 

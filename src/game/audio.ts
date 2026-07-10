@@ -26,7 +26,8 @@
 // All exported functions are safe no-ops before `initAudio()` has run, and
 // after `initAudio()` if no AudioContext is available in this environment.
 
-import { MUSIC_SYNTHS, SFX_SYNTHS } from './audioSynth';
+import { MUSIC_SYNTHS, SFX_SYNTHS, playViolinTone } from './audioSynth';
+import { clamp01 } from './mathUtils';
 
 // ---------------------------------------------------------------------------
 // Key registry
@@ -52,9 +53,21 @@ export const SFX_KEYS = [
   'sfx-heart-loss',
   'sfx-spike-beep',
   'sfx-defuse-tick',
+  'sfx-defuse-checkpoint',
+  'sfx-defuse-complete',
+  'sfx-detonate',
   'sfx-clutch',
   'sfx-boot-key',
   'sfx-ending-swell',
+  'sfx-develop-lock',
+  'sfx-develop-miss',
+  'sfx-violin-waver',
+  'sfx-violin-swell',
+  'sfx-paper-fold',
+  'sfx-sail-hoist',
+  'sfx-boat-expand',
+  'sfx-lantern-kindle',
+  'sfx-water-lap',
 ] as const;
 
 export const AUDIO_KEYS = [...MUSIC_KEYS, ...SFX_KEYS] as const;
@@ -175,6 +188,12 @@ export function playMusic(key: MusicKey, options: PlayMusicOptions = {}): void {
   }
   if (state.currentBed?.key === key) {
     return;
+  }
+
+  // Expose the active bed key for tests/observability (the ending regression
+  // smoke asserts the ending's bed is not stomped by a stray edge transition).
+  if (typeof document !== 'undefined') {
+    document.body.dataset.musicKey = key;
   }
 
   const fadeMs = options.fadeMs ?? DEFAULT_MUSIC_FADE_MS;
@@ -300,6 +319,41 @@ export function playSfx(key: SfxKey, options: PlaySfxOptions = {}): void {
   });
 }
 
+export interface PlayViolinNoteOptions {
+  volume?: number;
+}
+
+/** Plays a single sustained, warm violin-ish note at an arbitrary frequency
+ * through the SFX bus. Used by "the piece on the stand" activity so each pitch
+ * ____ hears and echoes rings out cleanly. Safe before init / without audio
+ * support (no-op). Falls through to the synthesized tone in `audioSynth.ts`;
+ * there is no per-note file (the drop-in `sfx-violin-*` recordings cover the
+ * miss and the final swell instead). */
+export function playViolinNote(
+  frequency: number,
+  durationMs: number,
+  options: PlayViolinNoteOptions = {},
+): void {
+  const ctx = state.ctx;
+  const sfxGain = state.sfxGain;
+  if (!ctx || !sfxGain) {
+    return;
+  }
+
+  const voiceGain = ctx.createGain();
+  voiceGain.gain.value = clamp01(options.volume ?? 1);
+  voiceGain.connect(sfxGain);
+
+  const durationEstimateMs = playViolinTone(ctx, voiceGain, { frequency, durationMs });
+  setTimeout(() => {
+    try {
+      voiceGain.disconnect();
+    } catch {
+      // already disconnected
+    }
+  }, durationEstimateMs + SFX_CLEANUP_SLACK_MS);
+}
+
 /** Whether audio is currently muted. Reflects the persisted preference even
  * before `initAudio()` has run. */
 export function isMuted(): boolean {
@@ -376,10 +430,6 @@ function resolveAudioContextCtor(): (new () => AudioContext) | undefined {
 
 function dbToGain(db: number): number {
   return Math.pow(10, db / 20);
-}
-
-function clamp01(value: number): number {
-  return Math.min(1, Math.max(0, value));
 }
 
 function fadeGainTo(ctx: AudioContext, param: AudioParam, from: number, to: number, ms: number): void {

@@ -45,7 +45,7 @@ describe('renderCollectionPanel', () => {
       'Glowing &lt;img src=x onerror=alert(1)&gt; Koi Scale',
     );
     expect(markup).not.toContain('<img src=x');
-    expect(markup).toContain('Hidden keepsake');
+    expect(markup).toContain('A letter, still to come');
   });
 
   it('renders a keepsake icon image for collected keepsakes', () => {

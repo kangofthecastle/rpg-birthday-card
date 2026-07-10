@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { RECIPIENT_SPRITE } from '../assets/recipientSpriteConfig';
 import { projectToIso, type IsoOrigin, type IsoPoint } from './isometricProjection';
+import { fnv1a, mulberry32 } from './rng';
 import {
   getPropColliders,
   type PropColliderRect,
@@ -21,6 +22,13 @@ const FLOOR_SKIRT_DEPTH = -59;
 const DOORMAT_DEPTH = -26;
 const DOORMAT_GLOW_DEPTH = -27;
 
+// The post-violin "awakening" overlay (golden window shafts + doormat shine)
+// draws as one group above the floor/rug/wall props but below every y-sorted
+// billboard (the player and floor-standing props all depth-sort by their
+// projected screen Y, hundreds of px positive), so warm light passes BEHIND
+// ____ and the furniture rather than washing over her face.
+const AWAKENING_DEPTH = -18;
+
 // The player yardstick: how tall ____'s sprite actually reads on screen. Her
 // 256px frame is drawn at RECIPIENT_SPRITE.scale, and the visible character fills
 // ~0.88 of that frame height (measured in-scene: ~102px of the 115px frame).
@@ -29,10 +37,44 @@ const RECIPIENT_VISIBLE_FRACTION = 0.88;
 const PLAYER_VISUAL_HEIGHT_PX =
   RECIPIENT_SPRITE.frameHeight * RECIPIENT_SPRITE.scale * RECIPIENT_VISIBLE_FRACTION;
 
+/** Screen-space extent union of rendered content, for deriving camera bounds. */
+export interface ScreenBounds {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+
 export interface RoomRenderResult {
   readonly objects: readonly Phaser.GameObjects.GameObject[];
   /** Floor colliders for solid props, in map coordinates. */
   readonly colliders: readonly PropColliderRect[];
+  /** Screen-space bounding box of everything rendered (may be negative). */
+  readonly contentBounds: ScreenBounds;
+}
+
+function emptyBounds(): ScreenBounds {
+  return { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+}
+
+function growBounds(bounds: ScreenBounds, x: number, y: number): void {
+  bounds.minX = Math.min(bounds.minX, x);
+  bounds.minY = Math.min(bounds.minY, y);
+  bounds.maxX = Math.max(bounds.maxX, x);
+  bounds.maxY = Math.max(bounds.maxY, y);
+}
+
+/** Unions a Phaser display object's world bounds into a ScreenBounds. */
+export function growBoundsFromObject(
+  bounds: ScreenBounds,
+  object: Phaser.GameObjects.GameObject & { getBounds?: () => Phaser.Geom.Rectangle },
+): void {
+  if (typeof object.getBounds !== 'function') {
+    return;
+  }
+  const rect = object.getBounds();
+  growBounds(bounds, rect.x, rect.y);
+  growBounds(bounds, rect.x + rect.width, rect.y + rect.height);
 }
 
 /**
@@ -46,6 +88,7 @@ export function renderRoomDressing(
   dressing: RoomDressing,
   tilemap: Phaser.Tilemaps.Tilemap,
   origin: IsoOrigin,
+  propDepthOverrides: Readonly<Record<string, number>> = {},
 ): RoomRenderResult {
   registerPropFrames(scene, dressing);
 
@@ -66,9 +109,23 @@ export function renderRoomDressing(
   objects.push(...renderWalls(scene, dressing, top, right, left));
   objects.push(...renderFloorSkirt(scene, left, bottom, right));
   objects.push(renderFloor(scene, dressing, [top, right, bottom, left]));
-  objects.push(...renderProps(scene, dressing, origin));
+  const propImages = renderProps(scene, dressing, origin, propDepthOverrides);
+  objects.push(...propImages);
 
-  return { objects, colliders: getPropColliders(dressing) };
+  // Content bounds: floor diamond + wall tops (negative Y) + skirt bottom, then
+  // union each placed prop's real bounds. Drives content-derived camera limits.
+  const bounds = emptyBounds();
+  for (const corner of [top, right, bottom, left]) {
+    growBounds(bounds, corner.x, corner.y);
+  }
+  growBounds(bounds, left.x, top.y - dressing.wallHeight); // back-left wall top
+  growBounds(bounds, right.x, top.y - dressing.wallHeight); // back-right wall top
+  growBounds(bounds, bottom.x, bottom.y + 18); // skirt depth
+  for (const image of propImages) {
+    growBoundsFromObject(bounds, image);
+  }
+
+  return { objects, colliders: getPropColliders(dressing), contentBounds: bounds };
 }
 
 /**
@@ -82,41 +139,366 @@ export function renderExitDoormat(
   exit: PropColliderRect,
   origin: IsoOrigin,
 ): RoomRenderResult {
-  const matKey = buildDoormatTexture(scene, dressing);
-  const glowKey = buildDoormatGlowTexture(scene, dressing);
+  const matSrc = buildDoormatTexture(scene, dressing);
+  const glowSrc = buildDoormatGlowTexture(scene, dressing);
+  const idSuffix = `${Math.round(exit.x)}-${Math.round(exit.y)}`;
 
-  const center = projectToIso(exit.x + exit.width / 2, exit.y + exit.height / 2, origin);
-  const verticalScale = origin.verticalScale ?? 0.5;
-  const span = exit.width + exit.height;
-  const projWidth = span / 2;
-  const projHeight = (span * verticalScale) / 2;
+  // The mat lies IN the floor plane: warp its texture onto the exit rect's
+  // projected parallelogram so it foreshortens and aligns to the door edge
+  // (rather than reading as an axis-aligned sticker). The glow uses a slightly
+  // expanded quad so it pools softly around the mat.
+  const glow = warpTextureToFloorQuad(scene, glowSrc, `${glowSrc}-${idSuffix}`, exit, origin, 0.35);
+  const mat = warpTextureToFloorQuad(scene, matSrc, `${matSrc}-${idSuffix}`, exit, origin, 0);
 
-  const glow = scene.add
-    .image(center.x, center.y, glowKey)
-    .setOrigin(0.5, 0.5)
-    .setDepth(DOORMAT_GLOW_DEPTH)
+  const objects: Phaser.GameObjects.GameObject[] = [];
+  const bounds = emptyBounds();
+
+  if (glow) {
+    glow.setDepth(DOORMAT_GLOW_DEPTH).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.65);
+    scene.tweens.add({
+      targets: glow,
+      alpha: { from: 0.4, to: 0.8 },
+      duration: 1100,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+    objects.push(glow);
+    growBoundsFromObject(bounds, glow);
+  }
+  if (mat) {
+    mat.setDepth(DOORMAT_DEPTH);
+    objects.push(mat);
+    growBoundsFromObject(bounds, mat);
+  }
+
+  return { objects, colliders: [], contentBounds: bounds };
+}
+
+/**
+ * Renders the post-violin "awakening" for a dressed interior: golden light
+ * shafts streaming from the room's window onto the floor (with drifting dust
+ * motes and a gentle breathing pulse) plus an awakened shine on every exit
+ * doormat (a sweeping highlight glint + a stronger steady glow). The whole
+ * overlay lives in one container so the caller can fade it in as a single unit
+ * — instantly on room entry, or over `fadeInMs` at the moment the violin
+ * completes (the emotional beat landing while ____ stands at the stand).
+ *
+ * Depth-flat by design: everything sits at AWAKENING_DEPTH, above the floor/rug
+ * and wall-mounted props but behind the y-sorted player and furniture.
+ */
+export function renderInteriorAwakening(
+  scene: Phaser.Scene,
+  dressing: RoomDressing,
+  exits: readonly PropColliderRect[],
+  origin: IsoOrigin,
+  options: { readonly fadeInMs?: number } = {},
+): RoomRenderResult {
+  const container = scene.add.container(0, 0).setDepth(AWAKENING_DEPTH);
+
+  addWindowShafts(scene, dressing, origin, container);
+  for (const exit of exits) {
+    addDoormatAwakening(scene, dressing, exit, origin, container);
+  }
+
+  const fadeInMs = options.fadeInMs ?? 0;
+  if (fadeInMs > 0) {
+    container.setAlpha(0);
+    scene.tweens.add({
+      targets: container,
+      alpha: 1,
+      duration: fadeInMs,
+      ease: 'Sine.easeInOut',
+    });
+  }
+
+  const bounds = emptyBounds();
+  return { objects: [container], colliders: [], contentBounds: bounds };
+}
+
+// Golden shafts from the window (a back-wall prop) falling into the room. Each
+// beam is a screen-space trapezoid (narrow at the window, splaying onto the
+// floor) built from layered additive fills for soft edges, capped by a bright
+// landing pool, with a few seeded dust motes drifting slowly along its length.
+function addWindowShafts(
+  scene: Phaser.Scene,
+  dressing: RoomDressing,
+  origin: IsoOrigin,
+  container: Phaser.GameObjects.Container,
+): void {
+  const windowProp = dressing.props.find((placement) => placement.frame === 'window');
+  if (!windowProp) {
+    return;
+  }
+
+  const wallBase = projectToIso(windowProp.mapX, windowProp.mapY, origin);
+  // Light enters up on the wall (the window opening), not at the baseboard.
+  const source: IsoPoint = { x: wallBase.x, y: wallBase.y - dressing.wallHeight * 0.62 };
+  const rng = mulberry32(fnv1a(`${dressing.tilesTextureKey}:window-shafts`));
+  const moteKey = buildInteriorMoteTexture(scene, dressing);
+
+  // Beams reach progressively deeper into the room (increasing map-x from the
+  // window), with a little cross-room spread (map-y offset) for variety.
+  const beams = [
+    { dist: 210, off: 24, topHW: 26, botHW: 66 },
+    { dist: 360, off: -14, topHW: 30, botHW: 82 },
+    { dist: 520, off: 58, topHW: 22, botHW: 58 },
+  ];
+
+  for (const beam of beams) {
+    const land = projectToIso(windowProp.mapX + beam.dist, windowProp.mapY + beam.off, origin);
+
+    const shaft = scene.add.graphics().setBlendMode(Phaser.BlendModes.ADD);
+    shaft.fillStyle(0xffd27a, 0.05);
+    shaft.fillPoints(toPhaserPoints(beamTrapezoid(source, land, beam.topHW * 1.5, beam.botHW * 1.4)), true);
+    shaft.fillStyle(0xffd98a, 0.08);
+    shaft.fillPoints(toPhaserPoints(beamTrapezoid(source, land, beam.topHW, beam.botHW)), true);
+    shaft.fillStyle(0xffecbe, 0.1);
+    shaft.fillPoints(toPhaserPoints(beamTrapezoid(source, land, beam.topHW * 0.5, beam.botHW * 0.55)), true);
+    container.add(shaft);
+    // Slow "breathing" so the light feels alive, not a static decal.
+    scene.tweens.add({
+      targets: shaft,
+      alpha: { from: 0.72, to: 1 },
+      duration: 3200 + rng() * 1200,
+      delay: rng() * 1500,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+
+    const pool = scene.add.graphics().setBlendMode(Phaser.BlendModes.ADD);
+    pool.fillStyle(0xffe6a8, 0.16);
+    pool.fillEllipse(land.x, land.y, beam.botHW * 2.6, beam.botHW * 1.1);
+    pool.fillStyle(0xfff2cf, 0.12);
+    pool.fillEllipse(land.x, land.y, beam.botHW * 1.5, beam.botHW * 0.6);
+    container.add(pool);
+    scene.tweens.add({
+      targets: pool,
+      alpha: { from: 0.7, to: 1 },
+      duration: 3400 + rng() * 1000,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+
+    const dx = land.x - source.x;
+    const dy = land.y - source.y;
+    const len = Math.hypot(dx, dy) || 1;
+    for (let i = 0; i < 4; i += 1) {
+      const t = 0.15 + rng() * 0.8;
+      const mx = source.x + dx * t + (rng() - 0.5) * beam.botHW * 0.9;
+      const my = source.y + dy * t;
+      const mote = scene.add
+        .image(mx, my, moteKey)
+        .setBlendMode(Phaser.BlendModes.ADD)
+        .setScale(0.4 + rng() * 0.7)
+        .setAlpha(0);
+      container.add(mote);
+      const driftMag = 28 + rng() * 42;
+      scene.tweens.add({
+        targets: mote,
+        x: mx + (dx / len) * driftMag + (rng() - 0.5) * 14,
+        y: my + (dy / len) * driftMag,
+        duration: 6000 + rng() * 4000,
+        delay: rng() * 2000,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+      });
+      scene.tweens.add({
+        targets: mote,
+        alpha: { from: 0.12, to: 0.55 + rng() * 0.2 },
+        duration: 1600 + rng() * 1400,
+        hold: 300 + rng() * 700,
+        delay: rng() * 1800,
+        repeatDelay: rng() * 1400,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+      });
+    }
+  }
+}
+
+// A screen-space trapezoid from a narrow source segment (top) to a wider
+// landing segment (bottom), with vertical sides — the read of a light shaft.
+function beamTrapezoid(
+  source: IsoPoint,
+  land: IsoPoint,
+  topHalfWidth: number,
+  botHalfWidth: number,
+): IsoPoint[] {
+  return [
+    { x: source.x - topHalfWidth, y: source.y },
+    { x: source.x + topHalfWidth, y: source.y },
+    { x: land.x + botHalfWidth, y: land.y },
+    { x: land.x - botHalfWidth, y: land.y },
+  ];
+}
+
+// Awakened doormat shine: a stronger steady additive glow warped onto the mat's
+// floor quad, plus a highlight glint that sweeps across the mat and repeats —
+// an unmistakable "go this way" without shouting.
+function addDoormatAwakening(
+  scene: Phaser.Scene,
+  dressing: RoomDressing,
+  exit: PropColliderRect,
+  origin: IsoOrigin,
+  container: Phaser.GameObjects.Container,
+): void {
+  const idSuffix = `awaken-${Math.round(exit.x)}-${Math.round(exit.y)}`;
+  const glowSrc = buildDoormatGlowTexture(scene, dressing);
+  const glow = warpTextureToFloorQuad(scene, glowSrc, `${glowSrc}-${idSuffix}`, exit, origin, 0.45);
+  if (glow) {
+    glow.setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.5);
+    scene.tweens.add({
+      targets: glow,
+      alpha: { from: 0.42, to: 0.85 },
+      duration: 1500,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+    container.add(glow);
+  }
+
+  const shimmerKey = buildDoormatShimmerTexture(scene, dressing);
+  const cy = exit.y + exit.height / 2;
+  const from = projectToIso(exit.x + exit.width * 0.08, cy, origin);
+  const to = projectToIso(exit.x + exit.width * 0.92, cy, origin);
+  const shimmer = scene.add
+    .image(from.x, from.y, shimmerKey)
     .setBlendMode(Phaser.BlendModes.ADD)
-    .setDisplaySize(projWidth * 2.6, projHeight * 2.6);
-  glow.setAlpha(0.7);
-
+    .setAlpha(0);
+  container.add(shimmer);
+  // Sweep the glint across; alpha rises then falls (yoyo) so it fades in at one
+  // edge and out at the other. Position resets on each repeat.
   scene.tweens.add({
-    targets: glow,
-    alpha: { from: 0.45, to: 0.95 },
-    scaleX: { from: glow.scaleX * 0.88, to: glow.scaleX * 1.12 },
-    scaleY: { from: glow.scaleY * 0.88, to: glow.scaleY * 1.12 },
-    duration: 1100,
+    targets: shimmer,
+    x: to.x,
+    y: to.y,
+    duration: 1700,
+    repeat: -1,
+    repeatDelay: 1500,
+    ease: 'Sine.easeInOut',
+    onRepeat: () => shimmer.setPosition(from.x, from.y),
+  });
+  scene.tweens.add({
+    targets: shimmer,
+    alpha: 0.75,
+    duration: 850,
     yoyo: true,
     repeat: -1,
+    repeatDelay: 1500,
     ease: 'Sine.easeInOut',
   });
+}
 
-  const mat = scene.add
-    .image(center.x, center.y, matKey)
-    .setOrigin(0.5, 0.5)
-    .setDepth(DOORMAT_DEPTH)
-    .setDisplaySize(projWidth * 1.06, projHeight * 1.12);
+function buildInteriorMoteTexture(scene: Phaser.Scene, dressing: RoomDressing): string {
+  const key = `${dressing.tilesTextureKey}-interior-mote`;
+  if (scene.textures.exists(key)) {
+    return key;
+  }
 
-  return { objects: [glow, mat], colliders: [] };
+  const graphics = scene.make.graphics({}, false);
+  graphics.fillStyle(0xfff2c8, 0.9);
+  graphics.fillCircle(8, 8, 3);
+  graphics.fillStyle(0xffe1a1, 0.35);
+  graphics.fillCircle(8, 8, 7);
+  graphics.generateTexture(key, 16, 16);
+  graphics.destroy();
+
+  return key;
+}
+
+function buildDoormatShimmerTexture(scene: Phaser.Scene, dressing: RoomDressing): string {
+  const key = `${dressing.tilesTextureKey}-doormat-shimmer`;
+  if (scene.textures.exists(key)) {
+    return key;
+  }
+
+  const w = 48;
+  const h = 72;
+  const graphics = scene.make.graphics({}, false);
+  const cx = w / 2;
+  const cy = h / 2;
+  const rings = 8;
+  // Soft vertical gold streak: stacked translucent ellipses fake a blurred band.
+  for (let i = rings; i >= 1; i -= 1) {
+    const t = i / rings;
+    graphics.fillStyle(0xfff3d0, 0.1);
+    graphics.fillEllipse(cx, cy, w * t * 0.7, h * t);
+  }
+  graphics.generateTexture(key, w, h);
+  graphics.destroy();
+
+  return key;
+}
+
+/**
+ * Renders `srcKey`'s texture warped onto the floor parallelogram of `rect`
+ * (map space) — i.e. the exact iso projection of the rect — so the result lies
+ * flat in the floor plane. `expand` inflates the rect (fraction of its size) for
+ * a soft surrounding glow. Returns the placed image (origin top-left).
+ */
+function warpTextureToFloorQuad(
+  scene: Phaser.Scene,
+  srcKey: string,
+  destKey: string,
+  rect: PropColliderRect,
+  origin: IsoOrigin,
+  expand: number,
+): Phaser.GameObjects.Image | undefined {
+  const ex = rect.x - rect.width * expand;
+  const ey = rect.y - rect.height * expand;
+  const ew = rect.width * (1 + expand * 2);
+  const eh = rect.height * (1 + expand * 2);
+
+  // Floor-plane corners of the (expanded) rect.
+  const p00 = projectToIso(ex, ey, origin);
+  const p10 = projectToIso(ex + ew, ey, origin);
+  const p01 = projectToIso(ex, ey + eh, origin);
+  const p11 = projectToIso(ex + ew, ey + eh, origin);
+  const corners = [p00, p10, p01, p11];
+  const minX = Math.min(...corners.map((c) => c.x));
+  const minY = Math.min(...corners.map((c) => c.y));
+  const maxX = Math.max(...corners.map((c) => c.x));
+  const maxY = Math.max(...corners.map((c) => c.y));
+
+  const src = scene.textures.get(srcKey);
+  const srcImage = src.getSourceImage() as CanvasImageSource;
+  const srcFrame = src.get();
+  const srcW = srcFrame.width;
+  const srcH = srcFrame.height;
+
+  const canvasW = Math.max(1, Math.ceil(maxX - minX));
+  const canvasH = Math.max(1, Math.ceil(maxY - minY));
+
+  if (!scene.textures.exists(destKey)) {
+    const canvasTexture = scene.textures.createCanvas(destKey, canvasW, canvasH);
+    if (!canvasTexture) {
+      return undefined;
+    }
+    const ctx = canvasTexture.getContext();
+    // Map texture space [0,srcW]x[0,srcH] onto the parallelogram (local coords):
+    //   local = (p00 - min) + (sx/srcW)*A + (sy/srcH)*B
+    // with A = p10 - p00 (map +x edge), B = p01 - p00 (map +y edge).
+    const ax = (p10.x - p00.x) / srcW;
+    const ay = (p10.y - p00.y) / srcW;
+    const bx = (p01.x - p00.x) / srcH;
+    const by = (p01.y - p00.y) / srcH;
+    ctx.setTransform(ax, ay, bx, by, p00.x - minX, p00.y - minY);
+    ctx.drawImage(srcImage, 0, 0);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    canvasTexture.refresh();
+  }
+
+  const center = projectToIso(ex + ew / 2, ey + eh / 2, origin);
+  return scene.add.image(center.x, center.y, destKey).setOrigin(
+    (center.x - minX) / canvasW,
+    (center.y - minY) / canvasH,
+  );
 }
 
 function buildDoormatTexture(scene: Phaser.Scene, dressing: RoomDressing): string {
@@ -362,8 +744,11 @@ function renderProps(
   scene: Phaser.Scene,
   dressing: RoomDressing,
   origin: IsoOrigin,
+  propDepthOverrides: Readonly<Record<string, number>>,
 ): Phaser.GameObjects.Image[] {
-  return dressing.props.map((placement) => renderProp(scene, dressing, placement, origin));
+  return dressing.props.map((placement) =>
+    renderProp(scene, dressing, placement, origin, propDepthOverrides[placement.frame]),
+  );
 }
 
 function renderProp(
@@ -371,6 +756,7 @@ function renderProp(
   dressing: RoomDressing,
   placement: PropPlacement,
   origin: IsoOrigin,
+  depthOverride?: number,
 ): Phaser.GameObjects.Image {
   const point = projectToIso(placement.mapX, placement.mapY, origin);
   const scale = resolvePropScale(dressing, placement);
@@ -397,7 +783,12 @@ function renderProp(
     .setScale(scale)
     .setFlipX(placement.flipX ?? false);
 
-  image.setDepth(placement.fixedDepth ?? point.y);
+  // Depth-sort by the prop's floor-contact line. A depthMapY override (from the
+  // zones JSON or the placement) moves that line off the anchor so the player
+  // can pass behind visually tall props.
+  const depthMapY = depthOverride ?? placement.depthMapY ?? placement.mapY;
+  const depthY = projectToIso(placement.mapX, depthMapY, origin).y;
+  image.setDepth(placement.fixedDepth ?? depthY);
 
   return image;
 }

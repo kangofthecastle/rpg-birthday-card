@@ -161,7 +161,7 @@ export const ASSET_MANIFEST: readonly GameAsset[] = [
     status: 'review',
     locationIds: ['friend-b', 'final-spot'],
     notes:
-      'Small keepsake icon used in collection UI and final reveal for the SPLIT.EXE minigame. A miniature defused Valorant-style spike with a calm teal glowing core.',
+      'Small keepsake icon used in collection UI and final reveal for the RETAKE.EXE minigame. A miniature defused Valorant-style spike with a calm teal glowing core.',
     qaChecks: ['small-size readability', 'palette consistency'],
   },
   {
@@ -177,7 +177,7 @@ export const ASSET_MANIFEST: readonly GameAsset[] = [
   {
     id: 'activity-art-split-arena-tiles',
     kind: 'activity-art',
-    label: 'SPLIT.EXE arena tiles',
+    label: 'RETAKE.EXE arena tiles',
     status: 'review',
     locationIds: ['friend-b'],
     notes:
@@ -187,7 +187,7 @@ export const ASSET_MANIFEST: readonly GameAsset[] = [
   {
     id: 'activity-art-split-minisprites',
     kind: 'activity-art',
-    label: 'SPLIT.EXE Viper/Omen/bot minisprites',
+    label: 'RETAKE.EXE Viper/Omen/bot minisprites',
     status: 'review',
     locationIds: ['friend-b'],
     notes:
@@ -197,7 +197,7 @@ export const ASSET_MANIFEST: readonly GameAsset[] = [
   {
     id: 'activity-art-split-spike',
     kind: 'activity-art',
-    label: 'SPLIT.EXE planted spike',
+    label: 'RETAKE.EXE planted spike',
     status: 'review',
     locationIds: ['friend-b'],
     notes:

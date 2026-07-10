@@ -255,6 +255,61 @@ body {
   transform: translate(-50%, -50%) translateY(0) scale(1);
 }
 
+/* Restaged arrival: the letters unfold (creased from the folds) rather than
+ * being placed. They start folded-small and rotated, and open flat. */
+.ending-keepsake--letter {
+  transform: translate(-50%, -50%) translateY(-10px) rotate(-8deg) scale(0.42);
+}
+
+.ending-keepsake--letter.ending-keepsake--placed {
+  transform: translate(-50%, -50%) rotate(0deg) scale(1);
+}
+
+.ending-caption {
+  position: absolute;
+  top: 12%;
+  left: 50%;
+  width: min(80%, 520px);
+  margin: 0;
+  transform: translateX(-50%);
+  color: rgba(255, 247, 232, 0.86);
+  text-align: center;
+  font-size: clamp(14px, 2vw, 18px);
+  letter-spacing: 0.02em;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.6);
+}
+
+.ending-boat {
+  position: absolute;
+  top: 58%;
+  left: 50%;
+  width: 128px;
+  height: 60px;
+  transform: translate(-50%, -50%);
+  filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.5));
+}
+
+.ending-boat__hull {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: 120px;
+  height: 34px;
+  transform: translateX(-50%);
+  background: #f2e8cf;
+  clip-path: polygon(0 0, 100% 0, 82% 100%, 18% 100%);
+}
+
+.ending-boat__sail {
+  position: absolute;
+  bottom: 28px;
+  left: 44%;
+  width: 34px;
+  height: 40px;
+  background: #f6ecd2;
+  clip-path: polygon(0 0, 0 100%, 100% 100%);
+}
+
 .ending-ocean {
   position: absolute;
   inset: 0;
@@ -968,6 +1023,54 @@ body {
 }
 
 .friendone-fishing-game__host canvas {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+/* RETAKE.EXE plays near-fullscreen: the 960x540 Scale.FIT canvas fills most of
+   the viewport instead of inheriting the generic .activity-panel width. */
+.activity-panel--valorant-split {
+  display: flex;
+  flex-direction: column;
+  width: min(1680px, calc(100vw - 8px));
+  max-height: calc(100vh - 8px);
+  padding: clamp(6px, 1vw, 16px);
+  overflow: auto;
+}
+
+.activity-panel--valorant-split h2 {
+  flex: none;
+  margin: 0 0 8px;
+}
+
+.activity-panel--valorant-split .activity-actions {
+  flex: none;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.valorant-split-game {
+  display: grid;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 180px;
+  max-height: min(calc(100vh - 120px), calc((100vw - 16px) * 0.5625));
+  aspect-ratio: 16 / 9;
+  place-items: stretch;
+  overflow: hidden;
+  border: 2px solid rgba(241, 215, 154, 0.58);
+  background: #14171d;
+}
+
+.valorant-split-game__host {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.valorant-split-game__host canvas {
   display: block;
   max-width: 100%;
   max-height: 100%;

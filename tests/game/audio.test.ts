@@ -193,9 +193,21 @@ describe('key registry', () => {
       'sfx-heart-loss',
       'sfx-spike-beep',
       'sfx-defuse-tick',
+      'sfx-defuse-checkpoint',
+      'sfx-defuse-complete',
+      'sfx-detonate',
       'sfx-clutch',
       'sfx-boot-key',
       'sfx-ending-swell',
+      'sfx-develop-lock',
+      'sfx-develop-miss',
+      'sfx-violin-waver',
+      'sfx-violin-swell',
+      'sfx-paper-fold',
+      'sfx-sail-hoist',
+      'sfx-boat-expand',
+      'sfx-lantern-kindle',
+      'sfx-water-lap',
     ]);
     expect(audio.AUDIO_KEYS).toEqual([...audio.MUSIC_KEYS, ...audio.SFX_KEYS]);
   });

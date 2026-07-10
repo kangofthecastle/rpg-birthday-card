@@ -25,6 +25,23 @@ export function projectToIso(x: number, y: number, origin: IsoOrigin): IsoPoint 
   };
 }
 
+/**
+ * Exact inverse of {@link projectToIso}: maps a screen-space point back to map
+ * (orthogonal) coordinates. Round-trips with projectToIso for any origin.
+ */
+export function unprojectFromIso(screenX: number, screenY: number, origin: IsoOrigin): IsoPoint {
+  const verticalScale = origin.verticalScale ?? 0.5;
+  const sx = screenX - origin.x; // = (mapX - mapY) / 2
+  const sy = screenY - origin.y; // = (mapX + mapY) * verticalScale / 2
+  const sum = (sy * 2) / verticalScale; // mapX + mapY
+  const diff = sx * 2; // mapX - mapY
+
+  return {
+    x: (sum + diff) / 2,
+    y: (sum - diff) / 2,
+  };
+}
+
 export function projectScreenDirectionToIsoVelocity(
   direction: IsoPoint,
   origin: IsoOrigin,

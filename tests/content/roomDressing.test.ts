@@ -27,7 +27,7 @@ function loadRecipientHouseInteractables(): readonly TiledObjectJson[] {
 
 describe('getRoomDressing', () => {
   it('returns undefined for undressed locations', () => {
-    expect(getRoomDressing('entry')).toBeUndefined();
+    expect(getRoomDressing('main-outside')).toBeUndefined();
     expect(getRoomDressing('friend-a')).toBeUndefined();
     expect(getRoomDressing('final-spot')).toBeUndefined();
   });

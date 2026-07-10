@@ -4,6 +4,7 @@ import {
   getIsoTileCorners,
   projectScreenDirectionToIsoVelocity,
   projectToIso,
+  unprojectFromIso,
 } from '../../src/game/isometricProjection';
 
 describe('isometric projection', () => {
@@ -50,6 +51,29 @@ describe('isometric projection', () => {
       x: 440,
       y: 440,
     });
+  });
+
+  it('round-trips map coordinates through projectToIso and unprojectFromIso', () => {
+    for (const [x, y] of [
+      [0, 0],
+      [704, 768],
+      [1408, 1024],
+      [372, 688],
+      [-40, 512],
+    ] as const) {
+      const screen = projectToIso(x, y, origin);
+      const back = unprojectFromIso(screen.x, screen.y, origin);
+      expect(back.x).toBeCloseTo(x, 6);
+      expect(back.y).toBeCloseTo(y, 6);
+    }
+  });
+
+  it('inverts projection for a non-default vertical scale', () => {
+    const steepOrigin = { x: 100, y: 40, verticalScale: 0.7 };
+    const screen = projectToIso(300, 220, steepOrigin);
+    const back = unprojectFromIso(screen.x, screen.y, steepOrigin);
+    expect(back.x).toBeCloseTo(300, 6);
+    expect(back.y).toBeCloseTo(220, 6);
   });
 
   it('keeps diagonal screen-space controls at a consistent visual speed', () => {

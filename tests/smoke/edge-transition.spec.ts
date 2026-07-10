@@ -1,0 +1,34 @@
+import { expect, test } from '@playwright/test';
+
+// Outdoor areas connect edge-to-edge: walking off a map side (no E-press) drops
+// the player into the neighbouring area on its opposite edge. This walks off
+// main-outside's west edge and lands in ____'s block.
+test('walks off the west edge of main-outside into ____’s block', async ({ page }) => {
+  // Spawn mid-height (just outside ____'s door) so the straight-west walk has
+  // plenty of vertical margin away from the open south edge.
+  await page.goto('/?testMode=1&locationId=main-outside&spawnId=from-recipient-house');
+
+  const canvas = page.locator('canvas');
+  await expect(canvas).toBeVisible();
+  await expect(page.locator('body')).toHaveAttribute('data-location-id', 'main-outside');
+
+  await canvas.click();
+
+  // Two Lefts + one Up nets straight world-west (y steady): screen-Left drives
+  // world (-x,+y) and screen-Up drives world (-x,-y), so 2·Left + 1·Up cancels y
+  // and pushes the player toward the west edge without drifting south.
+  const pattern = ['ArrowLeft', 'ArrowLeft', 'ArrowUp'] as const;
+  let arrived = false;
+  for (let step = 0; step < 40 && !arrived; step += 1) {
+    const key = pattern[step % pattern.length];
+    await page.keyboard.down(key);
+    await page.waitForTimeout(110);
+    await page.keyboard.up(key);
+    await page.waitForTimeout(40);
+    arrived =
+      (await page.locator('body').getAttribute('data-location-id')) === 'friendtwo-yard';
+  }
+
+  expect(arrived).toBe(true);
+  await expect(page.locator('body')).toHaveAttribute('data-location-id', 'friendtwo-yard');
+});

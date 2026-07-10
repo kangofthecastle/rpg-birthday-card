@@ -9,7 +9,7 @@ export function renderCollectionPanel(state: RunState): string {
   const items = keepsakes
     .map((keepsake) => {
       const collected = state.collectedKeepsakeIds.includes(keepsake.id);
-      const label = collected ? keepsake.label : 'Hidden keepsake';
+      const label = collected ? keepsake.label : 'A letter, still to come';
       const safeLabel = escapeHtml(label);
       const icon = collected
         ? `<img class="collection-item__icon" src="/assets/keepsakes/${encodeURIComponent(
@@ -26,8 +26,8 @@ export function renderCollectionPanel(state: RunState): string {
     .join('');
 
   return `
-    <aside class="collection-panel" aria-label="Keepsake collection">
-      <h2>Keepsakes</h2>
+    <aside class="collection-panel" aria-label="Letters collection">
+      <h2>Letters</h2>
       <ul>${items}</ul>
     </aside>
   `;

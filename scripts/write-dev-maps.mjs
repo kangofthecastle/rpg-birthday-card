@@ -7,42 +7,62 @@ const mapsDir = join(root, 'public', 'maps');
 
 mkdirSync(mapsDir, { recursive: true });
 
-const mapWidth = 22;
-const mapHeight = 16;
+const TILE = 64;
+const STD_W = 22;
+const STD_H = 16;
 
-const ground = Array.from({ length: mapWidth * mapHeight }, (_, index) => {
-  const x = index % mapWidth;
-  const y = Math.floor(index / mapWidth);
-
-  return x === 0 || y === 0 || x === mapWidth - 1 || y === mapHeight - 1 ? 2 : 1;
-});
-
-const collision = ground.map((tile) => (tile === 2 ? 2 : 0));
-
+// Per-map definitions. `openEdges` lists sides whose border wall is opened along
+// its full walkable span (tiles 1..n-2), so the player can walk off that side
+// and trigger an edge transition. Corners always stay solid.
 const maps = [
   {
-    file: 'entry.tmj',
+    file: 'main-outside.tmj',
+    width: 30,
+    height: 18,
+    openEdges: ['west', 'east', 'south'],
     spawns: [
-      point(1, 'start', 704, 512),
-      point(2, 'from-friend-a', 320, 512),
-      point(3, 'from-friend-b', 704, 512),
-      point(4, 'from-final', 704, 768),
-      point(5, 'from-recipient-house', 320, 640),
+      point(1, 'start', 960, 900),
+      point(2, 'from-recipient-house', 960, 470),
     ],
-    exits: [
-      rect(6, 'to-friend-a', 'exit', 256, 256, 128, 96),
-      rect(7, 'to-friend-b', 'exit', 640, 256, 128, 96),
-      rect(8, 'to-final', 'exit', 640, 768, 128, 96),
-      rect(9, 'to-recipient-house', 'exit', 256, 736, 128, 96),
-    ],
-    interactables: [rect(10, 'entry-sign', 'dialogue', 656, 544, 128, 80)],
+    exits: [rect(3, 'to-recipient-house', 'exit', 896, 320, 128, 88)],
+    interactables: [rect(4, 'main-signpost', 'dialogue', 896, 720, 128, 88)],
+  },
+  {
+    file: 'friendtwo-yard.tmj',
+    width: STD_W,
+    height: STD_H,
+    openEdges: ['east'],
+    spawns: [point(1, 'start', 704, 640), point(2, 'from-friend-b', 704, 500)],
+    exits: [rect(3, 'to-friend-b', 'exit', 640, 344, 128, 84)],
+    interactables: [],
+  },
+  {
+    file: 'friendone-yard.tmj',
+    width: STD_W,
+    height: STD_H,
+    openEdges: ['west'],
+    spawns: [point(1, 'start', 704, 640), point(2, 'from-friend-a', 704, 500)],
+    exits: [rect(3, 'to-friend-a', 'exit', 640, 344, 128, 84)],
+    interactables: [],
+  },
+  {
+    file: 'clearing.tmj',
+    width: STD_W,
+    height: STD_H,
+    openEdges: ['north', 'south'],
+    spawns: [point(1, 'start', 704, 512)],
+    exits: [],
+    // The origami ritual at the southern shore — a wide kneel-at-the-water zone
+    // set a couple of tiles in from the south edge, so the player reaches it
+    // before the (gated) edge transition.
+    interactables: [rect(4, 'clearing-shore', 'activity', 512, 800, 384, 128)],
   },
   {
     file: 'recipient-house.tmj',
-    spawns: [
-      point(1, 'front-door', 704, 768),
-      point(2, 'near-pc', 704, 768),
-    ],
+    width: STD_W,
+    height: STD_H,
+    openEdges: [],
+    spawns: [point(1, 'front-door', 704, 768), point(2, 'near-pc', 704, 768)],
     exits: [rect(3, 'step-outside', 'exit', 640, 864, 128, 80)],
     interactables: [
       rect(4, 'recipient-violin', 'easterEgg', 240, 300, 160, 140),
@@ -54,10 +74,10 @@ const maps = [
   },
   {
     file: 'friend-a.tmj',
-    spawns: [
-      point(1, 'front-door', 704, 768),
-      point(5, 'near-friendone-pc', 800, 416),
-    ],
+    width: STD_W,
+    height: STD_H,
+    openEdges: [],
+    spawns: [point(1, 'front-door', 704, 768), point(5, 'near-friendone-pc', 800, 416)],
     exits: [rect(2, 'back-entry', 'exit', 640, 832, 128, 80)],
     interactables: [
       rect(3, 'friendone-host', 'dialogue', 512, 384, 128, 96),
@@ -66,10 +86,10 @@ const maps = [
   },
   {
     file: 'friend-b.tmj',
-    spawns: [
-      point(1, 'front-door', 704, 768),
-      point(5, 'near-friendtwo-pc', 704, 432),
-    ],
+    width: STD_W,
+    height: STD_H,
+    openEdges: [],
+    spawns: [point(1, 'front-door', 704, 768), point(5, 'near-friendtwo-pc', 704, 432)],
     exits: [rect(2, 'back-entry', 'exit', 640, 832, 128, 80)],
     interactables: [
       rect(3, 'friend-b-host', 'activity', 640, 384, 128, 96),
@@ -79,8 +99,11 @@ const maps = [
   },
   {
     file: 'final-spot.tmj',
+    width: STD_W,
+    height: STD_H,
+    openEdges: ['north'],
     spawns: [point(1, 'clearing-path', 704, 768), point(4, 'near-lantern', 704, 432)],
-    exits: [rect(2, 'back-entry', 'exit', 640, 832, 128, 80)],
+    exits: [],
     interactables: [rect(3, 'final-table', 'activity', 640, 384, 128, 96)],
   },
 ];
@@ -89,27 +112,59 @@ for (const map of maps) {
   writeFileSync(join(mapsDir, map.file), `${JSON.stringify(createMap(map), null, 2)}\n`);
 }
 
-function createMap({ spawns, exits, interactables }) {
+// Builds the Ground/Collision tile arrays for a map. The border is a solid
+// 1-tile wall everywhere except the walkable spans of `openEdges`, which are
+// carved out (floor + no collision) so the player can walk off that side.
+function buildTiles(width, height, openEdges) {
+  const isOpen = new Set(openEdges);
+  const ground = [];
+  const collision = [];
+
+  for (let index = 0; index < width * height; index += 1) {
+    const x = index % width;
+    const y = Math.floor(index / width);
+    const onBorder = x === 0 || y === 0 || x === width - 1 || y === height - 1;
+    const onCorner =
+      (x === 0 || x === width - 1) && (y === 0 || y === height - 1);
+
+    let wall = onBorder;
+    if (onBorder && !onCorner) {
+      if (x === 0 && isOpen.has('west')) wall = false;
+      if (x === width - 1 && isOpen.has('east')) wall = false;
+      if (y === 0 && isOpen.has('north')) wall = false;
+      if (y === height - 1 && isOpen.has('south')) wall = false;
+    }
+
+    ground.push(wall ? 2 : 1);
+    collision.push(wall ? 2 : 0);
+  }
+
+  return { ground, collision };
+}
+
+function createMap({ width, height, openEdges = [], spawns, exits, interactables }) {
+  const { ground, collision } = buildTiles(width, height, openEdges);
+
   return {
     type: 'map',
     version: '1.10',
     tiledversion: '1.10.2',
     orientation: 'orthogonal',
     renderorder: 'right-down',
-    width: mapWidth,
-    height: mapHeight,
-    tilewidth: 64,
-    tileheight: 64,
+    width,
+    height,
+    tilewidth: TILE,
+    tileheight: TILE,
     infinite: false,
     tilesets: [
       {
         firstgid: 1,
         name: 'temp-floor',
         image: 'tile-floor.png',
-        imagewidth: 64,
-        imageheight: 64,
-        tilewidth: 64,
-        tileheight: 64,
+        imagewidth: TILE,
+        imageheight: TILE,
+        tilewidth: TILE,
+        tileheight: TILE,
         tilecount: 1,
         columns: 1,
         margin: 0,
@@ -119,10 +174,10 @@ function createMap({ spawns, exits, interactables }) {
         firstgid: 2,
         name: 'temp-wall',
         image: 'tile-wall.png',
-        imagewidth: 64,
-        imageheight: 64,
-        tilewidth: 64,
-        tileheight: 64,
+        imagewidth: TILE,
+        imageheight: TILE,
+        tilewidth: TILE,
+        tileheight: TILE,
         tilecount: 1,
         columns: 1,
         margin: 0,
@@ -130,8 +185,8 @@ function createMap({ spawns, exits, interactables }) {
       },
     ],
     layers: [
-      tileLayer(1, 'Ground', ground),
-      tileLayer(2, 'Collision', collision),
+      tileLayer(1, 'Ground', ground, width, height),
+      tileLayer(2, 'Collision', collision, width, height),
       objectLayer(3, 'Spawns', spawns),
       objectLayer(4, 'Exits', exits),
       objectLayer(5, 'Interactables', interactables),
@@ -139,13 +194,13 @@ function createMap({ spawns, exits, interactables }) {
   };
 }
 
-function tileLayer(id, name, data) {
+function tileLayer(id, name, data, width, height) {
   return {
     id,
     name,
     type: 'tilelayer',
-    width: mapWidth,
-    height: mapHeight,
+    width,
+    height,
     data,
   };
 }

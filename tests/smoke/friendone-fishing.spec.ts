@@ -5,7 +5,7 @@ test('completes ____ PC fishing activity through test mode', async ({ page }) =>
 
   const canvas = page.locator('canvas').first();
   await expect(canvas).toBeVisible();
-  await expect(page.locator('.collection-panel')).toContainText('Keepsakes');
+  await expect(page.locator('.collection-panel')).toContainText('Letters');
 
   await canvas.click();
   await page.keyboard.down('E');
@@ -20,8 +20,8 @@ test('completes ____ PC fishing activity through test mode', async ({ page }) =>
 
   await expect(page.getByText('____')).toBeVisible();
   await expect(page.getByText('')).toBeVisible();
-  await expect(page.locator('.collection-panel')).not.toContainText('Glowing Koi Scale');
+  await expect(page.locator('.collection-panel')).not.toContainText('____’s Letter');
   await page.getByRole('button', { name: 'Continue' }).click();
 
-  await expect(page.locator('.collection-panel')).toContainText('Glowing Koi Scale');
+  await expect(page.locator('.collection-panel')).toContainText('____’s Letter');
 });

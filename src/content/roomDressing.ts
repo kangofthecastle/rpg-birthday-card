@@ -78,6 +78,13 @@ export interface PropPlacement {
    * or behind them). Use a small negative value for flat/rug/wall-mounted items.
    */
   readonly fixedDepth?: number;
+  /**
+   * Depth-sort line override: sort this prop as if its floor-contact point were
+   * at map-y = depthMapY (keeping its own map-x) instead of its anchor mapY.
+   * Lets the player pass behind a visually tall prop whose base reads lower than
+   * its anchor. Usually sourced from the zones JSON `propDepthOverrides`.
+   */
+  readonly depthMapY?: number;
   /** Optional label for maintainers; not rendered. */
   readonly note?: string;
 }
@@ -99,19 +106,27 @@ export interface RoomDressing {
   readonly props: readonly PropPlacement[];
 }
 
-// Prop crops measured as tight alpha bounding boxes on the 1024x1024 sheet.
+// Prop crops measured as tight alpha bounding boxes (alpha>=16) on the
+// 1024x1024 sheet. Several were re-measured to stop cropping through the art:
+// the earlier rug/kitchen/violin/musicStand/photoWall/window rects ended mid-
+// sprite (fringe, table legs, sheet-music page, hanging hook, window frame) and
+// rendered a hard straight cut. The violin bow and the music stand overlap in
+// the sheet (columns ~849-865 at different rows), so those two split at x=848/
+// x=849: the violin keeps its body+bow up to 848, the stand takes 849..997 for
+// its full right page. Anything past that split cannot be recovered by rects
+// without ghosting the neighbour (see the regen note in the audit).
 const RECIPIENT_PROP_FRAMES = {
   bed: { x: 27, y: 60, w: 283, h: 399 },
   desk: { x: 353, y: 71, w: 340, h: 352 },
-  violin: { x: 725, y: 74, w: 120, h: 301 },
-  musicStand: { x: 840, y: 104, w: 135, h: 271 },
+  violin: { x: 725, y: 74, w: 124, h: 306 },
+  musicStand: { x: 849, y: 104, w: 149, h: 271 },
   camera: { x: 389, y: 466, w: 116, h: 235 },
-  photoWall: { x: 586, y: 445, w: 358, h: 228 },
-  kitchen: { x: 26, y: 728, w: 219, h: 217 },
-  rug: { x: 250, y: 782, w: 295, h: 143 },
+  photoWall: { x: 586, y: 433, w: 358, h: 240 },
+  kitchen: { x: 26, y: 728, w: 227, h: 237 },
+  rug: { x: 266, y: 782, w: 253, h: 161 },
   monstera: { x: 542, y: 719, w: 140, h: 219 },
   pothos: { x: 684, y: 720, w: 131, h: 229 },
-  window: { x: 814, y: 710, w: 161, h: 240 },
+  window: { x: 814, y: 709, w: 171, h: 243 },
 } as const satisfies Record<string, PropFrame>;
 
 const RECIPIENT_HOUSE_DRESSING: RoomDressing = {
@@ -183,7 +198,9 @@ const RECIPIENT_HOUSE_DRESSING: RoomDressing = {
       frame: 'violin',
       mapX: 296,
       mapY: 392,
-      heightRatio: 1.15,
+      // Frame height grew 301->306 when the bow tip / stand feet were restored;
+      // scale hr by 306/301 so the rendered size stays put (1.15 * 306/301).
+      heightRatio: 1.169,
       note: 'violin on stand -> recipient-violin (thin; no collider)',
     },
     {
@@ -198,7 +215,9 @@ const RECIPIENT_HOUSE_DRESSING: RoomDressing = {
       frame: 'kitchen',
       mapX: 1040,
       mapY: 392,
-      heightRatio: 1.0,
+      // Frame height grew 217->237 when the cut-off table legs were restored;
+      // scale hr by 237/217 so the table renders the same size (1.0 * 237/217).
+      heightRatio: 1.092,
       footprint: { w: 120, d: 64 },
       note: 'kitchenette table w/ mango sticky rice -> recipient-mango-rice',
     },

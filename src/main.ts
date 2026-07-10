@@ -2,12 +2,18 @@ import Phaser from 'phaser';
 import { initAudio } from './game/audio';
 import { createGameConfig } from './game/gameConfig';
 import { runBootScreen } from './ui/bootScreen';
+import { mountMuteButton } from './ui/muteButton';
 import './styles.css';
 
 // Fallback for paths that skip the boot overlay (testMode): arm WebAudio on
 // the first user gesture of any kind.
 document.addEventListener('keydown', () => initAudio(), { once: true });
 document.addEventListener('pointerdown', () => initAudio(), { once: true });
+
+// A persistent top-right mute toggle, mounted on <body> so it survives the
+// scene changes that clear #ui-root. It sits under the z-1000 boot overlay, so
+// it reveals itself once the cold-open finishes.
+mountMuteButton();
 
 const root = document.querySelector<HTMLDivElement>('#game-root');
 

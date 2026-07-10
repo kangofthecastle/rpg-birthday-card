@@ -975,10 +975,50 @@ body {
 
 .collection-panel {
   position: absolute;
-  top: 20px;
+  /* Sits just beneath the mute button in the top-right corner. */
+  top: 72px;
   right: 20px;
   width: 220px;
   padding: 14px;
+}
+
+.mute-button {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  /* Above the game + UI, but below the z-1000 boot overlay so the cold-open
+     stays clean and the button only appears once the game is in view. */
+  z-index: 200;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 2px solid #f1d79a;
+  border-radius: 8px;
+  background: rgba(27, 31, 31, 0.94);
+  color: #fff7e8;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.32);
+  cursor: pointer;
+  transition: transform 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.mute-button:hover {
+  transform: translateY(-1px);
+}
+
+.mute-button:focus-visible {
+  outline: 2px solid #f1d79a;
+  outline-offset: 2px;
+}
+
+.mute-button--muted {
+  color: #e7a08c;
+  border-color: #7c5a51;
+}
+
+.mute-button__icon {
+  display: block;
 }
 
 .collection-panel h2 {

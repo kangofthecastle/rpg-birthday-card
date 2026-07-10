@@ -1,4 +1,5 @@
 import type { ActivityModule } from '../activityTypes';
+import { addKeyboardActivation } from '../activityDom';
 import type { FriendOneFishingSceneCallbacks } from './FriendOneFishingScene';
 
 interface FishingGameHandle {
@@ -39,25 +40,6 @@ async function createDefaultFishingGame(
 
 function isTestMode(): boolean {
   return new URL(window.location.href).searchParams.get('testMode') === '1';
-}
-
-function addKeyboardActivation(
-  button: HTMLButtonElement,
-  activate: () => void,
-): void {
-  button.addEventListener(
-    'keydown',
-    (event) => {
-      if (event.key !== 'Enter' && event.key !== ' ' && event.code !== 'Space') {
-        return;
-      }
-
-      event.preventDefault();
-      event.stopPropagation();
-      activate();
-    },
-    { capture: true },
-  );
 }
 
 export function createFriendOneFishingActivity(

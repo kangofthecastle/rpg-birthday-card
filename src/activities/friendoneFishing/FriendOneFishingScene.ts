@@ -73,7 +73,7 @@ export class FriendOneFishingScene extends Phaser.Scene {
     this.drawDynamicElements(0, false);
   }
 
-  update(time: number, delta: number): void {
+  update(time: number, _delta: number): void {
     if (
       !this.isFinalizing &&
       this.escapeKey &&
@@ -85,12 +85,17 @@ export class FriendOneFishingScene extends Phaser.Scene {
 
     const holdActive = this.isHolding();
 
+    // Drive the model from real elapsed time (clamped) rather than Phaser's
+    // smoothed per-frame delta, so difficulty is wall-clock consistent regardless
+    // of render FPS.
+    const modelDelta = Math.min(250, this.game.loop.rawDelta);
+
     if (!this.isTransitioning && !this.isFinalizing) {
       this.round = updateFishingRound(
         this.round,
         this.currentFish,
         { holdActive },
-        delta,
+        modelDelta,
       );
 
       if (getFishingCompletion(this.round)) {

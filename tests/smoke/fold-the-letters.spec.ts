@@ -1,0 +1,164 @@
+import { expect, test, type Page } from '@playwright/test';
+
+// The keepsake ritual: with all three keepsakes in hand, the clearing's southern
+// shore unlocks. Kneeling at the water makes the boat — ____'s letter FOLDED into
+// the hull, ____'s letter HOISTED as the sail, ____'s sheet music ROLLED and
+// KINDLED into the lantern — and the sail-away cinematic carries her INTO the
+// lantern clearing (final-spot).
+//
+// Two smokes: the first drives the ACTUAL gestures (real pointer strokes per verb,
+// read off the panel's data-fold-* observability) all the way through the
+// cinematic AND proves she arrives with CONTROL by opening the ending; the second
+// keeps the fast test-mode skip path.
+
+const CANVAS_W = 640;
+const CANVAS_H = 400;
+// Paper / stage centre in the canvas's logical space.
+const CX = 326;
+const CY = 183;
+
+async function walkToShore(page: Page): Promise<void> {
+  const foldPanel = page.getByRole('dialog', { name: 'fold' });
+  const continueButton = page.getByRole('button', { name: 'Continue' });
+  for (let step = 0; step < 30 && (await foldPanel.count()) === 0; step += 1) {
+    if (await continueButton.isVisible().catch(() => false)) {
+      await continueButton.click().catch(() => undefined);
+      await page.waitForTimeout(30);
+      continue;
+    }
+    await page.keyboard.down('ArrowDown');
+    await page.waitForTimeout(110);
+    await page.keyboard.up('ArrowDown');
+    await page.keyboard.press('E', { delay: 25 });
+    await page.waitForTimeout(30);
+  }
+  await expect(foldPanel).toBeVisible();
+}
+
+test('makes the boat with real gestures and arrives at the lantern clearing WITH control', async ({
+  page,
+}) => {
+  await page.goto('/?testMode=1&locationId=clearing&spawnId=start&seedKeepsakes=all');
+  const canvas = page.locator('canvas').first();
+  await expect(canvas).toBeVisible();
+  await expect(page.locator('body')).toHaveAttribute('data-location-id', 'clearing');
+
+  await canvas.click();
+  await walkToShore(page);
+
+  const panel = page.locator('[data-fold-panel]');
+  const foldCanvas = page.getByRole('dialog', { name: 'fold' }).locator('canvas');
+
+  // Logical (0..640, 0..400) → client px, using the live canvas box.
+  const toClient = async (lx: number, ly: number): Promise<{ x: number; y: number }> => {
+    const box = (await foldCanvas.boundingBox())!;
+    return { x: box.x + (lx / CANVAS_W) * box.width, y: box.y + (ly / CANVAS_H) * box.height };
+  };
+  const dragLine = async (
+    a: { x: number; y: number },
+    b: { x: number; y: number },
+    steps = 14,
+  ): Promise<void> => {
+    const p0 = await toClient(a.x, a.y);
+    const p1 = await toClient(b.x, b.y);
+    await page.mouse.move(p0.x, p0.y);
+    await page.mouse.down();
+    for (let s = 1; s <= steps; s += 1) {
+      await page.mouse.move(p0.x + (p1.x - p0.x) * (s / steps), p0.y + (p1.y - p0.y) * (s / steps));
+      await page.waitForTimeout(6);
+    }
+    await page.mouse.up();
+  };
+  const circleDrag = async (r: number, turns = 1.3, steps = 44): Promise<void> => {
+    const start = await toClient(CX + r, CY);
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    for (let s = 1; s <= steps; s += 1) {
+      const a = (s / steps) * Math.PI * 2 * turns;
+      const p = await toClient(CX + Math.cos(a) * r, CY + Math.sin(a) * r);
+      await page.mouse.move(p.x, p.y);
+      await page.waitForTimeout(6);
+    }
+    await page.mouse.up();
+  };
+  const attr = async (n: string): Promise<string | null> =>
+    (await panel.count()) === 0 ? null : panel.getAttribute(n).catch(() => null);
+
+  // Drive each verb with the gesture it actually expects, reading the current
+  // verb (and the pending hull crease's required drag axis) off the panel.
+  let sawHoist = false;
+  let sawRoll = false;
+  let sawKindle = false;
+  for (let i = 0; i < 80; i += 1) {
+    if ((await panel.count()) === 0) break;
+    if ((await attr('data-ritual-complete')) === '1') break;
+    if ((await page.locator('[data-fold-sail]').count()) > 0) break;
+    const verb = await attr('data-fold-verb');
+    if (verb === 'fold') {
+      const axis = await attr('data-fold-crease-axis');
+      if (axis === 'vertical') await dragLine({ x: CX, y: CY - 55 }, { x: CX, y: CY + 55 });
+      else if (axis === 'horizontal') await dragLine({ x: CX - 70, y: CY }, { x: CX + 70, y: CY });
+      else await dragLine({ x: CX - 55, y: CY - 55 }, { x: CX + 55, y: CY + 55 });
+      await page.waitForTimeout(520); // let the flip animation settle
+    } else if (verb === 'hoist') {
+      sawHoist = true;
+      await dragLine({ x: CX, y: CY + 95 }, { x: CX, y: CY - 95 }, 18);
+      await page.waitForTimeout(70);
+    } else if (verb === 'roll') {
+      sawRoll = true;
+      await circleDrag(70);
+      await page.waitForTimeout(50);
+    } else if (verb === 'kindle') {
+      sawKindle = true;
+      const p = await toClient(CX, CY);
+      await page.mouse.move(p.x, p.y);
+      await page.mouse.down();
+      await page.waitForTimeout(1700); // hold to kindle (~1.5s)
+      await page.mouse.up();
+      await page.waitForTimeout(120);
+    } else {
+      await page.waitForTimeout(120);
+    }
+  }
+
+  // All three distinct verbs were genuinely exercised.
+  expect(sawHoist && sawRoll && sawKindle).toBe(true);
+
+  // The ritual carries her INTO the lantern clearing (the travelTo integration).
+  await expect(page.locator('body')).toHaveAttribute('data-location-id', 'final-spot', {
+    timeout: 15000,
+  });
+
+  // CONTROL restored: she can move + interact at final-spot (the stuck-state
+  // regression guard). Opening the ending here is only possible with control.
+  const endingStage = page.locator('[data-ending-stage]');
+  const walkPattern = ['ArrowDown', 'ArrowLeft', 'ArrowUp', 'ArrowRight'] as const;
+  for (let step = 0; step < 40 && (await endingStage.count()) === 0; step += 1) {
+    await page.keyboard.press('E', { delay: 30 });
+    if ((await endingStage.count()) > 0) break;
+    const key = walkPattern[step % walkPattern.length];
+    await page.keyboard.down(key);
+    await page.waitForTimeout(90);
+    await page.keyboard.up(key);
+  }
+  await expect(endingStage).toBeVisible();
+});
+
+test('folds the boat via the test-mode skip and arrives at the lantern clearing', async ({
+  page,
+}) => {
+  await page.goto('/?testMode=1&locationId=clearing&spawnId=start&seedKeepsakes=all');
+  const canvas = page.locator('canvas').first();
+  await expect(canvas).toBeVisible();
+  await expect(page.locator('body')).toHaveAttribute('data-location-id', 'clearing');
+
+  await canvas.click();
+  await walkToShore(page);
+
+  // testMode skip: fold straight to the finished boat and run the sail-away.
+  await page.getByRole('button', { name: 'Fold the boat' }).click();
+
+  await expect(page.locator('body')).toHaveAttribute('data-location-id', 'final-spot', {
+    timeout: 15000,
+  });
+});

@@ -2,6 +2,7 @@ import type { ActivityModule } from './activityTypes';
 import type { DialogueLine } from '../content/types';
 import {
   createPlacement,
+  ENDING_KEEPSAKE_ID,
   FINAL_ENDING_LETTERS,
   FINAL_KEEPSAKES,
   isFullyPlaced,
@@ -105,7 +106,7 @@ export const finalKeepsakeActivity: ActivityModule = {
     //    Mount the persistent letters screen above the ocean, then let the
     //    scene mark the ending complete and remove the ocean beneath it.
     showLettersScreen({ host: getUiRoot(), fadeIn: true });
-    onComplete({ locationId: 'final-spot', keepsakeId: 'ending-light' });
+    onComplete({ locationId: 'final-spot', keepsakeId: ENDING_KEEPSAKE_ID });
   },
 };
 
@@ -135,6 +136,22 @@ function buildStage(mount: HTMLElement): StageParts {
   const clearing = document.createElement('div');
   clearing.className = 'ending-clearing';
 
+  // She arrives by boat: it rests at the lantern table, and the three letters
+  // she folded it from unfold themselves one by one around the light.
+  const caption = document.createElement('p');
+  caption.className = 'ending-caption';
+  caption.textContent = 'The boat rests. The letters open, and the music uncurls beside them.';
+  clearing.append(caption);
+
+  const boat = document.createElement('div');
+  boat.className = 'ending-boat';
+  const boatHull = document.createElement('span');
+  boatHull.className = 'ending-boat__hull';
+  const boatSail = document.createElement('span');
+  boatSail.className = 'ending-boat__sail';
+  boat.append(boatHull, boatSail);
+  clearing.append(boat);
+
   const lantern = document.createElement('div');
   lantern.className = 'ending-lantern';
   const lanternGlow = document.createElement('span');
@@ -146,9 +163,9 @@ function buildStage(mount: HTMLElement): StageParts {
   const keepsakeEls = FINAL_KEEPSAKES.map((keepsake, index) => {
     const slot = KEEPSAKE_SLOTS[index] ?? { left: 50, top: 60 };
     const img = document.createElement('img');
-    img.className = 'ending-keepsake';
+    img.className = 'ending-keepsake ending-keepsake--letter';
     img.src = keepsake.iconUrl;
-    img.alt = keepsake.label;
+    img.alt = `${keepsake.label}, unfolding`;
     img.style.left = `${slot.left}%`;
     img.style.top = `${slot.top}%`;
     img.style.transitionDuration = '620ms';

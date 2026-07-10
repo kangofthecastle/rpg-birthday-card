@@ -52,6 +52,9 @@ One file per row, named exactly as shown (`.mp3` or `.ogg`):
 | `sfx-clutch.mp3` | The spike is defused — the big triumphant "you did it" moment. Bigger and brighter than the keepsake chime. |
 | `sfx-boot-key.mp3` | A keypress sound during the cold-open "computer booting" screen. Very short, like a typewriter/keyboard click. |
 | `sfx-ending-swell.mp3` | A one-shot swelling flourish for the ending's big emotional beat (separate from the looping `music-ending` bed — this is a single triggered moment, a few seconds long). |
+| `sfx-paper-fold.mp3` | Folding a crease in the origami ritual. A soft, crisp paper fold — a short "shff," gentle and papery, not sharp. |
+| `sfx-boat-expand.mp3` | The folded boat pops from flat into shape and its lantern catches. A gentle pop that blooms — a soft rounded "whoomp" opening up. |
+| `sfx-water-lap.mp3` | A soft lap of water during the sail-away. Short and calm; the game retriggers it for a loose lapping rhythm. |
 
 ## Trying it out without playing the whole game
 

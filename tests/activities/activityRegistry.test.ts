@@ -17,7 +17,8 @@ describe('activityRegistry', () => {
       'friendone-pc-fishing',
       'valorant-split',
       'final-keepsake-reveal',
-      'recipient-pc-letter',
+      'fold-the-letters',
+      'recipient-violin-piece',
     ]);
   });
 
@@ -361,9 +362,9 @@ describe('activityRegistry', () => {
         (img) => img.getAttribute('alt'),
       );
       expect(keepsakes).toEqual([
-        'Glowing Koi Scale',
-        'Defused Spike Charm',
-        'Golden Hour Photo',
+        '____’s Letter, unfolding',
+        '____’s Letter, unfolding',
+        'Your Sheet Music, unfolding',
       ]);
       expect(mount.textContent).not.toContain('flower');
       expect(mount.textContent).not.toContain('paper star');
@@ -382,10 +383,11 @@ describe('activityRegistry', () => {
     );
 
     expect(activityIds).toEqual([
+      'fold-the-letters',
       'friendone-pc-fishing',
       'valorant-split',
       'final-keepsake-reveal',
-      'recipient-pc-letter',
+      'recipient-violin-piece',
     ]);
     expect(() => {
       activityIds.forEach((activityId) => getActivity(activityId));

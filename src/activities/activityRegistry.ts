@@ -1,14 +1,16 @@
-import { recipientPcActivity } from './recipientPcActivity';
 import type { ActivityModule } from './activityTypes';
 import { finalKeepsakeActivity } from './finalKeepsakeActivity';
+import { foldTheLettersActivity } from './foldTheLetters/foldTheLettersActivity';
 import { friendoneFishingActivity } from './friendoneFishing/friendoneFishingActivity';
 import { valorantSplitActivity } from './valorantSplit/valorantSplitActivity';
+import { violinActivity } from './violin/violinActivity';
 
 const ACTIVITIES: readonly ActivityModule[] = [
   friendoneFishingActivity,
   valorantSplitActivity,
   finalKeepsakeActivity,
-  recipientPcActivity,
+  foldTheLettersActivity,
+  violinActivity,
 ];
 
 export function listActivities(): readonly ActivityModule[] {

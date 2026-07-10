@@ -67,10 +67,20 @@ export function showDialogue(lines: readonly DialogueLine[]): Promise<void> {
       advance();
     };
 
+    // A left-click anywhere on the dialogue advances it too, not just the
+    // Continue button. `click` fires only for the primary button, so
+    // right-clicks are ignored.
+    const handleClick = () => {
+      advance();
+    };
+
     activeDialogue = {
       host,
       resolve: complete,
-      cleanup: () => document.removeEventListener('keydown', handleKeyDown),
+      cleanup: () => {
+        document.removeEventListener('keydown', handleKeyDown);
+        host.removeEventListener('click', handleClick);
+      },
     };
 
     const render = () => {
@@ -86,6 +96,7 @@ export function showDialogue(lines: readonly DialogueLine[]): Promise<void> {
     };
 
     document.addEventListener('keydown', handleKeyDown);
+    host.addEventListener('click', handleClick);
     render();
   });
 }
@@ -150,7 +161,12 @@ function createDialogueBox(line: DialogueLine, onNext: () => void): HTMLElement 
   action.type = 'button';
   action.className = 'dialogue-box__action';
   action.textContent = 'Continue';
-  action.addEventListener('click', onNext);
+  // The dialogue host advances on any click; keep the button's own click from
+  // bubbling so it advances exactly once.
+  action.addEventListener('click', (event) => {
+    event.stopPropagation();
+    onNext();
+  });
   content.append(action);
 
   box.append(portraitFrame, content);

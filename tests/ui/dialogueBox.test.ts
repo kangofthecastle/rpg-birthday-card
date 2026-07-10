@@ -129,4 +129,20 @@ describe('showDialogue', () => {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
     expect(root?.querySelector('[data-ui-layer="dialogue"]')).toBeNull();
   });
+
+  it('advances when clicking anywhere on the dialogue, not just the Continue button', async () => {
+    const promise = showDialogue([{ text: 'First' }, { text: 'Second' }]);
+    const root = document.querySelector<HTMLElement>('#ui-root');
+
+    expect(root?.querySelector('.dialogue-box__text')?.textContent).toBe('First');
+
+    // Click the body text, away from the Continue button — exactly one advance.
+    root?.querySelector<HTMLElement>('.dialogue-box__text')?.click();
+    expect(root?.querySelector('.dialogue-box__text')?.textContent).toBe('Second');
+
+    // A click on the box itself finishes the dialogue.
+    root?.querySelector<HTMLElement>('.dialogue-box')?.click();
+    await promise;
+    expect(root?.querySelector('[data-ui-layer="dialogue"]')).toBeNull();
+  });
 });

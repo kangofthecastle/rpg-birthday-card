@@ -96,4 +96,21 @@ describe('showLetterModal', () => {
     await second;
     expect(root?.querySelector('[data-ui-layer="letter"]')).toBeNull();
   });
+
+  it('advances when clicking anywhere on the letter, not just the Continue button', async () => {
+    const promise = showLetterModal([
+      { text: 'First page.' },
+      { text: 'Second page.' },
+    ]);
+    const root = document.querySelector<HTMLElement>('#ui-root');
+
+    expect(root?.querySelector('.letter-modal__text')?.textContent).toBe('First page.');
+
+    root?.querySelector<HTMLElement>('.letter-modal__text')?.click();
+    expect(root?.querySelector('.letter-modal__text')?.textContent).toBe('Second page.');
+
+    root?.querySelector<HTMLElement>('.letter-modal')?.click();
+    await promise;
+    expect(root?.querySelector('[data-ui-layer="letter"]')).toBeNull();
+  });
 });

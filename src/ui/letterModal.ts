@@ -36,6 +36,7 @@ export function showLetterModal(lines: readonly DialogueLine[]): Promise<void> {
       }
 
       isComplete = true;
+      host.removeEventListener('click', handleClick);
 
       if (activeLetter?.host === host) {
         activeLetter = undefined;
@@ -54,6 +55,12 @@ export function showLetterModal(lines: readonly DialogueLine[]): Promise<void> {
       }
 
       render();
+    };
+
+    // A left-click anywhere on the letter advances it too, not just the
+    // Continue button.
+    const handleClick = () => {
+      advance();
     };
 
     activeLetter = {
@@ -79,6 +86,7 @@ export function showLetterModal(lines: readonly DialogueLine[]): Promise<void> {
       host.querySelector<HTMLButtonElement>('.letter-modal__action')?.focus({ preventScroll: true });
     };
 
+    host.addEventListener('click', handleClick);
     render();
   });
 }
@@ -112,7 +120,12 @@ export function createLetterModal(options: LetterModalOptions): HTMLElement {
   action.type = 'button';
   action.className = 'letter-modal__action';
   action.textContent = options.actionLabel ?? 'Continue';
-  action.addEventListener('click', options.onAction);
+  // The letter host advances on any click; keep the button's own click from
+  // bubbling so it advances exactly once.
+  action.addEventListener('click', (event) => {
+    event.stopPropagation();
+    options.onAction();
+  });
 
   paper.append(body, action);
   modal.append(paper);

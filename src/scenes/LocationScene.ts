@@ -47,6 +47,8 @@ import {
   getExteriors,
   getOutdoorPalette,
   exteriorTextureKey,
+  GROUND_TILESET_KEY,
+  GROUND_TILES,
   type ExteriorPlacement,
   type OutdoorPalette,
 } from '../content/outdoorScenery';
@@ -118,6 +120,74 @@ function mixColor(a: number, b: number, t: number): number {
   const g = Math.round(ag + (bg - ag) * t);
   const bl = Math.round(ab + (bb - ab) * t);
   return (r << 16) | (g << 8) | bl;
+}
+
+interface TilePiece {
+  readonly frame: number;
+  /** Clockwise 90° turns to apply to the base tile orientation. */
+  readonly quarter: number;
+}
+
+// Picks the ground path tile(s) for a cell from its 4-neighbour connectivity.
+// Base tile orientations (from the tileset): straight = N–S, curve = {E,S},
+// T = {E,S,W} (missing N), fade (dead-end) = open at S. Rotations are clockwise
+// quarter turns (N→E→S→W). The dusk set has only straight + fade, so its corners
+// degrade to a straight/cross stamp.
+function choosePathTile(
+  n: boolean,
+  e: boolean,
+  s: boolean,
+  w: boolean,
+  dusk: boolean,
+): readonly TilePiece[] {
+  const count = (n ? 1 : 0) + (e ? 1 : 0) + (s ? 1 : 0) + (w ? 1 : 0);
+  // Quarter turns to rotate a base direction into a target (base→target).
+  const fadeQuarter = { S: 0, W: 1, N: 2, E: 3 } as const;
+
+  if (dusk) {
+    const straight = GROUND_TILES.duskPathStraight;
+    if (count <= 1) {
+      const target = n ? 'N' : e ? 'E' : w ? 'W' : 'S';
+      return [{ frame: GROUND_TILES.duskPathFade, quarter: fadeQuarter[target] }];
+    }
+    const horizontal = e || w;
+    const vertical = n || s;
+    if (horizontal && vertical) {
+      return [
+        { frame: straight, quarter: 0 },
+        { frame: straight, quarter: 1 },
+      ];
+    }
+    return [{ frame: straight, quarter: horizontal ? 1 : 0 }];
+  }
+
+  if (count === 0) {
+    return [{ frame: GROUND_TILES.pathStraight, quarter: 0 }];
+  }
+  if (count === 1) {
+    const target = n ? 'N' : e ? 'E' : w ? 'W' : 'S';
+    return [{ frame: GROUND_TILES.pathFade, quarter: fadeQuarter[target] }];
+  }
+  if (count === 2) {
+    if (n && s) return [{ frame: GROUND_TILES.pathStraight, quarter: 0 }];
+    if (e && w) return [{ frame: GROUND_TILES.pathStraight, quarter: 1 }];
+    // Corner: curve base is {E,S}. Rotate to the actual open pair.
+    let quarter = 0;
+    if (s && w) quarter = 1;
+    else if (w && n) quarter = 2;
+    else if (n && e) quarter = 3;
+    return [{ frame: GROUND_TILES.pathCurve, quarter }];
+  }
+  if (count === 3) {
+    // T base misses N; rotate so the missing side matches (N→0,E→1,S→2,W→3).
+    const missingQuarter = !n ? 0 : !e ? 1 : !s ? 2 : 3;
+    return [{ frame: GROUND_TILES.pathT, quarter: missingQuarter }];
+  }
+  // 4-way cross: overlay two straights.
+  return [
+    { frame: GROUND_TILES.pathStraight, quarter: 0 },
+    { frame: GROUND_TILES.pathStraight, quarter: 1 },
+  ];
 }
 
 // Ambient bed per location; activities layer their own bed on top and the
@@ -735,6 +805,20 @@ export class LocationScene extends Phaser.Scene {
       path: 0xb9a06b,
     };
     const openEdges = new Set((this.location.edgeExits ?? []).map((exit) => exit.edge));
+
+    // File-first: when the ground tileset dropped in, tile the ground from it
+    // (grass scatter + auto-tiled paths + hedge band + dusk set for the
+    // clearing) instead of the procedural fills. The procedural path below stays
+    // the fallback when the tileset is absent. Per-area palette tinting is kept
+    // as a subtle overlay in both paths so areas stay distinguishable.
+    if (this.textures.exists(GROUND_TILESET_KEY)) {
+      this.buildTilesetGround(tilemap, pal, openEdges);
+      if (this.location.id === 'clearing') {
+        this.drawClearingShore(width, height, tile);
+      }
+      return;
+    }
+
     const rng = mulberry32(fnv1a(this.location.id));
 
     // 1. Grass base + subtle per-tile checker + scattered darker tufts.
@@ -809,6 +893,175 @@ export class LocationScene extends Phaser.Scene {
     if (this.location.id === 'clearing') {
       this.drawClearingShore(width, height, tile);
     }
+  }
+
+  // Tileset-driven flat ground: grass base with seeded variant scatter, worn
+  // dirt paths auto-tiled (straight/curve/T/fade) along the same centre→edge/door
+  // routes, and a 1-tile hedge band on every CLOSED edge. The clearing uses the
+  // dusk-tinted tile set. Everything bakes into one GPU RenderTexture; a subtle
+  // per-area palette rect is overlaid so areas stay distinguishable.
+  private buildTilesetGround(
+    tilemap: Phaser.Tilemaps.Tilemap,
+    pal: OutdoorPalette,
+    openEdges: Set<string>,
+  ): void {
+    const tile = tilemap.tileWidth;
+    const cols = tilemap.width;
+    const rows = tilemap.height;
+    const width = tilemap.widthInPixels;
+    const height = tilemap.heightInPixels;
+    const dusk = this.location.id === 'clearing';
+    const rng = mulberry32(fnv1a(`${this.location.id}:tiles`));
+
+    const rt = this.add
+      .renderTexture(0, 0, width, height)
+      .setOrigin(0, 0)
+      .setDepth(-20);
+
+    // 1. Grass base — mostly the plain variant, occasional bright/textured, rare
+    //    tufted accent. The clearing uses the two dusk grass tiles.
+    for (let row = 0; row < rows; row += 1) {
+      for (let column = 0; column < cols; column += 1) {
+        const roll = rng();
+        let frame: number;
+        if (dusk) {
+          frame = roll < 0.26 ? GROUND_TILES.duskGrass[1] : GROUND_TILES.duskGrass[0];
+        } else if (roll < 0.06) {
+          frame = GROUND_TILES.grass[3];
+        } else if (roll < 0.13) {
+          frame = GROUND_TILES.grass[1];
+        } else if (roll < 0.32) {
+          frame = GROUND_TILES.grass[2];
+        } else {
+          frame = GROUND_TILES.grass[0];
+        }
+        this.stampGroundTile(rt, frame, 0, column * tile, row * tile, tile);
+      }
+    }
+
+    // 2. Worn paths: rasterize centre→(open edge / door) routes into a 1-tile-wide
+    //    cell mask, then auto-tile each cell from its 4-neighbour connectivity.
+    const path = this.rasterizePathCells(cols, rows, tile, width, height, openEdges);
+    for (let index = 0; index < path.length; index += 1) {
+      if (!path[index]) {
+        continue;
+      }
+      const column = index % cols;
+      const row = Math.floor(index / cols);
+      const n = row > 0 && path[index - cols];
+      const s = row < rows - 1 && path[index + cols];
+      const w = column > 0 && path[index - 1];
+      const e = column < cols - 1 && path[index + 1];
+      for (const piece of choosePathTile(n, e, s, w, dusk)) {
+        this.stampGroundTile(rt, piece.frame, piece.quarter, column * tile, row * tile, tile);
+      }
+    }
+
+    // 3. Hedge band ~1 tile thick on each CLOSED edge (dusk areas have no hedge
+    //    tile set — the shore reads the boundary there, so skip when dusk).
+    if (!dusk) {
+      const hedge = GROUND_TILES.hedgeStraight;
+      for (let column = 0; column < cols; column += 1) {
+        if (!openEdges.has('north')) this.stampGroundTile(rt, hedge, 0, column * tile, 0, tile);
+        if (!openEdges.has('south')) {
+          this.stampGroundTile(rt, hedge, 0, column * tile, (rows - 1) * tile, tile);
+        }
+      }
+      for (let row = 0; row < rows; row += 1) {
+        if (!openEdges.has('west')) this.stampGroundTile(rt, hedge, 1, 0, row * tile, tile);
+        if (!openEdges.has('east')) {
+          this.stampGroundTile(rt, hedge, 1, (cols - 1) * tile, row * tile, tile);
+        }
+      }
+    }
+
+    // 4. Subtle per-area palette overlay so shared grass tiles still read as
+    //    distinct places (cool ____ yard, warm ____ yard, dusk clearing).
+    const tint = this.add.graphics().setDepth(-19).setAlpha(dusk ? 0.22 : 0.16);
+    tint.fillStyle(pal.floorA, 1);
+    tint.fillRect(0, 0, width, height);
+  }
+
+  // Stamps one 64px tileset frame (optionally rotated by `quarter` clockwise
+  // 90° turns) into the ground RenderTexture at map px (x, y). Rotated variants
+  // are baked once into cached canvas textures so no per-draw rotation is needed.
+  private stampGroundTile(
+    rt: Phaser.GameObjects.RenderTexture,
+    frame: number,
+    quarter: number,
+    x: number,
+    y: number,
+    size: number,
+  ): void {
+    rt.drawFrame(this.rotatedTileKey(frame, quarter, size), undefined, x, y);
+  }
+
+  private rotatedTileKey(frame: number, quarter: number, size: number): string {
+    const key = `gt-${frame}-${quarter}-${size}`;
+    if (this.textures.exists(key)) {
+      return key;
+    }
+    const source = this.textures.get(GROUND_TILESET_KEY);
+    const cut = source.get(frame);
+    const canvasTexture = this.textures.createCanvas(key, size, size);
+    if (!canvasTexture) {
+      return GROUND_TILESET_KEY;
+    }
+    const ctx = canvasTexture.getContext();
+    ctx.save();
+    ctx.translate(size / 2, size / 2);
+    ctx.rotate((quarter * Math.PI) / 2);
+    ctx.translate(-size / 2, -size / 2);
+    ctx.drawImage(
+      source.getSourceImage() as CanvasImageSource,
+      cut.cutX,
+      cut.cutY,
+      cut.cutWidth,
+      cut.cutHeight,
+      0,
+      0,
+      size,
+      size,
+    );
+    ctx.restore();
+    canvasTexture.refresh();
+    return key;
+  }
+
+  // Rasterizes the worn-path routes (map centre → each open edge and each door
+  // exit) into a boolean cell mask, ~1 tile wide, matching the procedural routes.
+  private rasterizePathCells(
+    cols: number,
+    rows: number,
+    tile: number,
+    width: number,
+    height: number,
+    openEdges: Set<string>,
+  ): boolean[] {
+    const mask = new Array<boolean>(cols * rows).fill(false);
+    const center = { x: width / 2, y: height / 2 };
+    const targets: Array<{ x: number; y: number }> = [];
+    if (openEdges.has('west')) targets.push({ x: 0, y: height / 2 });
+    if (openEdges.has('east')) targets.push({ x: width, y: height / 2 });
+    if (openEdges.has('north')) targets.push({ x: width / 2, y: 0 });
+    if (openEdges.has('south')) targets.push({ x: width / 2, y: height });
+    for (const exit of this.exits) {
+      targets.push({ x: exit.x + exit.width / 2, y: exit.y + exit.height / 2 });
+    }
+    const mark = (px: number, py: number): void => {
+      const c = Math.min(cols - 1, Math.max(0, Math.floor(px / tile)));
+      const r = Math.min(rows - 1, Math.max(0, Math.floor(py / tile)));
+      mask[r * cols + c] = true;
+    };
+    for (const target of targets) {
+      const distance = Math.hypot(target.x - center.x, target.y - center.y);
+      const steps = Math.max(2, Math.round(distance / (tile * 0.4)));
+      for (let i = 0; i <= steps; i += 1) {
+        const t = i / steps;
+        mark(center.x + (target.x - center.x) * t, center.y + (target.y - center.y) * t);
+      }
+    }
+    return mask;
   }
 
   // A dark-water band along the clearing's south edge (~2 tiles). Always present;

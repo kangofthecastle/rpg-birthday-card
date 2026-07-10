@@ -4,6 +4,29 @@
 // LocationScene projects them to iso screen space like room-dressing props.
 
 export const EXTERIOR_KEY_PREFIX = 'exterior-';
+
+// Optional drop-in ground tileset (probed + loaded in BootScene as a 64×64
+// spritesheet). When present, createFlatGround tiles the outdoor ground from it
+// instead of the procedural grass/path/hedge fills. 4×4 grid (256×256):
+//   row 0: grass variants (base / bright / textured / tufted)
+//   row 1: worn dirt path — straight[N-S] / curve[E-S] / T[E-S-W] / fade[S]
+//   row 2: hedge border — straight[E-W] / corner / canopy / corner
+//   row 3: dusk-tinted set — grass / grass-variant / path[N-S] / path-fade
+export const GROUND_TILESET_KEY = 'ground-tileset';
+export const GROUND_TILESET_URL = '/assets/tiles/ground-tileset.png';
+export const GROUND_TILE_SIZE = 64;
+/** Frame indices into the 4×4 tileset (row-major). */
+export const GROUND_TILES = {
+  grass: [0, 1, 2, 3] as const,
+  pathStraight: 4,
+  pathCurve: 5,
+  pathT: 6,
+  pathFade: 7,
+  hedgeStraight: 8,
+  duskGrass: [12, 13] as const,
+  duskPathStraight: 14,
+  duskPathFade: 15,
+} as const;
 /** Placeholder SVG source size; a drop-in PNG can be any size (scaled to fit). */
 export const EXTERIOR_SOURCE_WIDTH = 320;
 export const EXTERIOR_SOURCE_HEIGHT = 360;

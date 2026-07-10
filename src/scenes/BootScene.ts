@@ -14,8 +14,14 @@ import {
   EXTERIOR_SOURCE_HEIGHT,
   EXTERIOR_SOURCE_WIDTH,
   exteriorTextureKey,
+  GROUND_TILESET_KEY,
+  GROUND_TILESET_URL,
+  GROUND_TILE_SIZE,
 } from '../content/outdoorScenery';
+import { DOORMAT_DROP_KEY } from '../game/roomRenderer';
 import { isImageUrl } from '../game/assetProbe';
+
+const DOORMAT_DROP_URL = '/assets/doormat.png';
 
 export class BootScene extends Phaser.Scene {
   constructor() {
@@ -46,9 +52,38 @@ export class BootScene extends Phaser.Scene {
 
   create(): void {
     createTempTextures(this);
-    // Resolve house exteriors (PNG-preferred, SVG fallback) before entering the
-    // world, so an outdoor scene always has its textures ready.
-    void this.loadExteriors().then(() => this.startWorld());
+    // Resolve optional/generated art (house exteriors, ground tileset, interior
+    // doormat) before entering the world, so scenes always have their textures
+    // ready. Each is probed up front so a missing file never errors the loader.
+    void this.loadExteriors()
+      .then(() => this.loadOptionalDropIns())
+      .then(() => this.startWorld());
+  }
+
+  // Optional Codex-generated drop-ins, probed then loaded into shared texture
+  // keys. Absent files are silently skipped; downstream renderers fall back to
+  // their procedural textures when a key is missing.
+  private async loadOptionalDropIns(): Promise<void> {
+    const [hasTileset, hasDoormat] = await Promise.all([
+      isImageUrl(GROUND_TILESET_URL),
+      isImageUrl(DOORMAT_DROP_URL),
+    ]);
+    if (!hasTileset && !hasDoormat) {
+      return;
+    }
+    await new Promise<void>((resolve) => {
+      if (hasTileset) {
+        this.load.spritesheet(GROUND_TILESET_KEY, GROUND_TILESET_URL, {
+          frameWidth: GROUND_TILE_SIZE,
+          frameHeight: GROUND_TILE_SIZE,
+        });
+      }
+      if (hasDoormat) {
+        this.load.image(DOORMAT_DROP_KEY, DOORMAT_DROP_URL);
+      }
+      this.load.once(Phaser.Loader.Events.COMPLETE, () => resolve());
+      this.load.start();
+    });
   }
 
   // House exteriors: prefer a Codex-generated PNG, fall back to the hand-authored

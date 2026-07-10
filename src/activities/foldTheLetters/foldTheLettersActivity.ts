@@ -29,7 +29,15 @@ import {
   type RitualState,
 } from './foldModel';
 import { FoldStage } from './foldStage';
+import { isImageUrl } from '../../game/assetProbe';
 import './foldTheLetters.css';
+
+// Optional full-scene backdrop for the sail-away cinematic. File-first: when
+// present it cross-fades in over the composited boat as the drift begins and
+// holds through the travel. Absent → the procedural water/petals scene alone.
+const SAIL_AWAY_KEY_ART_URL = '/assets/activities/fold-the-letters/sail-away-key-art.png';
+let sailAwayKeyArtUrl: string | undefined;
+let sailAwayKeyArtProbed = false;
 
 /**
  * The keepsake ritual at the clearing shore. ____ makes a paper boat from her
@@ -423,7 +431,16 @@ export const foldTheLettersActivity: ActivityModule = {
         return;
       }
 
-      const cinematic = buildSailAwayCinematic(stage.getLoadedPieceUrls());
+      if (!sailAwayKeyArtProbed) {
+        sailAwayKeyArtProbed = true;
+        sailAwayKeyArtUrl = (await isImageUrl(SAIL_AWAY_KEY_ART_URL))
+          ? SAIL_AWAY_KEY_ART_URL
+          : undefined;
+        if (finished) {
+          return;
+        }
+      }
+      const cinematic = buildSailAwayCinematic(stage.getLoadedPieceUrls(), sailAwayKeyArtUrl);
       mount.append(cinematic);
       void cinematic.offsetWidth;
       cinematic.classList.add('fold-sail--go');
@@ -469,7 +486,10 @@ function validDragFor(crease: HullCrease): { dx: number; dy: number } {
   return { dx: 50, dy: 50 };
 }
 
-function buildSailAwayCinematic(pieces: Partial<Record<string, string>>): HTMLElement {
+function buildSailAwayCinematic(
+  pieces: Partial<Record<string, string>>,
+  keyArtUrl?: string,
+): HTMLElement {
   const stage = document.createElement('div');
   stage.className = 'fold-sail';
   stage.dataset.foldSail = '';
@@ -506,7 +526,17 @@ function buildSailAwayCinematic(pieces: Partial<Record<string, string>>): HTMLEl
     petals.append(petal);
   }
 
-  stage.append(sky, water, boat, petals);
+  // Full-scene key art (file-first) cross-fades in over the boat as it drifts,
+  // becoming the held final image; layered above the boat, below the petals.
+  if (keyArtUrl) {
+    const keyart = document.createElement('img');
+    keyart.className = 'fold-sail__keyart';
+    keyart.src = keyArtUrl;
+    keyart.alt = '';
+    stage.append(sky, water, boat, keyart, petals);
+  } else {
+    stage.append(sky, water, boat, petals);
+  }
   return stage;
 }
 

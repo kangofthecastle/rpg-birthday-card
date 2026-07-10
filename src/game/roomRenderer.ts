@@ -29,6 +29,10 @@ const DOORMAT_GLOW_DEPTH = -27;
 // ____ and the furniture rather than washing over her face.
 const AWAKENING_DEPTH = -18;
 
+/** Texture key for an optional drop-in doormat PNG (loaded by BootScene). When
+ * present it is used as the warp source in place of the procedural weave. */
+export const DOORMAT_DROP_KEY = 'doormat-drop';
+
 // The player yardstick: how tall ____'s sprite actually reads on screen. Her
 // 256px frame is drawn at RECIPIENT_SPRITE.scale, and the visible character fills
 // ~0.88 of that frame height (measured in-scene: ~102px of the 115px frame).
@@ -502,6 +506,13 @@ function warpTextureToFloorQuad(
 }
 
 function buildDoormatTexture(scene: Phaser.Scene, dressing: RoomDressing): string {
+  // File-first: a dropped-in doormat PNG (probed + loaded in BootScene) replaces
+  // the procedural weave as the warp source, using the same warp + glow + shimmer
+  // pipeline. Falls back to the procedural texture when absent.
+  if (scene.textures.exists(DOORMAT_DROP_KEY)) {
+    return DOORMAT_DROP_KEY;
+  }
+
   const key = `${dressing.tilesTextureKey}-doormat`;
 
   if (scene.textures.exists(key)) {

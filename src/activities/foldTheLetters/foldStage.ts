@@ -145,6 +145,30 @@ const PIECE_FILES: Readonly<Record<string, string>> = {
   'recipient-boat': `${ASSET_BASE}/recipient-boat.png`,
 };
 
+// Optional drop-in art used ONLY during the HOIST stage (the raising of the
+// sail), probed file-first like the pieces above so they slot in with zero code
+// changes and everything looks unchanged until they land:
+//   sail-loose.png — the sail fabric ALONE (no pole), drawn as the hoisted cloth
+//     with the same billow warp; fallback chain sail-loose → sail → procedural.
+//   mast.png       — a proper painted mast/pole, drawn to the mast geometry
+//     (mastTop..mastBottom) in place of the procedural #bd914f bar; else the bar.
+// The assembled/tray/ending art stays sail.png (unchanged).
+const HOIST_ART_FILES: Readonly<Record<string, string>> = {
+  'sail-loose': `${ASSET_BASE}/sail-loose.png`,
+  mast: `${ASSET_BASE}/mast.png`,
+};
+
+// Grab forgiveness for on-paper pickup (logical px): a pointerdown must land on
+// the current paper silhouette or within this margin of its edge to start a
+// gesture, so clicking empty background does nothing but imprecise grabs near an
+// edge/corner still take. Modest by design.
+const PICK_MARGIN = 24;
+
+// The lantern sheet's footprint (roll/kindle) in logical coords — the flat page
+// as drawn in drawLanternStage, centred on rollCentre(). Used for on-page pickup.
+const LANTERN_PAGE_W = 260;
+const LANTERN_PAGE_H = 150;
+
 // Optional drop-in paper textures, one per piece — the flat unfolded sheet (each
 // 512x640, straight-on, filling the frame edge-to-edge). When a file is present it
 // becomes the paper's fill in EVERY fold state, drawn to the fixed sheet frame
@@ -256,7 +280,12 @@ export interface FoldStageCallbacks {
 }
 
 export class FoldStage {
-  private readonly ctx: CanvasRenderingContext2D;
+  // The active draw target. Normally the on-screen canvas' context; briefly
+  // repointed at an offscreen buffer while rendering the transparent hand-down
+  // sprite (renderPieceToBuffer), then restored — so the piece-draw methods,
+  // which all draw to `this.ctx`, re-render the finished piece onto a clean,
+  // background-free surface.
+  private ctx: CanvasRenderingContext2D;
   private readonly callbacks: FoldStageCallbacks;
 
   private verb: Verb = 'fold';
@@ -311,6 +340,9 @@ export class FoldStage {
   private pointerDown = false;
   private hoistGrabOffset = 0;
   private pointerLast?: Point;
+  // Roll only starts when the pointerdown landed on the lantern page (with a
+  // forgiveness margin); a sideways sweep begun over empty background is ignored.
+  private rollGrabbed = false;
 
   private readonly images: Partial<Record<string, HTMLImageElement>> = {};
 
@@ -472,30 +504,53 @@ export class FoldStage {
     return { x: 176, y: 88, w: 100, h: 168 };
   }
 
-  /** Captures the current (finished-component) frame from the canvas into an
-   * offscreen buffer, then switches the hand-down into its flying phase. */
+  /** Builds the flying sprite by RE-RENDERING just the finished piece onto a
+   * TRANSPARENT offscreen buffer — no backdrop, no tray, no water — so the piece
+   * flies with clean alpha edges over the painted backdrop instead of carrying a
+   * stale background rectangle copied off the main canvas. Then switches the
+   * hand-down into its flying phase. */
   private captureHandDown(hd: HandDown): void {
-    const s = RENDER_SCALE;
-    const buf = document.createElement('canvas');
-    buf.width = Math.max(1, Math.round(hd.src.w * s));
-    buf.height = Math.max(1, Math.round(hd.src.h * s));
-    const bctx = buf.getContext('2d');
-    if (bctx) {
-      bctx.drawImage(
-        this.canvas,
-        hd.src.x * s,
-        hd.src.y * s,
-        hd.src.w * s,
-        hd.src.h * s,
-        0,
-        0,
-        buf.width,
-        buf.height,
-      );
-      hd.snapshot = buf;
-    }
+    hd.snapshot = this.renderPieceToBuffer(hd.key, hd.src);
     hd.phase = 'fly';
     hd.start = performance.now();
+  }
+
+  /** Renders ONLY the finished component (its silhouette + paper texture / sail
+   * art / rolled lantern, with its own soft shadow but NO background fill) into a
+   * transparent offscreen canvas covering `src` in logical space. The piece-draw
+   * methods draw to `this.ctx`, so we briefly repoint that at the buffer's context
+   * (transformed so `src`'s top-left maps to the buffer origin) and restore it. */
+  private renderPieceToBuffer(
+    key: 'hull' | 'sail' | 'lantern',
+    src: Rect,
+  ): HTMLCanvasElement | undefined {
+    const s = RENDER_SCALE;
+    const buf = document.createElement('canvas');
+    buf.width = Math.max(1, Math.round(src.w * s));
+    buf.height = Math.max(1, Math.round(src.h * s));
+    const bctx = buf.getContext('2d');
+    if (!bctx) {
+      return undefined;
+    }
+    const prev = this.ctx;
+    this.ctx = bctx;
+    // Logical (lx,ly) → buffer px (s·(lx−src.x), s·(ly−src.y)); buffer starts fully
+    // transparent, so only the piece's own pixels (+ its shadow) are ever drawn.
+    bctx.setTransform(s, 0, 0, s, -src.x * s, -src.y * s);
+    try {
+      if (key === 'hull') {
+        // At hand-down the hull is settled to 'boat' with no pending crease, so
+        // this draws exactly the finished hull silhouette.
+        this.drawHullStage();
+      } else if (key === 'sail') {
+        this.drawHoistStage();
+      } else {
+        this.drawLanternStage();
+      }
+    } finally {
+      this.ctx = prev;
+    }
+    return buf;
   }
 
   /** Draws the flying snapshot shrinking/moving from its stage bounds into the
@@ -570,7 +625,7 @@ export class FoldStage {
 
   private async loadPieces(): Promise<void> {
     await Promise.all(
-      Object.entries({ ...PIECE_FILES, ...PIECE_PAPER_FILES, backdrop: BACKDROP_URL }).map(async ([key, url]) => {
+      Object.entries({ ...PIECE_FILES, ...PIECE_PAPER_FILES, ...HOIST_ART_FILES, backdrop: BACKDROP_URL }).map(async ([key, url]) => {
         if (!(await isImageUrl(url))) {
           return;
         }
@@ -613,6 +668,13 @@ export class FoldStage {
     }
 
     if (this.verb === 'fold') {
+      // A fold only starts when the finger actually lands ON the paper (the
+      // current silhouette, plus a modest forgiveness margin) — clicking empty
+      // background does nothing. The 'open' fold keeps its grab-anywhere-ON-the-
+      // paper feel because the test is the whole silhouette, not an edge.
+      if (!this.pointerOnFoldPaper(point)) {
+        return;
+      }
       const plan = this.buildFoldPlan();
       if (plan) {
         plan.active = this.pickActiveFlap(plan, point);
@@ -628,7 +690,14 @@ export class FoldStage {
       // Grab the sail wherever the pointer lands without a jump: remember the
       // offset between the pointer's implied hoist and the sail's real hoist.
       this.hoistGrabOffset = this.hoist - this.hoistFromPointer(point);
+    } else if (this.verb === 'roll') {
+      // Only begin a roll when the sweep starts on the page (with margin).
+      this.rollGrabbed = this.pointerOnLanternPage(point);
     } else if (this.verb === 'kindle') {
+      // Kindle only ignites when the press lands on the rolled page.
+      if (!this.pointerOnLanternPage(point)) {
+        return;
+      }
       this.kindleHeld = true;
       this.callbacks.onKindleChange(true);
     }
@@ -648,7 +717,7 @@ export class FoldStage {
     } else if (this.verb === 'hoist') {
       const progress = clamp01(this.hoistFromPointer(now) + this.hoistGrabOffset);
       this.callbacks.onHoistProgress(progress);
-    } else if (this.verb === 'roll') {
+    } else if (this.verb === 'roll' && this.rollGrabbed) {
       // Rolling is PRIMARILY a sideways sweep: horizontal drag rolls the tube like
       // a scroll pulled along a table. |dx| over ROLL_SWIPE_SPAN is the fraction of
       // the whole roll swept, converted to the model's radian metric. A circular
@@ -677,7 +746,31 @@ export class FoldStage {
     }
     this.pointerDown = false;
     this.pointerLast = undefined;
+    this.rollGrabbed = false;
   };
+
+  /** True when `p` lands on the paper being FOLDED right now (the current
+   * silhouette — the hull shape for hull folds, the sail sheet for the sail
+   * fold), or within PICK_MARGIN of its edge. Gates fold pickup so empty
+   * background never folds the paper. */
+  private pointerOnFoldPaper(p: Point): boolean {
+    const poly =
+      this.componentId === 'hull' ? this.hullPolygon(this.hullShape) : rectPoints(this.paper);
+    return pointNearPolygon(p, poly, PICK_MARGIN);
+  }
+
+  /** True when `p` lands on the lantern sheet (roll/kindle) or within PICK_MARGIN
+   * of its edge. Gates roll/kindle pickup to the page. */
+  private pointerOnLanternPage(p: Point): boolean {
+    const c = this.rollCentre();
+    const rect: Rect = {
+      x: c.x - LANTERN_PAGE_W / 2,
+      y: c.y - LANTERN_PAGE_H / 2,
+      w: LANTERN_PAGE_W,
+      h: LANTERN_PAGE_H,
+    };
+    return pointNearPolygon(p, rectPoints(rect), PICK_MARGIN);
+  }
 
   private rollCentre(): Point {
     return { x: LOGICAL_WIDTH / 2, y: 170 };
@@ -1290,17 +1383,32 @@ export class FoldStage {
     const mastX = LOGICAL_WIDTH / 2;
     const { mastTop, mastBottom, headLow, travel } = this.hoistBounds();
 
-    // A short, warm-wood/bamboo mast — no pennant. Its top sits just above the
-    // fully-raised sail head so a full hoist reads as reaching the masthead.
-    ctx.save();
-    ctx.strokeStyle = '#bd914f';
-    ctx.lineWidth = 6;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(mastX, mastTop);
-    ctx.lineTo(mastX, mastBottom);
-    ctx.stroke();
-    ctx.restore();
+    // A short mast running mastTop..mastBottom. If mast.png is present it is the
+    // painted pole (authored tall/thin, e.g. 64×512), scaled to the mast height
+    // and centred on the mast line; otherwise a warm-wood/bamboo bar. Its top sits
+    // just above the fully-raised sail head so a full hoist reads as reaching the
+    // masthead.
+    const mastArt = this.images.mast;
+    if (mastArt) {
+      const mastH = mastBottom - mastTop;
+      const drawW = mastH * (mastArt.width / mastArt.height);
+      ctx.save();
+      ctx.shadowColor = 'rgba(0,0,0,0.3)';
+      ctx.shadowBlur = 8;
+      ctx.shadowOffsetY = 3;
+      ctx.drawImage(mastArt, mastX - drawW / 2, mastTop, drawW, mastH);
+      ctx.restore();
+    } else {
+      ctx.save();
+      ctx.strokeStyle = '#bd914f';
+      ctx.lineWidth = 6;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(mastX, mastTop);
+      ctx.lineTo(mastX, mastBottom);
+      ctx.stroke();
+      ctx.restore();
+    }
 
     const hoist = this.renderedHoist;
     // Wind swells smoothly across the wobble-window boundaries: amplitude 2.5→10,
@@ -1315,9 +1423,11 @@ export class FoldStage {
     const sailH = 128;
     const foot = topY + sailH;
 
-    const sailArt = this.images.sail;
+    // The hoisted fabric: sail-loose.png (the sail alone, no pole) when present,
+    // else sail.png (current behaviour), else the procedural quad below.
+    const sailArt = this.images['sail-loose'] ?? this.images.sail;
     if (sailArt) {
-      // The painted sail (sail.png) rides UP the mast, warped by a gentle billow:
+      // The painted sail rides UP the mast, warped by a gentle billow:
       // horizontal rows bow out toward the sail's belly and wave with the same
       // wind-catch wobble, so it reads as cloth catching air rather than a flat
       // decal. The head (apex) and foot stay pinned; only the middle bellies.
@@ -1412,8 +1522,8 @@ export class FoldStage {
     const cx = centre.x;
     const cy = centre.y;
     const roll = this.roll;
-    const pageW = 260;
-    const pageH = 150;
+    const pageW = LANTERN_PAGE_W;
+    const pageH = LANTERN_PAGE_H;
     const tubeR = 30; // radius of the fully rolled cylinder
 
     // The swept angle the model accumulated (up to ROLL_TARGET): the tube's
@@ -1760,6 +1870,51 @@ function dist2(a: Point, b: Point): number {
   const dx = a.x - b.x;
   const dy = a.y - b.y;
   return dx * dx + dy * dy;
+}
+
+/** Ray-cast point-in-polygon test (boundary counts as inside within eps). */
+export function pointInPolygon(p: Point, poly: Point[]): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i, i += 1) {
+    const a = poly[i];
+    const b = poly[j];
+    const intersects =
+      a.y > p.y !== b.y > p.y &&
+      p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y || 1e-12) + a.x;
+    if (intersects) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+/** Shortest distance from point `p` to segment a→b. */
+function distToSegment(p: Point, a: Point, b: Point): number {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len2 = dx * dx + dy * dy;
+  if (len2 === 0) {
+    return Math.hypot(p.x - a.x, p.y - a.y);
+  }
+  const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2));
+  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+}
+
+/** True when `p` is inside `poly` OR within `margin` (logical px) of its edge —
+ * the on-paper pickup test (a modest grab-forgiveness band around the shape). */
+export function pointNearPolygon(p: Point, poly: Point[], margin: number): boolean {
+  if (poly.length < 3) {
+    return false;
+  }
+  if (pointInPolygon(p, poly)) {
+    return true;
+  }
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i, i += 1) {
+    if (distToSegment(p, poly[j], poly[i]) <= margin) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /** Sutherland–Hodgman clip of a simple polygon to the half-plane on the side of

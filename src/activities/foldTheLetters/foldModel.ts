@@ -11,9 +11,10 @@
 //   2. ____'s letter → the SAIL  — HOIST: one continuous fold to make the
 //      triangle, then the sail rides UP pinned to the pointer's height until it
 //      reaches the masthead.
-//   3. ____'s sheet music → the LANTERN — ROLL then LIGHT: a circular drag curls
-//      the page into a cylinder (staff lines wrapping, plucked notes sounding one
-//      by one); then press-and-HOLD to kindle it until it glows through.
+//   3. ____'s sheet music → the LANTERN — ROLL then LIGHT: a sideways (horizontal)
+//      drag rolls the page across into a cylinder (staff lines wrapping, plucked
+//      notes sounding one by one); then press-and-HOLD to kindle it until it glows
+//      through.
 //
 // There is no fail state — every gesture only ever moves the ritual forward.
 // Kept dependency-free so the sequence unit-tests in isolation and drives the
@@ -183,6 +184,19 @@ export const FOLD_COMPONENTS: readonly FoldComponent[] = [
  * before it and the flap falls back open — no penalty, try again. */
 export const FOLD_COMMIT_THRESHOLD = 0.65;
 
+/** The open-out fold (peak → boat) is a big, imprecise two-handed pull rather
+ * than a crisp crease, so it commits on a SHORTER drag — a natural medium pull
+ * registers reliably instead of stalling just short of the full span. */
+export const FOLD_COMMIT_THRESHOLD_OPEN = 0.55;
+
+/** The commit threshold for the fold currently pending — lower for the open-out
+ * fold (see FOLD_COMMIT_THRESHOLD_OPEN), the standard threshold otherwise. */
+export function foldCommitThreshold(state: RitualState): number {
+  return currentFoldCrease(state)?.kind === 'open'
+    ? FOLD_COMMIT_THRESHOLD_OPEN
+    : FOLD_COMMIT_THRESHOLD;
+}
+
 /** Progress windows where the sail visibly catches wind and sways (view feel). */
 export const SAIL_WOBBLE_WINDOWS: readonly (readonly [number, number])[] = [
   [0.36, 0.5],
@@ -194,8 +208,13 @@ export const SAIL_WOBBLE_WINDOWS: readonly (readonly [number, number])[] = [
  * fully home, so the sail clicks into place instead of stalling a pixel short. */
 export const HOIST_COMPLETE_THRESHOLD = 0.985;
 
-/** Total swept angle (radians) that rolls the sheet fully into the lantern. */
-export const ROLL_TARGET = Math.PI * 3;
+/** Total swept angle (radians) that rolls the sheet fully into the lantern — one
+ * full turn of the tube surface. The primary roll input is a LINEAR horizontal
+ * drag (see foldStage's ROLL_SWIPE_SPAN), which the view converts into swept
+ * angle; circular drag also contributes. Progress = rollAngle / ROLL_TARGET, so
+ * this value cancels out of the linear-drag difficulty and only sets how far the
+ * rendered surface rotates across a full roll. */
+export const ROLL_TARGET = Math.PI * 2;
 /** How many plucked notes sound across a full roll. */
 export const ROLL_NOTE_COUNT = 6;
 
@@ -322,7 +341,7 @@ export function setFoldProgress(state: RitualState, t: number): RitualState {
 
 /** True if the current fold has been dragged far enough to settle on release. */
 export function willCommitFold(state: RitualState): boolean {
-  return currentVerb(state) === 'fold' && state.foldProgress >= FOLD_COMMIT_THRESHOLD;
+  return currentVerb(state) === 'fold' && state.foldProgress >= foldCommitThreshold(state);
 }
 
 /**
@@ -356,7 +375,7 @@ export function releaseFold(state: RitualState): RitualState {
   if (currentVerb(state) !== 'fold') {
     return state;
   }
-  if (state.foldProgress >= FOLD_COMMIT_THRESHOLD) {
+  if (state.foldProgress >= foldCommitThreshold(state)) {
     return commitFold(state);
   }
   return { ...state, foldProgress: 0 };
@@ -403,8 +422,9 @@ export function rollNoteIndex(state: RitualState): number {
   return Math.min(ROLL_NOTE_COUNT, Math.floor(rollProgress(state) * ROLL_NOTE_COUNT));
 }
 
-/** Applies swept angle (radians, magnitude) from a circular drag. Rolling is
- * direction-agnostic — any turning wraps the page. */
+/** Applies swept angle (radians, magnitude) from a roll gesture — the view feeds
+ * a radian-equivalent from a horizontal drag (primary) or a circular drag.
+ * Rolling is direction-agnostic — any sideways sweep or turn wraps the page. */
 export function applyRoll(state: RitualState, deltaAngle: number): RitualState {
   if (currentVerb(state) !== 'roll') {
     return state;

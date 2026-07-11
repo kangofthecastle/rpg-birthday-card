@@ -338,12 +338,19 @@ function buildBoat(assets: NonNullable<typeof probed>): HTMLElement | undefined 
   const boat = document.createElement('div');
   boat.className = 'ending-frames__boat';
   boat.dataset.endingBoat = '';
-  boat.append(
-    piece('ending-frames__hull', assets.hull ? ASSET.hull : undefined),
-    piece('ending-frames__sail', assets.sail ? ASSET.sail : undefined),
-    piece('ending-frames__lantern', assets.lantern ? ASSET.lantern : undefined),
-    piece('ending-frames__rider', assets.rider ? ASSET.rider : undefined),
-  );
+  if (assets.rider) {
+    // recipient-boat.png is a COMPLETE painted boat (hull + sail + lantern + ____), so
+    // it stands alone — stacking the separate hull/sail/lantern pieces under it
+    // would show two hulls. Render ONLY the rider painting when it resolves.
+    boat.append(piece('ending-frames__rider', ASSET.rider));
+  } else {
+    // No complete-boat art: assemble from whichever individual pieces exist.
+    boat.append(
+      piece('ending-frames__hull', assets.hull ? ASSET.hull : undefined),
+      piece('ending-frames__sail', assets.sail ? ASSET.sail : undefined),
+      piece('ending-frames__lantern', assets.lantern ? ASSET.lantern : undefined),
+    );
+  }
   return boat;
 }
 

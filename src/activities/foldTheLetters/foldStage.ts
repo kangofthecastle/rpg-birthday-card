@@ -11,8 +11,9 @@
 //                         settles the flap home (commit) or falls it back open.
 //   HOIST (sail)        — the sail is pinned to the pointer's height and rides the
 //                         mast (onHoistProgress(progress)).
-//   ROLL  (lantern)     — a circular drag curls the page from its edge into a
-//                         cylinder (onRoll(deltaAngle)).
+//   ROLL  (lantern)     — a sideways (horizontal) drag rolls the page across into
+//                         a cylinder, like rolling a scroll along a table; a
+//                         circular drag also works (onRoll(deltaAngle)).
 //   KINDLE(lantern)     — press-and-hold (onKindleChange(held)).
 //
 // No model logic lives here: the activity owns the RitualState, pushes the derived
@@ -43,8 +44,10 @@ const HULL_CX = 320;
 const HULL_CY = 182;
 const HULL_H = 128; // shared half-extent (x and y) — keeps folds square-true.
 
-// How far (logical px) an "open" pull drag travels to fully open the boat.
-const PULL_SPAN = 130;
+// How far (logical px) an "open" pull drag travels to fully open the boat. Kept
+// short (vs the old 130) so a natural medium pull reaches the open-fold commit
+// threshold — the peak→boat pull is a broad two-sided tug, not a precise crease.
+const PULL_SPAN = 95;
 // Per-frame settle speed for the short ease home / fall-back-open after release.
 const SETTLE_RATE = 0.14;
 
@@ -60,10 +63,14 @@ const HOIST_SMOOTH_K = 0.35;
 // How far outside a wobble window the wind-catch factor ramps in/out (progress
 // units), so the sail's sway swells across the boundary instead of snapping.
 const WIND_RAMP = 0.07;
-// Pennant flutter-and-settle after the sail reaches the masthead (ms).
-const SAIL_SETTLE_MS = 620;
 // A plucked-note sparkle at the rolling tube lives this long (ms).
 const ROLL_SPARKLE_MS = 420;
+// Linear-roll feel: logical px of HORIZONTAL drag that completes the whole roll.
+// The primary lantern gesture is a sideways sweep (a scroll rolled along a table),
+// tuned so ~2–3 comfortable swipes across the 640-wide stage curl it fully. The
+// view converts |dx|/ROLL_SWIPE_SPAN of the roll into swept angle each move, so
+// this alone sets the linear difficulty (independent of ROLL_TARGET).
+const ROLL_SWIPE_SPAN = 800;
 
 type NPoint = readonly [number, number];
 
@@ -258,9 +265,6 @@ export class FoldStage {
   // Continuous wobble phase (accumulated at the wind-modulated rate) so changing
   // the sway frequency never jumps the sail — only its rate of sway changes.
   private wobblePhase = 0;
-  // When the rendered sail first reached the masthead — drives the pennant's
-  // brief flutter-and-settle. Undefined until it arrives (reset on re-approach).
-  private sailSettleStart?: number;
   private roll = 0;
   private kindle = 0;
   private kindleHeld = false;
@@ -286,6 +290,13 @@ export class FoldStage {
   // stage stops drawing (no doubling) and the tray piece it lands as stays hidden
   // until the animation arrives.
   private handDown?: HandDown;
+  // Once a component's hand-down has LANDED in the tray, the big in-progress stage
+  // must not redraw the finished piece behind/over the tray — otherwise the last
+  // component (the lantern, plus its kindle glow) lingers full-size after it has
+  // dropped in. Set true when a hand-down lands; cleared when the next component
+  // is set. Suppresses the big verb-stage draw for the gap until then (and, for
+  // the final piece, right through the sail-away).
+  private componentSettledToTray = false;
   // Timestamp the finished boat began its float-down onto the water (undefined =
   // rest at BOAT_REST_Y, no descent in flight).
   private boatDropStart?: number;
@@ -330,7 +341,6 @@ export class FoldStage {
     this.paper = { x: 176, y: 92, w: 288, h: 190 };
     this.hoist = 0;
     this.renderedHoist = 0;
-    this.sailSettleStart = undefined;
     this.roll = 0;
     this.kindle = 0;
     this.kindleHeld = false;
@@ -344,6 +354,8 @@ export class FoldStage {
     // A fresh component supersedes any in-flight hand-down; the caller has
     // already advanced the tray count (passed in `assembled`), so just drop it.
     this.handDown = undefined;
+    // The new component's big stage draws again (the previous one has settled).
+    this.componentSettledToTray = false;
   }
 
   setVerb(verb: Verb): void {
@@ -445,8 +457,9 @@ export class FoldStage {
       return { x: b.x - 8, y: b.y - 8, w: b.w + 16, h: b.h + 16 };
     }
     if (key === 'sail') {
-      // The hoisted sail + its masthead pennant (see drawHoistStage geometry).
-      return { x: 314, y: 44, w: 88, h: 156 };
+      // The raised sail on its (short) mast — head at headHigh≈120 down to the
+      // sail foot, spanning the mast and the billowed sail (see drawHoistStage).
+      return { x: 300, y: 98, w: 106, h: 158 };
     }
     // The rolled, kindled lantern tube with a little of its glow.
     return { x: 176, y: 88, w: 100, h: 168 };
@@ -486,6 +499,7 @@ export class FoldStage {
       // Capture failed (no context) — just reveal the piece.
       this.assembled = hd.target;
       this.handDown = undefined;
+      this.componentSettledToTray = true;
       return;
     }
     const t = clamp01((performance.now() - hd.start) / hd.durationMs);
@@ -515,9 +529,12 @@ export class FoldStage {
 
     if (t >= 1) {
       // Landed exactly on the anchor: reveal the real tray piece (same place,
-      // same size) and end the hand-down — the swap is seamless.
+      // same size) and end the hand-down — the swap is seamless. The big
+      // in-progress view is now suppressed until the next component is set, so
+      // the finished piece (and any glow) never lingers over the tray.
       this.assembled = hd.target;
       this.handDown = undefined;
+      this.componentSettledToTray = true;
     }
   }
 
@@ -625,10 +642,18 @@ export class FoldStage {
       const progress = clamp01(this.hoistFromPointer(now) + this.hoistGrabOffset);
       this.callbacks.onHoistProgress(progress);
     } else if (this.verb === 'roll') {
+      // Rolling is PRIMARILY a sideways sweep: horizontal drag rolls the tube like
+      // a scroll pulled along a table. |dx| over ROLL_SWIPE_SPAN is the fraction of
+      // the whole roll swept, converted to the model's radian metric. A circular
+      // drag still contributes; take whichever swept MORE this move (both are
+      // direction-agnostic magnitudes), so either gesture feels natural and they
+      // never double-count.
+      const linear = (Math.abs(now.x - last.x) / ROLL_SWIPE_SPAN) * ROLL_TARGET;
       const centre = this.rollCentre();
-      const deltaAngle = signedAngle(last, now, centre);
-      if (Number.isFinite(deltaAngle) && deltaAngle !== 0) {
-        this.callbacks.onRoll(deltaAngle);
+      const angular = Math.abs(signedAngle(last, now, centre));
+      const swept = Math.max(linear, Number.isFinite(angular) ? angular : 0);
+      if (swept > 0) {
+        this.callbacks.onRoll(swept);
       }
     }
     this.pointerLast = now;
@@ -665,10 +690,14 @@ export class FoldStage {
     headHigh: number;
     travel: number;
   } {
-    const mastTop = 48;
-    const mastBottom = 300;
-    const headLow = 226;
-    const headHigh = 64;
+    // A short, proportionate mast: its top sits just above the sail's fully-raised
+    // head (headHigh) so a full hoist reads as reaching the masthead, and it runs
+    // down only a little past the raised sail's foot — not the tall bare pole it
+    // was (48 → 300). headLow/headHigh set the sail head's travel accordingly.
+    const mastTop = 104;
+    const mastBottom = 288;
+    const headLow = 232;
+    const headHigh = 120;
     return { mastTop, mastBottom, headLow, headHigh, travel: headLow - headHigh };
   }
 
@@ -879,6 +908,14 @@ export class FoldStage {
     // stage, so the big view and the tray piece never render at once.
     if (this.handDown?.phase === 'fly') {
       this.drawHandDown(this.handDown);
+      return;
+    }
+
+    // The just-finished component has dropped into the tray: the tray piece (drawn
+    // above) is now the only view of it. Skip the big in-progress stage so the
+    // finished silhouette + kindle glow don't redraw over the tray in the gap
+    // before the next component (or, for the final piece, through the sail-away).
+    if (this.componentSettledToTray) {
       return;
     }
 
@@ -1237,8 +1274,10 @@ export class FoldStage {
     const mastX = LOGICAL_WIDTH / 2;
     const { mastTop, mastBottom, headLow, travel } = this.hoistBounds();
 
+    // A short, warm-wood/bamboo mast — no pennant. Its top sits just above the
+    // fully-raised sail head so a full hoist reads as reaching the masthead.
     ctx.save();
-    ctx.strokeStyle = 'rgba(180, 150, 110, 0.9)';
+    ctx.strokeStyle = '#bd914f';
     ctx.lineWidth = 6;
     ctx.lineCap = 'round';
     ctx.beginPath();
@@ -1260,44 +1299,81 @@ export class FoldStage {
     const sailH = 128;
     const foot = topY + sailH;
 
-    ctx.save();
-    ctx.translate(mastX + 2, 0);
-    ctx.beginPath();
-    ctx.moveTo(0, topY);
-    ctx.quadraticCurveTo(70 + wobble, topY + sailH * 0.4, 40 + wobble * 0.6, foot);
-    ctx.lineTo(0, foot);
-    ctx.closePath();
-    const grad = ctx.createLinearGradient(0, topY, 60, foot);
-    grad.addColorStop(0, PAPER_LIGHT);
-    grad.addColorStop(1, PAPER_MID);
-    ctx.fillStyle = grad;
-    ctx.shadowColor = 'rgba(0,0,0,0.35)';
-    ctx.shadowBlur = 12;
-    ctx.fill();
-    ctx.restore();
-
-    ctx.save();
-    ctx.beginPath();
-    ctx.moveTo(mastX + 2, topY);
-    ctx.quadraticCurveTo(mastX + 72 + wobble, topY + sailH * 0.4, mastX + 42 + wobble * 0.6, foot);
-    ctx.lineTo(mastX + 2, foot);
-    ctx.closePath();
-    ctx.clip();
-    const sailTex = this.paperTexture();
-    if (sailTex) {
-      // The printed sail face rides up the mast with the sail as it hoists.
-      ctx.drawImage(sailTex, mastX + 2, topY, 74, sailH);
+    const sailArt = this.images.sail;
+    if (sailArt) {
+      // The painted sail (sail.png) rides UP the mast, warped by a gentle billow:
+      // horizontal rows bow out toward the sail's belly and wave with the same
+      // wind-catch wobble, so it reads as cloth catching air rather than a flat
+      // decal. The head (apex) and foot stay pinned; only the middle bellies.
+      const drawW = 104;
+      const drawH = drawW * (sailArt.height / sailArt.width);
+      const x0 = mastX - drawW * 0.26; // the painted luff/pole aligns to the mast
+      const rows = 18;
+      const rh = drawH / rows;
+      const srh = sailArt.height / rows;
+      ctx.save();
+      ctx.shadowColor = 'rgba(0,0,0,0.3)';
+      ctx.shadowBlur = 10;
+      ctx.shadowOffsetY = 4;
+      for (let i = 0; i < rows; i += 1) {
+        const v = i / (rows - 1); // 0 top → 1 bottom
+        const belly = Math.sin(v * Math.PI); // 0 at ends, 1 mid — the sail's belly
+        const off = (Math.sin(this.wobblePhase + v * 2.2) * amp + wobble * 0.2) * belly;
+        // +0.6 overlap hides seams between rows from sub-pixel rounding.
+        ctx.drawImage(
+          sailArt,
+          0,
+          i * srh,
+          sailArt.width,
+          srh,
+          x0 + off,
+          topY + i * rh,
+          drawW,
+          rh + 0.6,
+        );
+      }
+      ctx.restore();
     } else {
-      ctx.fillStyle = INK;
-      ctx.font = '13px "Georgia", serif';
-      const flutterAmp = 1.5 + 2.5 * wind;
-      this.textLines.forEach((line, i) => {
-        const ly = topY + 34 + i * 26;
-        const flutter = Math.sin(this.time * 3 + i) * flutterAmp;
-        ctx.fillText(line, mastX + 12, ly + flutter);
-      });
+      // Fallback (no sail.png): the procedural quad sail with the paper-friendtwo
+      // texture, or the fluttering letter text.
+      ctx.save();
+      ctx.translate(mastX + 2, 0);
+      ctx.beginPath();
+      ctx.moveTo(0, topY);
+      ctx.quadraticCurveTo(70 + wobble, topY + sailH * 0.4, 40 + wobble * 0.6, foot);
+      ctx.lineTo(0, foot);
+      ctx.closePath();
+      const grad = ctx.createLinearGradient(0, topY, 60, foot);
+      grad.addColorStop(0, PAPER_LIGHT);
+      grad.addColorStop(1, PAPER_MID);
+      ctx.fillStyle = grad;
+      ctx.shadowColor = 'rgba(0,0,0,0.35)';
+      ctx.shadowBlur = 12;
+      ctx.fill();
+      ctx.restore();
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(mastX + 2, topY);
+      ctx.quadraticCurveTo(mastX + 72 + wobble, topY + sailH * 0.4, mastX + 42 + wobble * 0.6, foot);
+      ctx.lineTo(mastX + 2, foot);
+      ctx.closePath();
+      ctx.clip();
+      const sailTex = this.paperTexture();
+      if (sailTex) {
+        ctx.drawImage(sailTex, mastX + 2, topY, 74, sailH);
+      } else {
+        ctx.fillStyle = INK;
+        ctx.font = '13px "Georgia", serif';
+        const flutterAmp = 1.5 + 2.5 * wind;
+        this.textLines.forEach((line, i) => {
+          const ly = topY + 34 + i * 26;
+          const flutter = Math.sin(this.time * 3 + i) * flutterAmp;
+          ctx.fillText(line, mastX + 12, ly + flutter);
+        });
+      }
+      ctx.restore();
     }
-    ctx.restore();
 
     // A grab handle at the sail's head while it's below the top, so it reads as a
     // thing to pull up.
@@ -1310,31 +1386,6 @@ export class FoldStage {
       ctx.fill();
       ctx.restore();
     }
-
-    // The masthead pennant. As the sail arrives it FLUTTERS and settles: it whips
-    // for a beat and brightens from a faint marker to solid gold, instead of
-    // snapping to gold the instant the head clears the top.
-    if (hoist > 0.92 && this.sailSettleStart === undefined) {
-      this.sailSettleStart = performance.now();
-    } else if (hoist < 0.6) {
-      // A genuine re-approach re-flutters.
-      this.sailSettleStart = undefined;
-    }
-    const settle =
-      this.sailSettleStart === undefined
-        ? 0
-        : clamp01((performance.now() - this.sailSettleStart) / SAIL_SETTLE_MS);
-    const whip = (1 - settle) * 18 * Math.sin(this.time * 13);
-    const pg = 217 + Math.round(21 * settle); // 217 → 238 (warms to solid gold)
-    ctx.save();
-    ctx.fillStyle = `rgba(255, ${pg}, 138, ${0.5 + 0.5 * settle})`;
-    ctx.beginPath();
-    ctx.moveTo(mastX, mastTop);
-    ctx.lineTo(mastX + 24 + wobble * 0.5 + whip, mastTop + 6 + whip * 0.3);
-    ctx.lineTo(mastX, mastTop + 12);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
   }
 
   // ROLL/KINDLE: the sheet music curls from its leading edge into a cylinder,
@@ -1349,9 +1400,9 @@ export class FoldStage {
     const pageH = 150;
     const tubeR = 30; // radius of the fully rolled cylinder
 
-    // The swept angle the model accumulated (up to ROLL_TARGET = 3π): the tube's
-    // surface rotates by this, so a circular pointer drag reads as circular visual
-    // motion. rollProgress = angle / ROLL_TARGET, so angle = roll × ROLL_TARGET.
+    // The swept angle the model accumulated (up to ROLL_TARGET): the tube's
+    // surface rotates by this, so a sideways drag reads as the tube rolling along
+    // under the finger. rollProgress = angle / ROLL_TARGET, so angle = roll × ROLL_TARGET.
     const sweptAngle = roll * ROLL_TARGET;
 
     // A brief sparkle at each of the plucked-note crossings, derived from the roll
@@ -1458,6 +1509,7 @@ export class FoldStage {
       const seams = 5;
       for (let k = 0; k < seams; k += 1) {
         // Position around the cylinder → projected onto the visible face via sin.
+        // sweptAngle grows with the drag, so seams sweep across as the tube rolls.
         const theta = sweptAngle + (k / seams) * Math.PI * 2;
         const lx = tubeCx + Math.sin(theta) * (halfW - 1.5);
         // Fade lines as they round the far side (cos < 0), like a real surface.

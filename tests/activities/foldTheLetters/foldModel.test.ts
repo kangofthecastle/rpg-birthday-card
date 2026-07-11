@@ -13,6 +13,8 @@ import {
   currentHullShape,
   currentVerb,
   FOLD_COMMIT_THRESHOLD,
+  FOLD_COMMIT_THRESHOLD_OPEN,
+  foldCommitThreshold,
   FOLD_COMPONENTS,
   HOIST_COMPLETE_THRESHOLD,
   HULL_CREASES,
@@ -170,6 +172,32 @@ describe('verb: FOLD — continuous direct manipulation', () => {
     // First of three folds, half-dragged → about one sixth of the hull.
     expect(componentProgress(b)).toBeCloseTo(0.5 / 3, 6);
   });
+
+  it('commits the open-out fold (hull → boat) on a shorter pull than a crease fold', () => {
+    // The crease folds (hull-1 reflect, hull-2 corners) use the standard threshold.
+    let state = createRitualState();
+    expect(currentFoldCrease(state)?.kind).toBe('reflect');
+    expect(foldCommitThreshold(state)).toBe(FOLD_COMMIT_THRESHOLD);
+    expect(willCommitFold(setFoldProgress(state, FOLD_COMMIT_THRESHOLD - 0.05))).toBe(false);
+
+    state = fold(state); // → hull-2 (corners)
+    expect(foldCommitThreshold(state)).toBe(FOLD_COMMIT_THRESHOLD);
+    state = fold(state); // → hull-3 (open)
+    expect(currentFoldCrease(state)?.kind).toBe('open');
+    expect(foldCommitThreshold(state)).toBe(FOLD_COMMIT_THRESHOLD_OPEN);
+    expect(FOLD_COMMIT_THRESHOLD_OPEN).toBeLessThan(FOLD_COMMIT_THRESHOLD);
+
+    // A medium pull that would NOT commit a crease fold DOES commit the open fold.
+    const medium = FOLD_COMMIT_THRESHOLD_OPEN + 0.02;
+    expect(medium).toBeLessThan(FOLD_COMMIT_THRESHOLD);
+    expect(willCommitFold(setFoldProgress(state, medium))).toBe(true);
+    expect(isAssembled(releaseFold(setFoldProgress(state, medium)))).toBe(true);
+
+    // Below the open threshold falls the flap back open (no commit, no penalty).
+    const shy = releaseFold(setFoldProgress(state, FOLD_COMMIT_THRESHOLD_OPEN - 0.05));
+    expect(shy.foldProgress).toBe(0);
+    expect(isAssembled(shy)).toBe(false);
+  });
 });
 
 describe('verb: HOIST (sail) — pinned to the pointer', () => {
@@ -233,6 +261,19 @@ describe('verb: ROLL then KINDLE (lantern)', () => {
     state = applyRoll(state, -ROLL_TARGET);
     expect(state.rollAngle).toBe(ROLL_TARGET);
     expect(currentVerb(state)).toBe('kindle');
+  });
+
+  it('rolls fully into the lantern in one full turn (2π) of the tube surface', () => {
+    expect(ROLL_TARGET).toBeCloseTo(Math.PI * 2, 6);
+  });
+
+  it('distributes all six note plucks evenly across the full roll', () => {
+    const seen: number[] = [];
+    for (let i = 0; i <= ROLL_NOTE_COUNT; i += 1) {
+      const state = applyRoll(lanternStart(), (ROLL_TARGET * i) / ROLL_NOTE_COUNT);
+      seen.push(rollNoteIndex(state));
+    }
+    expect(seen).toEqual([0, 1, 2, 3, 4, 5, 6]);
   });
 
   it('kindles by holding, and bleeds off (but never fails) when released', () => {

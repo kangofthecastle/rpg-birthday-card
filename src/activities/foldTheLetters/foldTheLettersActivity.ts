@@ -175,7 +175,7 @@ export const foldTheLettersActivity: ActivityModule = {
         return `${component.label} — hoist the sail: drag it up the mast to the top`;
       }
       if (verb === 'roll') {
-        return `${component.label} — roll the page: circle it into a lantern`;
+        return `${component.label} — roll the page: drag it sideways into a lantern`;
       }
       if (verb === 'kindle') {
         return `${component.label} — press and hold to kindle the light`;

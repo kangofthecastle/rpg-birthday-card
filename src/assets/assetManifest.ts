@@ -195,6 +195,16 @@ export const ASSET_MANIFEST: readonly GameAsset[] = [
     qaChecks: ['head-band readability', 'faction color contrast', 'top-down silhouette clarity'],
   },
   {
+    id: 'activity-art-split-gun',
+    kind: 'activity-art',
+    label: 'RETAKE.EXE Vandal rifle',
+    status: 'planned',
+    locationIds: ['friend-b'],
+    notes:
+      'Optional drop-in for the held weapon: a top-down/side Vandal-silhouette rifle (long barrel + muzzle, boxy receiver, angled magazine, rear stock, foregrip), drawn barrel-right with the grip roughly a third from the rear so it pivots believably in the hand. Team color is applied at runtime via GUN_TINT, so a neutral gunmetal sprite works. Deliver as public/assets/activities/valorant-split/gun.png; absent by default — the scene falls back to its generated Vandal-silhouette rifle (makeGun) and wires the slot via splitArt.ts ART_KEYS.gun.',
+    qaChecks: ['long-gun silhouette clarity', 'grip-pivot placement', 'reads at gameplay scale'],
+  },
+  {
     id: 'activity-art-split-spike',
     kind: 'activity-art',
     label: 'RETAKE.EXE planted spike',

@@ -72,10 +72,12 @@ Some props are pre-registered in `roomDressing.ts` with **no** sheet crop — th
 `frame` id has no entry in the room's `frames` map, so their art lives *only* in
 `props/singles/`. Until the file exists they simply don't render (and don't
 appear in dressEdit); no fallback, no error. Drop the matching PNG in and the
-prop appears at its default placement, ready to arrange + Save. Currently
-registered slots awaiting art:
+prop appears at its default placement, ready to arrange + Save.
 
-| Drop a PNG at | New prop |
+All currently registered singles-only slots now have art in place and render in
+their rooms:
+
+| PNG | New prop |
 | --- | --- |
 | `/assets/props/singles/recipient-house-bedside-table.png` | ____ — bedside table |
 | `/assets/props/singles/recipient-house-armchair.png` | ____ — reading armchair |
@@ -88,7 +90,9 @@ registered slots awaiting art:
 | `/assets/props/singles/friend-b-floor-lamp.png` | ____ — floor lamp |
 | `/assets/props/singles/friend-b-game-stack.png` | ____ — floor stack of game boxes |
 
-Newly registered singles-only props show up immediately (even though each room
+To register a *new* singles-only prop, add it to `roomDressing.ts` with no
+`frames` entry, then drop its PNG here. Newly registered singles-only props show
+up immediately (even though each room
 already has a saved `roomLayouts/<id>.json` layout): they are merged into the
 loaded layout until the author arranges and **Saves**, which writes them into the
 JSON so their placement persists.

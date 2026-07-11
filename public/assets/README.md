@@ -21,6 +21,24 @@ to the procedural version. **No code changes needed.**
 | `/assets/ending/water-to-galaxy.png` | Ending transition frame 2 — the water turning to galaxy (**1280×720**). Skipped if absent. |
 | `/assets/ending/galaxy-ground.png` | **OPTIONAL** full-bleed painted ground for the final galaxy scene (**1408×1024**, the final-spot map size). Replaces the ground that is otherwise **composed from the existing `ending-water.png`** (tiled + code shimmer + light-pools) — so nothing new needs generating. Drop one in only if you want a hand-painted galaxy floor. |
 
+## Room-dressing art (loaded directly, not probed)
+
+Dressed interiors (`src/content/roomDressing.ts`) render a tiled floor, a
+back-wall band, and positioned props from a **tile pair** + a **prop sheet** per
+room. Unlike the drop-in slots above, these are loaded unconditionally in
+`BootScene.ts`; if a file is missing the loader logs a 404 and that room falls
+back to the procedural dev checkerboard. Prop crops are tight alpha bounding
+boxes measured on the sheet and listed as `frames` in `roomDressing.ts`.
+
+| File | Format | Used by |
+| --- | --- | --- |
+| `/assets/tiles/recipient-room-tiles.png` | **128×64** — left 64×64 floor tile, right 64×64 wall + baseboard | ____'s room (`recipient-house`) floor/wall |
+| `/assets/props/recipient-room-props.png` | **1024×1024**, alpha | ____'s room props (bed, desk, violin, …) |
+| `/assets/tiles/friendone-room-tiles.png` | **128×64** — left floor tile, right wall + baseboard | ____'s room (`friend-a`) floor/wall (seafoam/teal) |
+| `/assets/props/friendone-room-props.png` | **1024×1024**, alpha | ____'s room props (bed w/ plushies, desk+PC+chair, gacha shelf, jersey, hockey stick, koi bowl, tea table, lightstick, hanging plant, posters, cushion, rug, window) |
+| `/assets/tiles/friendtwo-room-tiles.png` | **128×64** — left floor tile, right wall + baseboard | ____'s room (`friend-b`) floor/wall (navy) |
+| `/assets/props/friendtwo-room-props.png` | **1024×1024**, alpha | ____'s room props (dual-monitor battlestation, 2 gaming chairs, bed, game-box shelf, poster cluster, mini fridge, beanbag, second desk, snack table, rug, blinds window, cactus) |
+
 ## ⚠️ The doormat must be drawn FLAT / straight-on
 
 `/assets/doormat.png` is special: the engine does **not** paste it onto the

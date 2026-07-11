@@ -285,8 +285,377 @@ const RECIPIENT_HOUSE_DRESSING: RoomDressing = {
   ],
 };
 
+// ____'s room (location `friend-a`): calm seafoam/teal. Crops are tight alpha
+// bounding boxes measured on friendone-room-props.png (1024x1024, alpha>=16) via a
+// connected-component scan. The hockey stick crop includes the puck below it,
+// and the poster cluster crop spans the five taped prints as one hanging wall
+// piece. Placement anchors follow friend-a.tmj: the desk sits on the friendone-pc
+// (fishing) activity rect (768,384 128x96 -> center 832,432) and the tea table
+// sits on the friendone-host dialogue rect (512,384 -> center 576,432), so the
+// furniture matches where the player already interacts.
+const FRIEND_ONE_PROP_FRAMES = {
+  bed: { x: 5, y: 32, w: 320, h: 369 },
+  desk: { x: 359, y: 53, w: 346, h: 342 },
+  gachaShelf: { x: 733, y: 57, w: 261, h: 273 },
+  hockeyStick: { x: 614, y: 352, w: 160, h: 355 },
+  posterCluster: { x: 176, y: 426, w: 248, h: 253 },
+  jersey: { x: 470, y: 402, w: 197, h: 259 },
+  fishbowl: { x: 821, y: 376, w: 166, h: 149 },
+  lightstick: { x: 50, y: 444, w: 79, h: 209 },
+  hangingPlant: { x: 817, y: 549, w: 154, h: 243 },
+  teaTable: { x: 203, y: 728, w: 220, h: 228 },
+  cushion: { x: 0, y: 823, w: 191, h: 128 },
+  rug: { x: 456, y: 777, w: 265, h: 192 },
+  window: { x: 743, y: 811, w: 262, h: 200 },
+} as const satisfies Record<string, PropFrame>;
+
+const FRIEND_ONE_HOUSE_DRESSING: RoomDressing = {
+  tilesTextureKey: 'friendone-room-tiles',
+  floorFrame: 0,
+  wallFrame: 1,
+  propsTextureKey: 'friendone-room-props',
+  frames: FRIEND_ONE_PROP_FRAMES,
+  floorInsetTiles: 1,
+  wallHeight: 144,
+  backgroundColor: '#0d1a1c',
+  props: [
+    // --- Flat / wall dressing (drawn behind the billboards) ---
+    {
+      frame: 'rug',
+      mapX: 704,
+      mapY: 560,
+      scale: 0.78,
+      originX: 0.5,
+      originY: 0.5,
+      fixedDepth: -30,
+      note: 'braided seafoam rug, room center',
+    },
+    // Windows with curtains on the back-left (west) wall; each casts a light beam.
+    {
+      frame: 'window',
+      mapX: 64,
+      mapY: 380,
+      scale: 0.58,
+      originX: 0.5,
+      originY: 1,
+      screenYRaise: 14,
+      wallShear: -0.5,
+      fixedDepth: -22,
+      note: 'curtained window, west wall high',
+    },
+    {
+      frame: 'window',
+      mapX: 64,
+      mapY: 640,
+      scale: 0.58,
+      originX: 0.5,
+      originY: 1,
+      screenYRaise: 14,
+      wallShear: -0.5,
+      fixedDepth: -22,
+      note: 'curtained window, west wall low (above the bed)',
+    },
+    // Hockey jersey on a hook + poster cluster hung on the back-right (north) wall.
+    {
+      frame: 'jersey',
+      mapX: 360,
+      mapY: 64,
+      scale: 0.62,
+      originX: 0.5,
+      originY: 1,
+      screenYRaise: 12,
+      wallShear: 0.5,
+      fixedDepth: -21,
+      note: 'hockey jersey on a hook, north wall west',
+    },
+    {
+      frame: 'posterCluster',
+      mapX: 660,
+      mapY: 64,
+      scale: 0.6,
+      originX: 0.5,
+      originY: 1,
+      screenYRaise: 12,
+      wallShear: 0.5,
+      fixedDepth: -21,
+      note: 'taped poster cluster (sky/ocean prints), north wall center',
+    },
+    // Hanging plant trailing from the north-east corner ceiling.
+    {
+      frame: 'hangingPlant',
+      mapX: 1240,
+      mapY: 150,
+      scale: 0.6,
+      originX: 0.5,
+      originY: 1,
+      screenYRaise: 96,
+      fixedDepth: -19,
+      note: 'hanging plant, north-east corner (ceiling-hung)',
+    },
+
+    // --- Floor-standing dressing ---
+    {
+      frame: 'bed',
+      mapX: 270,
+      mapY: 700,
+      heightRatio: 2.0,
+      footprint: { w: 168, d: 112 },
+      note: 'bed with seal + penguin plushies, west-south corner',
+    },
+    {
+      frame: 'gachaShelf',
+      mapX: 1150,
+      mapY: 220,
+      heightRatio: 1.25,
+      footprint: { w: 150, d: 56 },
+      note: 'gacha figurine + capsule shelf, north-east against the wall',
+    },
+    {
+      frame: 'lightstick',
+      mapX: 1240,
+      mapY: 360,
+      heightRatio: 0.8,
+      note: 'idol lightstick on its stand (thin; no collider)',
+    },
+    {
+      frame: 'hockeyStick',
+      mapX: 120,
+      mapY: 600,
+      heightRatio: 1.4,
+      note: 'hockey stick + puck leaning on the west wall (thin; no collider)',
+    },
+    {
+      frame: 'fishbowl',
+      mapX: 1120,
+      mapY: 470,
+      heightRatio: 0.62,
+      footprint: { w: 60, d: 44 },
+      note: 'koi fishbowl on the floor, east side',
+    },
+    // Floor cushion + tea table on the friendone-host dialogue rect (512,384 -> 576,432).
+    {
+      frame: 'cushion',
+      mapX: 512,
+      mapY: 520,
+      scale: 0.62,
+      originX: 0.5,
+      originY: 0.6,
+      fixedDepth: -12,
+      note: 'floor cushion (flat; walk-over), south of the tea table',
+    },
+    {
+      frame: 'teaTable',
+      mapX: 576,
+      mapY: 448,
+      heightRatio: 0.9,
+      footprint: { w: 96, d: 56 },
+      note: 'low tea table w/ teapot -> friendone-host dialogue zone',
+    },
+    // Desk + PC + chair on the friendone-pc (fishing) activity rect (768,384 -> 832,432).
+    {
+      frame: 'desk',
+      mapX: 832,
+      mapY: 452,
+      heightRatio: 1.55,
+      footprint: { w: 150, d: 68 },
+      colliderOffsetY: -8,
+      note: 'desk + PC + chair -> friendone-pc (fishing game)',
+    },
+  ],
+};
+
+// ____'s room (location `friend-b`): navy gamer-cozy. Crops are tight alpha
+// bounding boxes on friendtwo-room-props.png (1024x1024). The four wall posters are
+// cropped as one cluster. friend-b.tmj: the battlestation sits on the friend-b-
+// host (valorant) activity rect (640,384 128x96 -> center 704,432); the second
+// desk + the two gaming chairs pulled close sit on the friend-b-easter-egg rect
+// (960,384 -> center 1024,432), matching the "two chairs pulled close, a second
+// headset already waiting on the desk" inspect line (locations.ts).
+const FRIEND_TWO_PROP_FRAMES = {
+  battlestation: { x: 52, y: 38, w: 513, h: 301 },
+  gamingChair: { x: 611, y: 48, w: 159, h: 297 },
+  gamingChair2: { x: 782, y: 50, w: 144, h: 297 },
+  bed: { x: 6, y: 376, w: 281, h: 331 },
+  gameShelf: { x: 340, y: 374, w: 326, h: 114 },
+  posterCluster: { x: 721, y: 381, w: 238, h: 275 },
+  miniFridge: { x: 298, y: 517, w: 158, h: 219 },
+  beanbag: { x: 485, y: 531, w: 217, h: 210 },
+  secondDesk: { x: 726, y: 659, w: 204, h: 198 },
+  snackTable: { x: 39, y: 732, w: 172, h: 227 },
+  rug: { x: 236, y: 779, w: 448, h: 169 },
+  window: { x: 743, y: 862, w: 101, h: 142 },
+  cactus: { x: 871, y: 877, w: 56, h: 125 },
+} as const satisfies Record<string, PropFrame>;
+
+const FRIEND_TWO_HOUSE_DRESSING: RoomDressing = {
+  tilesTextureKey: 'friendtwo-room-tiles',
+  floorFrame: 0,
+  wallFrame: 1,
+  propsTextureKey: 'friendtwo-room-props',
+  frames: FRIEND_TWO_PROP_FRAMES,
+  floorInsetTiles: 1,
+  wallHeight: 144,
+  backgroundColor: '#0b1020',
+  props: [
+    // --- Flat / wall dressing ---
+    {
+      frame: 'rug',
+      mapX: 704,
+      mapY: 580,
+      scale: 0.55,
+      originX: 0.5,
+      originY: 0.5,
+      fixedDepth: -30,
+      note: 'navy diamond rug, room center',
+    },
+    // Windows with blinds on the back-left (west) wall; each casts a light beam.
+    {
+      frame: 'window',
+      mapX: 64,
+      mapY: 420,
+      scale: 0.85,
+      originX: 0.5,
+      originY: 1,
+      screenYRaise: 14,
+      wallShear: -0.5,
+      fixedDepth: -22,
+      note: 'blinds window, west wall high',
+    },
+    {
+      frame: 'window',
+      mapX: 64,
+      mapY: 660,
+      scale: 0.85,
+      originX: 0.5,
+      originY: 1,
+      screenYRaise: 14,
+      wallShear: -0.5,
+      fixedDepth: -22,
+      note: 'blinds window, west wall low (above the bed)',
+    },
+    // Floating game-box/figurine shelf + poster cluster on the north wall.
+    {
+      frame: 'gameShelf',
+      mapX: 360,
+      mapY: 64,
+      scale: 0.6,
+      originX: 0.5,
+      originY: 1,
+      screenYRaise: 12,
+      wallShear: 0.5,
+      fixedDepth: -21,
+      note: 'floating shelf of game boxes + figurines, north wall west',
+    },
+    {
+      frame: 'posterCluster',
+      mapX: 780,
+      mapY: 64,
+      scale: 0.62,
+      originX: 0.5,
+      originY: 1,
+      screenYRaise: 12,
+      wallShear: 0.5,
+      fixedDepth: -21,
+      note: 'esports poster cluster (4 posters), north wall east',
+    },
+
+    // --- Floor-standing dressing ---
+    {
+      frame: 'bed',
+      mapX: 250,
+      mapY: 700,
+      heightRatio: 2.0,
+      footprint: { w: 158, d: 110 },
+      note: 'plaid bed, west-south corner',
+    },
+    {
+      frame: 'beanbag',
+      mapX: 430,
+      mapY: 560,
+      heightRatio: 0.75,
+      footprint: { w: 110, d: 70 },
+      note: 'navy beanbag, west-center chill spot',
+    },
+    {
+      frame: 'miniFridge',
+      mapX: 1245,
+      mapY: 560,
+      heightRatio: 1.05,
+      footprint: { w: 96, d: 60 },
+      note: 'mini fridge stocked with cans, east side',
+    },
+    {
+      frame: 'snackTable',
+      mapX: 1150,
+      mapY: 660,
+      heightRatio: 0.72,
+      footprint: { w: 84, d: 52 },
+      note: 'snack side-table (cup noodle + chips), south-east (clear of the easter-egg approach)',
+    },
+    {
+      frame: 'cactus',
+      mapX: 150,
+      mapY: 500,
+      heightRatio: 0.6,
+      footprint: { w: 44, d: 36 },
+      note: 'potted cactus by the west windows',
+    },
+    // Battlestation (dual monitors + headset) on the friend-b-host valorant rect
+    // (640,384 -> 704,432), with a gaming chair pulled up in front.
+    {
+      frame: 'battlestation',
+      mapX: 704,
+      mapY: 448,
+      heightRatio: 1.55,
+      footprint: { w: 200, d: 70 },
+      colliderOffsetY: -8,
+      note: 'dual-monitor battlestation + headset -> friend-b-host (RETAKE.EXE)',
+    },
+    {
+      frame: 'gamingChair',
+      mapX: 704,
+      mapY: 512,
+      heightRatio: 0.95,
+      footprint: { w: 70, d: 44 },
+      note: "gaming chair in front of the battlestation (player's seat)",
+    },
+    // The easter-egg vignette on the friend-b-easter-egg rect (960,384 -> 1024,
+    // 432): a second desk with a waiting headset and two chairs pulled close.
+    {
+      frame: 'secondDesk',
+      mapX: 1024,
+      mapY: 400,
+      heightRatio: 1.05,
+      footprint: { w: 120, d: 52 },
+      note: 'second desk w/ waiting headset -> friend-b-easter-egg (north of the zone)',
+    },
+    // The two chairs pulled close, side by side, in front of the second desk;
+    // their colliders end at y~448 so a clear standing spot stays open in the
+    // south of the easter-egg rect (y 448-480) for the inspect prompt.
+    {
+      frame: 'gamingChair2',
+      mapX: 1000,
+      mapY: 448,
+      heightRatio: 0.95,
+      footprint: { w: 60, d: 40 },
+      note: 'second gaming chair, pulled close (easter egg)',
+    },
+    {
+      frame: 'gamingChair',
+      mapX: 1050,
+      mapY: 450,
+      heightRatio: 0.95,
+      flipX: true,
+      footprint: { w: 60, d: 40 },
+      note: 'third gaming chair, pulled close facing the second (easter egg)',
+    },
+  ],
+};
+
 const ROOM_DRESSINGS: Readonly<Record<string, RoomDressing>> = {
   'recipient-house': RECIPIENT_HOUSE_DRESSING,
+  'friend-a': FRIEND_ONE_HOUSE_DRESSING,
+  'friend-b': FRIEND_TWO_HOUSE_DRESSING,
 };
 
 export function getRoomDressing(locationId: string): RoomDressing | undefined {

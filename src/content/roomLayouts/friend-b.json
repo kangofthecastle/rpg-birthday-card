@@ -3,9 +3,9 @@
   "props": [
     {
       "frame": "rug",
-      "mapX": 704,
-      "mapY": 580,
-      "scale": 0.55,
+      "mapX": 594,
+      "mapY": 488,
+      "scale": 0.77,
       "originX": 0.5,
       "originY": 0.5,
       "fixedDepth": -30,
@@ -13,8 +13,8 @@
     },
     {
       "frame": "window",
-      "mapX": 64,
-      "mapY": 420,
+      "mapX": 73,
+      "mapY": 364,
       "scale": 0.85,
       "originX": 0.5,
       "originY": 1,
@@ -37,9 +37,9 @@
     },
     {
       "frame": "gameShelf",
-      "mapX": 360,
-      "mapY": 64,
-      "scale": 0.6,
+      "mapX": 773,
+      "mapY": 1,
+      "scale": 0.5,
       "originX": 0.5,
       "originY": 1,
       "screenYRaise": 12,
@@ -48,22 +48,10 @@
       "note": "floating shelf of game boxes + figurines, north wall west"
     },
     {
-      "frame": "posterCluster",
-      "mapX": 780,
-      "mapY": 64,
-      "scale": 0.62,
-      "originX": 0.5,
-      "originY": 1,
-      "screenYRaise": 12,
-      "wallShear": 0.5,
-      "fixedDepth": -21,
-      "note": "esports poster cluster (4 posters), north wall east"
-    },
-    {
       "frame": "bed",
-      "mapX": 250,
-      "mapY": 700,
-      "heightRatio": 2,
+      "mapX": 316,
+      "mapY": 857,
+      "heightRatio": 1.58,
       "footprint": {
         "w": 158,
         "d": 110
@@ -72,9 +60,9 @@
     },
     {
       "frame": "beanbag",
-      "mapX": 430,
-      "mapY": 560,
-      "heightRatio": 0.75,
+      "mapX": 457,
+      "mapY": 207,
+      "heightRatio": 0.87,
       "footprint": {
         "w": 110,
         "d": 70
@@ -83,9 +71,9 @@
     },
     {
       "frame": "miniFridge",
-      "mapX": 1245,
-      "mapY": 560,
-      "heightRatio": 1.05,
+      "mapX": 452,
+      "mapY": 544,
+      "heightRatio": 0.65,
       "footprint": {
         "w": 96,
         "d": 60
@@ -94,9 +82,9 @@
     },
     {
       "frame": "snackTable",
-      "mapX": 1150,
-      "mapY": 660,
-      "heightRatio": 0.72,
+      "mapX": 1057,
+      "mapY": 445,
+      "heightRatio": 0.6,
       "footprint": {
         "w": 84,
         "d": 52
@@ -104,21 +92,10 @@
       "note": "snack side-table (cup noodle + chips), south-east (clear of the easter-egg approach)"
     },
     {
-      "frame": "cactus",
-      "mapX": 150,
-      "mapY": 500,
-      "heightRatio": 0.6,
-      "footprint": {
-        "w": 44,
-        "d": 36
-      },
-      "note": "potted cactus by the west windows"
-    },
-    {
       "frame": "battlestation",
-      "mapX": 704,
-      "mapY": 448,
-      "heightRatio": 1.55,
+      "mapX": 578,
+      "mapY": 446,
+      "heightRatio": 1.01,
       "footprint": {
         "w": 200,
         "d": 70
@@ -128,9 +105,9 @@
     },
     {
       "frame": "gamingChair",
-      "mapX": 704,
-      "mapY": 512,
-      "heightRatio": 0.95,
+      "mapX": 705,
+      "mapY": 488,
+      "heightRatio": 0.97,
       "footprint": {
         "w": 70,
         "d": 44
@@ -139,9 +116,9 @@
     },
     {
       "frame": "secondDesk",
-      "mapX": 1024,
-      "mapY": 400,
-      "heightRatio": 1.05,
+      "mapX": 1170,
+      "mapY": 428,
+      "heightRatio": 0.91,
       "footprint": {
         "w": 120,
         "d": 52
@@ -150,8 +127,8 @@
     },
     {
       "frame": "gamingChair2",
-      "mapX": 1000,
-      "mapY": 448,
+      "mapX": 1236,
+      "mapY": 460,
       "heightRatio": 0.95,
       "footprint": {
         "w": 60,
@@ -160,16 +137,39 @@
       "note": "second gaming chair, pulled close (easter egg)"
     },
     {
-      "frame": "gamingChair",
-      "mapX": 1050,
-      "mapY": 450,
-      "heightRatio": 0.95,
-      "flipX": true,
-      "footprint": {
-        "w": 60,
-        "d": 40
-      },
-      "note": "third gaming chair, pulled close facing the second (easter egg)"
+      "frame": "plant-1",
+      "mapX": 134,
+      "mapY": 243,
+      "heightRatio": 0.84,
+      "note": "large cactus (singles-only)"
+    },
+    {
+      "frame": "plant-2",
+      "mapX": 682,
+      "mapY": 328,
+      "heightRatio": 0.92,
+      "note": "snake plant (singles-only)"
+    },
+    {
+      "frame": "bookshelf",
+      "mapX": 268,
+      "mapY": 174,
+      "heightRatio": 1.62,
+      "note": "bookshelf along the upper-right (north-east) wall (singles-only)"
+    },
+    {
+      "frame": "floor-lamp",
+      "mapX": 1213,
+      "mapY": 352,
+      "heightRatio": 1.3,
+      "note": "floor lamp (singles-only)"
+    },
+    {
+      "frame": "game-stack",
+      "mapX": 360,
+      "mapY": 734,
+      "heightRatio": 0.4,
+      "note": "stack of game boxes on the floor (singles-only)"
     }
   ]
 }

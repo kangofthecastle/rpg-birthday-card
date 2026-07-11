@@ -3,9 +3,9 @@
   "props": [
     {
       "frame": "rug",
-      "mapX": 704,
-      "mapY": 512,
-      "scale": 0.82,
+      "mapX": 1128,
+      "mapY": 648,
+      "scale": 0.86,
       "originX": 0.5,
       "originY": 0.5,
       "fixedDepth": -30,
@@ -37,9 +37,9 @@
     },
     {
       "frame": "monstera",
-      "mapX": 170,
-      "mapY": 170,
-      "heightRatio": 1.2,
+      "mapX": 117,
+      "mapY": 146,
+      "heightRatio": 0.88,
       "footprint": {
         "w": 64,
         "d": 48
@@ -48,9 +48,9 @@
     },
     {
       "frame": "pothos",
-      "mapX": 200,
-      "mapY": 860,
-      "heightRatio": 0.95,
+      "mapX": 1247,
+      "mapY": 267,
+      "heightRatio": 1.49,
       "footprint": {
         "w": 64,
         "d": 48
@@ -59,9 +59,9 @@
     },
     {
       "frame": "bed",
-      "mapX": 372,
-      "mapY": 688,
-      "heightRatio": 2,
+      "mapX": 380,
+      "mapY": 825,
+      "heightRatio": 1.52,
       "footprint": {
         "w": 168,
         "d": 108
@@ -70,23 +70,23 @@
     },
     {
       "frame": "violin",
-      "mapX": 296,
-      "mapY": 392,
-      "heightRatio": 1.169,
+      "mapX": 312,
+      "mapY": 344,
+      "heightRatio": 0.929,
       "note": "violin on stand -> recipient-violin (thin; no collider; bow removed)"
     },
     {
       "frame": "musicStand",
-      "mapX": 392,
-      "mapY": 388,
+      "mapX": 377,
+      "mapY": 288,
       "heightRatio": 1,
       "note": "sheet-music stand (dressing beside violin; no collider)"
     },
     {
       "frame": "kitchen",
-      "mapX": 1040,
-      "mapY": 392,
-      "heightRatio": 1.092,
+      "mapX": 1191,
+      "mapY": 716,
+      "heightRatio": 1.032,
       "footprint": {
         "w": 120,
         "d": 64
@@ -95,9 +95,9 @@
     },
     {
       "frame": "photoWall",
-      "mapX": 1140,
+      "mapX": 642,
       "mapY": 64,
-      "scale": 0.55,
+      "scale": 0.47,
       "screenYRaise": 12,
       "wallShear": 0.5,
       "fixedDepth": -21,
@@ -105,16 +105,16 @@
     },
     {
       "frame": "camera",
-      "mapX": 1240,
-      "mapY": 250,
-      "heightRatio": 1.3,
+      "mapX": 947,
+      "mapY": 147,
+      "heightRatio": 0.92,
       "note": "camera on tripod (dressing under the photo wall; thin, no collider)"
     },
     {
       "frame": "desk",
-      "mapX": 704,
-      "mapY": 812,
-      "heightRatio": 1.55,
+      "mapX": 765,
+      "mapY": 581,
+      "heightRatio": 1.49,
       "footprint": {
         "w": 54,
         "d": 30
@@ -122,6 +122,13 @@
       "colliderOffsetY": 46,
       "colliderOffsetX": -34,
       "note": "desk + PC + chair -> recipient-pc"
+    },
+    {
+      "frame": "bedside-table",
+      "mapX": 188,
+      "mapY": 665,
+      "heightRatio": 0.92,
+      "note": "bedside table (singles-only; beside the bed)"
     }
   ]
 }

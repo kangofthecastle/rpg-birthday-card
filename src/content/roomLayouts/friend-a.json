@@ -3,9 +3,9 @@
   "props": [
     {
       "frame": "rug",
-      "mapX": 704,
-      "mapY": 560,
-      "scale": 0.78,
+      "mapX": 1047,
+      "mapY": 576,
+      "scale": 0.84,
       "originX": 0.5,
       "originY": 0.5,
       "fixedDepth": -30,
@@ -13,8 +13,8 @@
     },
     {
       "frame": "window",
-      "mapX": 64,
-      "mapY": 380,
+      "mapX": 63,
+      "mapY": 314,
       "scale": 0.58,
       "originX": 0.5,
       "originY": 1,
@@ -37,9 +37,9 @@
     },
     {
       "frame": "jersey",
-      "mapX": 360,
-      "mapY": 64,
-      "scale": 0.62,
+      "mapX": 354,
+      "mapY": 25,
+      "scale": 0.3,
       "originX": 0.5,
       "originY": 1,
       "screenYRaise": 12,
@@ -49,9 +49,9 @@
     },
     {
       "frame": "posterCluster",
-      "mapX": 660,
-      "mapY": 64,
-      "scale": 0.6,
+      "mapX": 687,
+      "mapY": 61,
+      "scale": 0.46,
       "originX": 0.5,
       "originY": 1,
       "screenYRaise": 12,
@@ -72,9 +72,9 @@
     },
     {
       "frame": "bed",
-      "mapX": 270,
-      "mapY": 700,
-      "heightRatio": 2,
+      "mapX": 360,
+      "mapY": 740,
+      "heightRatio": 1.64,
       "footprint": {
         "w": 168,
         "d": 112
@@ -83,8 +83,8 @@
     },
     {
       "frame": "gachaShelf",
-      "mapX": 1150,
-      "mapY": 220,
+      "mapX": 214,
+      "mapY": 215,
       "heightRatio": 1.25,
       "footprint": {
         "w": 150,
@@ -94,23 +94,16 @@
     },
     {
       "frame": "lightstick",
-      "mapX": 1240,
-      "mapY": 360,
+      "mapX": 142,
+      "mapY": 559,
       "heightRatio": 0.8,
       "note": "idol lightstick on its stand (thin; no collider)"
     },
     {
-      "frame": "hockeyStick",
-      "mapX": 120,
-      "mapY": 600,
-      "heightRatio": 1.4,
-      "note": "hockey stick + puck leaning on the west wall (thin; no collider)"
-    },
-    {
       "frame": "fishbowl",
-      "mapX": 1120,
-      "mapY": 470,
-      "heightRatio": 0.62,
+      "mapX": 952,
+      "mapY": 173,
+      "heightRatio": 0.48,
       "footprint": {
         "w": 60,
         "d": 44
@@ -119,8 +112,8 @@
     },
     {
       "frame": "cushion",
-      "mapX": 512,
-      "mapY": 520,
+      "mapX": 1167,
+      "mapY": 494,
       "scale": 0.62,
       "originX": 0.5,
       "originY": 0.6,
@@ -129,9 +122,9 @@
     },
     {
       "frame": "teaTable",
-      "mapX": 576,
-      "mapY": 448,
-      "heightRatio": 0.9,
+      "mapX": 1050,
+      "mapY": 611,
+      "heightRatio": 0.88,
       "footprint": {
         "w": 96,
         "d": 56
@@ -140,15 +133,36 @@
     },
     {
       "frame": "desk",
-      "mapX": 832,
-      "mapY": 452,
-      "heightRatio": 1.55,
+      "mapX": 561,
+      "mapY": 436,
+      "heightRatio": 1.21,
       "footprint": {
         "w": 150,
         "d": 68
       },
       "colliderOffsetY": -8,
       "note": "desk + PC + chair -> friendone-pc (fishing game)"
+    },
+    {
+      "frame": "plant-1",
+      "mapX": 639,
+      "mapY": 311,
+      "heightRatio": 1.1,
+      "note": "leafy floor plant (singles-only)"
+    },
+    {
+      "frame": "plant-2",
+      "mapX": 154,
+      "mapY": 902,
+      "heightRatio": 1,
+      "note": "second floor plant (singles-only)"
+    },
+    {
+      "frame": "fishbowl-table",
+      "mapX": 1040,
+      "mapY": 262,
+      "heightRatio": 0.69,
+      "note": "small side table under the koi fishbowl (singles-only; bowl sits on it after rearrange)"
     }
   ]
 }

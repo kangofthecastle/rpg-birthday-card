@@ -125,6 +125,23 @@ const PIECE_PAPER_FILES: Readonly<Record<string, string>> = {
   'paper:lantern': `${ASSET_BASE}/paper-sheetmusic.png`,
 };
 
+// The assembled boat rides in the lower-CENTRE of the logical stage, not jammed
+// against the very bottom. The whole 640x400 space maps to the visible stage
+// (the canvas stretches to fill it — no letterbox crop), so anchoring the boat
+// here keeps the full composite (sail top → hull base) comfortably on-canvas at
+// every panel size, with a clear water margin below it. baseY was previously
+// LOGICAL_HEIGHT - 30 (370) which sat the hull at ~94% down — essentially at the
+// clipped edge on the near-fullscreen panel.
+const BOAT_PIECE_COUNT = 3;
+/** Top of the water band. The hull's base rests right on this line. */
+const WATERLINE_Y = 352;
+/** Boat-tray origin at rest (hull base sits on the waterline). */
+const BOAT_REST_Y = 346;
+/** How far above rest the finished boat floats down from. */
+const BOAT_DROP_RISE = 55;
+/** Gentle eased descent duration for the finished boat settling onto the water. */
+const BOAT_DROP_MS = 1000;
+
 // Composite anchors in the boat-tray's local frame (origin = waterline centre).
 // Documented in public/assets/activities/fold-the-letters/README.md so real art
 // slots in with zero code changes. Each piece is drawn centred on its anchor.
@@ -218,6 +235,9 @@ export class FoldStage {
   private rafId?: number;
   private time = 0;
   private disposed = false;
+  // Timestamp the finished boat began its float-down onto the water (undefined =
+  // rest at BOAT_REST_Y, no descent in flight).
+  private boatDropStart?: number;
 
   private pointerDown = false;
   private hoistGrabOffset = 0;
@@ -282,7 +302,12 @@ export class FoldStage {
   }
 
   setAssembled(count: number): void {
+    const wasComplete = this.assembled >= BOAT_PIECE_COUNT;
     this.assembled = count;
+    // The moment the boat is whole, animate it floating down onto the water.
+    if (count >= BOAT_PIECE_COUNT && !wasComplete) {
+      this.boatDropStart = performance.now();
+    }
   }
 
   setHoist(progress: number, catching: boolean): void {
@@ -1203,15 +1228,28 @@ export class FoldStage {
 
   // The boat coming together along the bottom — a COMPOSITE of the three pieces
   // (file-first images when present, else procedural), never one monolith.
+  /** The boat-tray's animated origin Y: rest at BOAT_REST_Y, or eased down onto
+   * the water from BOAT_DROP_RISE above when the finished boat first assembles,
+   * with a gentle decaying settle bob at the end (a boat easing onto water, not a
+   * hard stop). */
+  private boatOriginY(): number {
+    if (this.boatDropStart === undefined) {
+      return BOAT_REST_Y;
+    }
+    const t = clamp01((performance.now() - this.boatDropStart) / BOAT_DROP_MS);
+    const ease = 1 - Math.pow(1 - t, 3); // ease-out cubic descent
+    const bob = Math.sin(t * Math.PI * 3) * (1 - t) * 5; // small decaying settle
+    return BOAT_REST_Y - BOAT_DROP_RISE * (1 - ease) + bob;
+  }
+
   private drawBoatTray(): void {
     const ctx = this.ctx;
-    const baseY = LOGICAL_HEIGHT - 30;
     const cx = LOGICAL_WIDTH / 2;
 
     ctx.save();
     ctx.globalAlpha = 0.5;
     ctx.fillStyle = '#12233a';
-    ctx.fillRect(0, baseY, LOGICAL_WIDTH, 30);
+    ctx.fillRect(0, WATERLINE_Y, LOGICAL_WIDTH, LOGICAL_HEIGHT - WATERLINE_Y);
     ctx.restore();
 
     if (this.assembled <= 0) {
@@ -1219,7 +1257,7 @@ export class FoldStage {
     }
 
     ctx.save();
-    ctx.translate(cx, baseY);
+    ctx.translate(cx, this.boatOriginY());
     this.drawPiece('hull', TRAY_ANCHORS.hull, () => {
       ctx.fillStyle = '#f2e8cf';
       ctx.strokeStyle = 'rgba(120, 84, 48, 0.6)';

@@ -36,24 +36,36 @@
 }
 
 .fold-stage {
-  display: grid;
+  display: flex;
   flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
   width: 100%;
   min-height: 200px;
   /* 16/10 host, capped so the panel's title + caption + actions always fit; the
    * panel width drives it on wide viewports (16:10 → height = width * 0.625). */
   max-height: min(calc(100vh - 200px), calc((100vw - 16px) * 0.625));
   aspect-ratio: 16 / 10;
-  place-items: stretch;
   overflow: hidden;
   border: 2px solid rgba(241, 200, 138, 0.5);
   background: #171019;
 }
 
+/* The canvas FITS (contain) within the stage box, keeping its 16:10 aspect and
+ * centred. On wide/short viewports the stage is capped shorter than 16:10; a
+ * canvas that filled width would keep its bitmap-aspect height, run PAST the
+ * stage and get bottom-cropped by overflow:hidden — hiding the waterline and the
+ * whole assembled boat. `width:100%` grows it to fill, `max-height:100%` +
+ * `aspect-ratio` cap the height and pull the width back in so the FULL 640x400
+ * scene always stays on-canvas (letterboxed with side bars, never cropped). The
+ * canvas element box stays equal to the drawn area, so pointer→logical mapping
+ * is unchanged. */
 .fold-stage__canvas {
   display: block;
-  width: 100%;
   height: 100%;
+  width: auto;
+  max-width: 100%;
+  aspect-ratio: 16 / 10;
   touch-action: none;
   cursor: pointer;
 }

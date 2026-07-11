@@ -704,9 +704,15 @@ export class ViolinScene extends Phaser.Scene {
       // A broad golden wash over the whole panel at full pour.
       this.beamFx.fillStyle(0xffe6a6, 0.14 * p);
       this.beamFx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-      // Bright bloom right at the window.
-      this.beamFx.fillStyle(0xfff2cf, 0.28 * p);
-      this.beamFx.fillEllipse(src.x, src.y, 120, 200);
+      // A soft bloom at the window source. Built as layered low-alpha ellipses
+      // (additive) so it falls off smoothly like a radial gradient — never the
+      // flat, hard-edged white disc a single high-alpha fillEllipse stamps over
+      // the backdrop art (that stamped oval was the "white oval" regression).
+      for (let i = 5; i >= 1; i -= 1) {
+        const t = i / 5;
+        this.beamFx.fillStyle(0xfff2cf, 0.05 * p * (1.1 - t * 0.6));
+        this.beamFx.fillEllipse(src.x, src.y, 150 * t, 230 * t);
+      }
     }
   }
 

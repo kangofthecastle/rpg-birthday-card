@@ -110,11 +110,16 @@ export interface RoomDressing {
 // 1024x1024 sheet. Several were re-measured to stop cropping through the art:
 // the earlier rug/kitchen/violin/musicStand/photoWall/window rects ended mid-
 // sprite (fringe, table legs, sheet-music page, hanging hook, window frame) and
-// rendered a hard straight cut. The violin bow and the music stand overlap in
-// the sheet (columns ~849-865 at different rows), so those two split at x=848/
-// x=849: the violin keeps its body+bow up to 848, the stand takes 849..997 for
-// its full right page. Anything past that split cannot be recovered by rects
-// without ghosting the neighbour (see the regen note in the audit).
+// rendered a hard straight cut.
+//
+// The violin frame (725..848) once contained a bow leaning diagonally across
+// the right side, whose frog tail spilled into the music stand's frame columns
+// (849..865, below the paper). The bow was removed by scrubbing its pixels to
+// transparent directly on the sheet (canvas surgery; the sheet is git-tracked,
+// so history holds the original with-bow art) — NOT by shrinking the frame rect,
+// so the violin body keeps its exact on-screen size and floor position and the
+// heightRatio compensation below is unchanged. The stand still owns 849..997 for
+// its full right page.
 const RECIPIENT_PROP_FRAMES = {
   bed: { x: 27, y: 60, w: 283, h: 399 },
   desk: { x: 353, y: 71, w: 340, h: 352 },
@@ -198,10 +203,12 @@ const RECIPIENT_HOUSE_DRESSING: RoomDressing = {
       frame: 'violin',
       mapX: 296,
       mapY: 392,
-      // Frame height grew 301->306 when the bow tip / stand feet were restored;
-      // scale hr by 306/301 so the rendered size stays put (1.15 * 306/301).
+      // Frame height is 306 (grew 301->306 in a prior audit when the violin
+      // stand's feet were restored); hr scales from frame height, so it stays
+      // 1.169 (1.15 * 306/301). Removing the bow pixels did not change the frame
+      // rect, so the on-screen size/position is unchanged.
       heightRatio: 1.169,
-      note: 'violin on stand -> recipient-violin (thin; no collider)',
+      note: 'violin on stand -> recipient-violin (thin; no collider; bow removed)',
     },
     {
       frame: 'musicStand',

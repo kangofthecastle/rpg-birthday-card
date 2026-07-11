@@ -14,6 +14,7 @@ import {
   currentVerb,
   FOLD_COMMIT_THRESHOLD,
   FOLD_COMPONENTS,
+  HOIST_COMPLETE_THRESHOLD,
   HULL_CREASES,
   isAssembled,
   isCatchingWind,
@@ -198,6 +199,27 @@ describe('verb: HOIST (sail) — pinned to the pointer', () => {
     expect(state.hoistProgress).toBe(1);
     expect(isAssembled(state)).toBe(true);
     expect(assembledComponentCount(state)).toBe(2);
+  });
+
+  it('snaps home when the sail is dragged to within the masthead tolerance', () => {
+    let base = advanceComponent(foldHull(createRitualState()));
+    base = fold(base);
+    expect(currentVerb(base)).toBe('hoist');
+
+    // Just short of the tolerance: it tracks the pointer, does NOT snap home.
+    const shy = setHoistProgress(base, HOIST_COMPLETE_THRESHOLD - 0.01);
+    expect(shy.hoistProgress).toBeCloseTo(HOIST_COMPLETE_THRESHOLD - 0.01, 6);
+    expect(isAssembled(shy)).toBe(false);
+
+    // A near-masthead release (a hair under 1) snaps fully home and assembles.
+    const nearTop = setHoistProgress(base, 0.9996);
+    expect(nearTop.hoistProgress).toBe(1);
+    expect(isAssembled(nearTop)).toBe(true);
+
+    // Exactly at the tolerance boundary counts as home too.
+    const atThreshold = setHoistProgress(base, HOIST_COMPLETE_THRESHOLD);
+    expect(atThreshold.hoistProgress).toBe(1);
+    expect(isAssembled(atThreshold)).toBe(true);
   });
 });
 

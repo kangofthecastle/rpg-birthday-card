@@ -30,6 +30,8 @@ import Phaser from 'phaser';
 import type { Projection } from './projection';
 import type { IsoOrigin } from './isometricProjection';
 import { positionPropImage, type PropHandle } from './roomRenderer';
+import { getObjectLayer, type TiledMapJson } from './mapHelpers';
+import type { TmjRectPatch } from './tmjRectPatch';
 import {
   computeRemovedTombstones,
   type PropPlacement,
@@ -41,6 +43,16 @@ import {
 // src/content/roomLayouts/<locationId>.json. The glob in roomDressing.ts picks
 // the file up, so the HMR reload that follows the write shows the saved state.
 const SAVE_LAYOUT_ROUTE = '/__dev/save-room-layout';
+
+// Dev middleware (vite.config.ts) that writes edited interactable hotspot rects
+// back into the room's public/maps/<map>.tmj. Only x/y/width/height of the
+// edited objects change; everything else round-trips faithfully.
+const SAVE_MAP_OBJECTS_ROUTE = '/__dev/save-map-objects';
+
+// Tiled object-group layer names in the room maps.
+const INTERACTABLES_LAYER = 'Interactables';
+const EXITS_LAYER = 'Exits';
+const SPAWNS_LAYER = 'Spawns';
 
 interface DressEditorOptions {
   readonly locationId: string;
@@ -55,6 +67,13 @@ interface DressEditorOptions {
    * Save so singles-only deletions stay gone across reloads.
    */
   readonly removed?: readonly string[];
+  /**
+   * The room's parsed Tiled map. Used by the interactables mode to render and
+   * edit the interactable hotspot rects (and show spawns/exits for reference).
+   */
+  readonly mapJson: TiledMapJson;
+  /** Map file url (e.g. "/maps/recipient-house.tmj") — the tmj Save target. */
+  readonly mapUrl: string;
   /** Freeze/unfreeze the player+interactions so editing stays inert. */
   readonly setPlayerFrozen: (frozen: boolean) => void;
 }
@@ -67,11 +86,55 @@ interface PropEntry {
   readonly image: Phaser.GameObjects.Image;
 }
 
+type EditorMode = 'props' | 'interactables';
+
+// An editable interactable hotspot rect, in map coordinates. `id` is the Tiled
+// object id, used to patch exactly this object back into the tmj on Save.
+interface RectEntry {
+  readonly id: number;
+  readonly name: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  label: Phaser.GameObjects.Text;
+}
+
+// A read-only reference marker parsed from the tmj (exit rect or spawn point).
+interface RefRect {
+  readonly name: string;
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+  readonly label: Phaser.GameObjects.Text;
+}
+
+interface RefPoint {
+  readonly name: string;
+  readonly x: number;
+  readonly y: number;
+  readonly label: Phaser.GameObjects.Text;
+}
+
+// Which corner of a rect a resize drag grabbed (map-space corner order matches
+// getIsoRectCorners: 0=TL, 1=TR, 2=BR, 3=BL).
+type Corner = 0 | 1 | 2 | 3;
+
 const OVERLAY_DEPTH = 1_000_000;
 const HEIGHT_STEP = 0.02;
 const SCALE_STEP = 0.02;
 const MIN_HEIGHT = 0.05;
 const MIN_SCALE = 0.02;
+
+// Interactables mode.
+const MIN_RECT_SIZE = 8; // map px — never let a hotspot collapse to nothing
+const RESIZE_STEP = 2; // map px per +/- keystroke / wheel notch
+const HANDLE_HIT_RADIUS = 14; // screen px — how close a click must be to a corner
+const COLOR_INTERACTABLE = 0xf1d79a; // gold — matches the in-game interact marker
+const COLOR_SELECTED = 0x34d399; // green — matches the prop-selection highlight
+const COLOR_EXIT = 0x74c7ec; // blue — matches the in-game exit marker
+const COLOR_SPAWN = 0xff7ab6; // pink — distinct, read-only spawn points
 
 // Serialized field order, matching the interface/usage order in roomDressing.ts.
 const FIELD_ORDER: readonly (keyof PropPlacement)[] = [
@@ -114,6 +177,17 @@ class DressEditor {
   private grabDX = 0;
   private grabDY = 0;
 
+  // --- interactables mode ---------------------------------------------------
+  private mode: EditorMode = 'props';
+  private rects: RectEntry[] = [];
+  private exitRefs: RefRect[] = [];
+  private spawnRefs: RefPoint[] = [];
+  private selectedRect = -1;
+  // Active rect drag: either a body move (grab offset in map px) or a corner
+  // resize (which corner is being dragged).
+  private rectDrag: { kind: 'move' } | { kind: 'resize'; corner: Corner } | null = null;
+  private modeBtn?: HTMLButtonElement;
+
   // Camera panning (Space+drag / wheel-when-nothing-selected). Space gates the
   // drag so a pan can never simultaneously start a prop drag.
   private spaceDown = false;
@@ -132,6 +206,8 @@ class DressEditor {
   private panel!: HTMLElement;
   private readoutEl!: HTMLElement;
   private removedCountEl!: HTMLElement;
+  private hintEl!: HTMLElement;
+  private saveBtn!: HTMLButtonElement;
   private toastEl!: HTMLElement;
 
   constructor(scene: Phaser.Scene, options: DressEditorOptions) {
@@ -192,6 +268,11 @@ class DressEditor {
       return;
     }
 
+    if (this.mode === 'interactables') {
+      this.onRectPointerDown(pointer);
+      return;
+    }
+
     const hit = this.hitProp(pointer.worldX, pointer.worldY);
     if (hit < 0) {
       this.selected = -1;
@@ -216,6 +297,10 @@ class DressEditor {
       cam.scrollY -= (pointer.y - pointer.prevPosition.y) / cam.zoom;
       return;
     }
+    if (this.mode === 'interactables') {
+      this.onRectPointerMove(pointer);
+      return;
+    }
     if (!this.dragging || !pointer.isDown || this.selected < 0) {
       return;
     }
@@ -230,16 +315,23 @@ class DressEditor {
   private onPointerUp(): void {
     this.dragging = false;
     this.panning = false;
+    this.rectDrag = null;
     this.updateCursor();
   }
 
   private onWheel(_pointer: Phaser.Input.Pointer, _over: unknown, dx: number, dy: number): void {
-    // With a prop selected, the wheel resizes it (unchanged). With nothing
-    // selected, it pans the camera on both axes; Phaser clamps to setBounds().
-    if (this.selected < 0) {
+    // With a target selected, the wheel resizes it. With nothing selected it
+    // pans the camera on both axes; Phaser clamps to setBounds().
+    const hasSelection =
+      this.mode === 'interactables' ? this.selectedRect >= 0 : this.selected >= 0;
+    if (!hasSelection) {
       const cam = this.scene.cameras.main;
       cam.scrollX += dx / cam.zoom;
       cam.scrollY += dy / cam.zoom;
+      return;
+    }
+    if (this.mode === 'interactables') {
+      this.resizeSelectedRect(dy < 0 ? 1 : -1);
       return;
     }
     this.resizeSelected(dy < 0 ? 1 : -1);
@@ -253,6 +345,23 @@ class DressEditor {
       this.updateCursor();
       return;
     }
+    if (event.code === 'KeyM') {
+      event.preventDefault();
+      this.toggleMode();
+      return;
+    }
+    if (event.code === 'Escape') {
+      this.selected = -1;
+      this.selectedRect = -1;
+      this.updateReadout();
+      return;
+    }
+
+    if (this.mode === 'interactables') {
+      this.onRectKeyDown(event);
+      return;
+    }
+
     if ((event.metaKey || event.ctrlKey) && event.code === 'KeyZ') {
       event.preventDefault();
       this.undoRemove();
@@ -260,11 +369,6 @@ class DressEditor {
     }
     if (event.code === 'KeyE') {
       void this.exportProps();
-      return;
-    }
-    if (event.code === 'Escape') {
-      this.selected = -1;
-      this.updateReadout();
       return;
     }
     if (event.code === 'Delete' || event.code === 'Backspace') {
@@ -406,6 +510,10 @@ class DressEditor {
   private redraw(): void {
     const g = this.graphics;
     g.clear();
+    if (this.mode === 'interactables') {
+      this.drawInteractables(g);
+      return;
+    }
     if (this.selected < 0) {
       return;
     }
@@ -421,6 +529,354 @@ class DressEditor {
     g.lineBetween(anchor.x, anchor.y - 9, anchor.x, anchor.y + 9);
     g.fillStyle(0xf59e0b, 1);
     g.fillCircle(anchor.x, anchor.y, 3);
+  }
+
+  // --- interactables mode --------------------------------------------------
+
+  // Toggle between the props layout editor and the interactable-hotspot editor.
+  // Lazily builds the tmj-derived rects/markers the first time it's entered.
+  private toggleMode(): void {
+    this.mode = this.mode === 'props' ? 'interactables' : 'props';
+    if (this.mode === 'interactables') {
+      if (this.rects.length === 0 && this.exitRefs.length === 0 && this.spawnRefs.length === 0) {
+        this.buildInteractables();
+      }
+      this.selected = -1;
+      this.setInteractableLabelsVisible(true);
+    } else {
+      this.selectedRect = -1;
+      this.rectDrag = null;
+      this.setInteractableLabelsVisible(false);
+    }
+    this.updateModeButton();
+    this.updateSaveButton();
+    this.updateHint();
+    this.updateReadout();
+    this.toast(this.mode === 'interactables' ? 'Interactables mode' : 'Props mode');
+  }
+
+  // Parse the current room's tmj: editable interactable rects, plus read-only
+  // exit rects and spawn points shown for reference while placing hotspots.
+  private buildInteractables(): void {
+    const map = this.options.mapJson;
+    const depth = OVERLAY_DEPTH + 1;
+
+    for (const object of getObjectLayer(map, INTERACTABLES_LAYER)?.objects ?? []) {
+      this.rects.push({
+        id: object.id,
+        name: object.name,
+        x: object.x,
+        y: object.y,
+        width: object.width ?? 0,
+        height: object.height ?? 0,
+        label: this.makeLabel(object.name, COLOR_INTERACTABLE, depth),
+      });
+    }
+    for (const object of getObjectLayer(map, EXITS_LAYER)?.objects ?? []) {
+      this.exitRefs.push({
+        name: object.name,
+        x: object.x,
+        y: object.y,
+        width: object.width ?? 0,
+        height: object.height ?? 0,
+        label: this.makeLabel(`exit: ${object.name}`, COLOR_EXIT, depth),
+      });
+    }
+    for (const object of getObjectLayer(map, SPAWNS_LAYER)?.objects ?? []) {
+      this.spawnRefs.push({
+        name: object.name,
+        x: object.x,
+        y: object.y,
+        label: this.makeLabel(`spawn: ${object.name}`, COLOR_SPAWN, depth),
+      });
+    }
+    this.repositionAllLabels();
+  }
+
+  private makeLabel(text: string, color: number, depth: number): Phaser.GameObjects.Text {
+    return this.scene.add
+      .text(0, 0, text, {
+        color: colorToCss(color),
+        backgroundColor: 'rgba(20,16,21,0.82)',
+        padding: { x: 5, y: 2 },
+        fontSize: '13px',
+        fontStyle: '700',
+      })
+      .setOrigin(0.5, 1)
+      .setDepth(depth)
+      .setVisible(false);
+  }
+
+  private setInteractableLabelsVisible(visible: boolean): void {
+    for (const rect of this.rects) rect.label.setVisible(visible);
+    for (const ref of this.exitRefs) ref.label.setVisible(visible);
+    for (const ref of this.spawnRefs) ref.label.setVisible(visible);
+  }
+
+  // Labels are placed in world space at each object's projected centre; the
+  // camera handles scroll, so they only need repositioning when geometry moves.
+  private repositionAllLabels(): void {
+    for (const rect of this.rects) this.repositionRectLabel(rect);
+    for (const ref of this.exitRefs) {
+      const c = this.projection.project(ref.x + ref.width / 2, ref.y + ref.height / 2);
+      ref.label.setPosition(c.x, c.y);
+    }
+    for (const ref of this.spawnRefs) {
+      const c = this.projection.project(ref.x, ref.y);
+      ref.label.setPosition(c.x, c.y - 6);
+    }
+  }
+
+  private repositionRectLabel(rect: RectEntry): void {
+    const c = this.projection.project(rect.x + rect.width / 2, rect.y + rect.height / 2);
+    rect.label.setPosition(c.x, c.y);
+  }
+
+  // Map-space corners of a rect, in getIsoRectCorners order (TL, TR, BR, BL).
+  private rectCornersMap(rect: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }): readonly { x: number; y: number }[] {
+    return [
+      { x: rect.x, y: rect.y },
+      { x: rect.x + rect.width, y: rect.y },
+      { x: rect.x + rect.width, y: rect.y + rect.height },
+      { x: rect.x, y: rect.y + rect.height },
+    ];
+  }
+
+  private onRectPointerDown(pointer: Phaser.Input.Pointer): void {
+    // If a rect is already selected, a click near one of its projected corners
+    // starts a resize before any move/reselect.
+    if (this.selectedRect >= 0) {
+      const corner = this.hitHandle(this.rects[this.selectedRect], pointer.worldX, pointer.worldY);
+      if (corner !== null) {
+        this.rectDrag = { kind: 'resize', corner };
+        return;
+      }
+    }
+
+    const map = this.projection.unproject(pointer.worldX, pointer.worldY);
+    const hit = this.hitRect(map.x, map.y);
+    if (hit < 0) {
+      this.selectedRect = -1;
+      this.rectDrag = null;
+      this.updateReadout();
+      return;
+    }
+
+    this.selectedRect = hit;
+    const rect = this.rects[hit];
+    // Grab offset so the rect doesn't jump its corner to the cursor.
+    this.grabDX = rect.x - map.x;
+    this.grabDY = rect.y - map.y;
+    this.rectDrag = { kind: 'move' };
+    this.updateReadout();
+  }
+
+  private onRectPointerMove(pointer: Phaser.Input.Pointer): void {
+    if (!this.rectDrag || !pointer.isDown || this.selectedRect < 0) {
+      return;
+    }
+    const rect = this.rects[this.selectedRect];
+    const map = this.projection.unproject(pointer.worldX, pointer.worldY);
+    if (this.rectDrag.kind === 'move') {
+      rect.x = Math.round(map.x + this.grabDX);
+      rect.y = Math.round(map.y + this.grabDY);
+    } else {
+      this.resizeRectCorner(rect, this.rectDrag.corner, Math.round(map.x), Math.round(map.y));
+    }
+    this.repositionRectLabel(rect);
+    this.updateReadout();
+  }
+
+  // Drag one corner to `(mx, my)`, keeping the diagonally-opposite corner fixed
+  // and enforcing a minimum size.
+  private resizeRectCorner(rect: RectEntry, corner: Corner, mx: number, my: number): void {
+    const left = rect.x;
+    const top = rect.y;
+    const right = rect.x + rect.width;
+    const bottom = rect.y + rect.height;
+    switch (corner) {
+      case 0: // TL — right/bottom fixed
+        rect.x = Math.min(mx, right - MIN_RECT_SIZE);
+        rect.y = Math.min(my, bottom - MIN_RECT_SIZE);
+        rect.width = right - rect.x;
+        rect.height = bottom - rect.y;
+        break;
+      case 1: // TR — left/bottom fixed
+        rect.y = Math.min(my, bottom - MIN_RECT_SIZE);
+        rect.width = Math.max(mx - left, MIN_RECT_SIZE);
+        rect.height = bottom - rect.y;
+        break;
+      case 2: // BR — left/top fixed
+        rect.width = Math.max(mx - left, MIN_RECT_SIZE);
+        rect.height = Math.max(my - top, MIN_RECT_SIZE);
+        break;
+      case 3: // BL — right/top fixed
+        rect.x = Math.min(mx, right - MIN_RECT_SIZE);
+        rect.width = right - rect.x;
+        rect.height = Math.max(my - top, MIN_RECT_SIZE);
+        break;
+    }
+  }
+
+  // Keyboard: arrows nudge position (Shift = 8), +/- resize keeping the top-left
+  // corner fixed. Mirrors props-mode's arrow/± controls.
+  private onRectKeyDown(event: KeyboardEvent): void {
+    if (this.selectedRect < 0) {
+      return;
+    }
+    const rect = this.rects[this.selectedRect];
+    const step = event.shiftKey ? 8 : 1;
+    switch (event.code) {
+      case 'ArrowLeft':
+        event.preventDefault();
+        rect.x -= step;
+        break;
+      case 'ArrowRight':
+        event.preventDefault();
+        rect.x += step;
+        break;
+      case 'ArrowUp':
+        event.preventDefault();
+        rect.y -= step;
+        break;
+      case 'ArrowDown':
+        event.preventDefault();
+        rect.y += step;
+        break;
+      case 'Equal':
+      case 'NumpadAdd':
+        event.preventDefault();
+        this.resizeSelectedRect(1);
+        return;
+      case 'Minus':
+      case 'NumpadSubtract':
+        event.preventDefault();
+        this.resizeSelectedRect(-1);
+        return;
+      default:
+        return;
+    }
+    this.repositionRectLabel(rect);
+    this.updateReadout();
+  }
+
+  // Grow/shrink the selected rect uniformly, keeping its top-left fixed.
+  private resizeSelectedRect(dir: number): void {
+    if (this.selectedRect < 0) {
+      return;
+    }
+    const rect = this.rects[this.selectedRect];
+    rect.width = Math.max(MIN_RECT_SIZE, rect.width + dir * RESIZE_STEP);
+    rect.height = Math.max(MIN_RECT_SIZE, rect.height + dir * RESIZE_STEP);
+    this.repositionRectLabel(rect);
+    this.updateReadout();
+  }
+
+  // Index of the first interactable rect whose map-space rect contains (mx, my).
+  private hitRect(mx: number, my: number): number {
+    for (let i = 0; i < this.rects.length; i += 1) {
+      const r = this.rects[i];
+      if (mx >= r.x && mx <= r.x + r.width && my >= r.y && my <= r.y + r.height) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  // Which corner handle (if any) of `rect` is within grab range of the cursor,
+  // tested in screen space so the hit target is uniform regardless of zoom/iso.
+  private hitHandle(rect: RectEntry, worldX: number, worldY: number): Corner | null {
+    const corners = this.rectCornersMap(rect);
+    for (let i = 0; i < corners.length; i += 1) {
+      const p = this.projection.project(corners[i].x, corners[i].y);
+      if (Math.hypot(p.x - worldX, p.y - worldY) <= HANDLE_HIT_RADIUS) {
+        return i as Corner;
+      }
+    }
+    return null;
+  }
+
+  private drawInteractables(g: Phaser.GameObjects.Graphics): void {
+    // Read-only reference markers first (drawn under the editable rects).
+    for (const ref of this.exitRefs) {
+      this.strokeRectMap(g, ref, COLOR_EXIT, 0.16);
+    }
+    for (const ref of this.spawnRefs) {
+      const p = this.projection.project(ref.x, ref.y);
+      g.fillStyle(COLOR_SPAWN, 0.85);
+      g.fillCircle(p.x, p.y, 6);
+      g.lineStyle(2, COLOR_SPAWN, 1);
+      g.strokeCircle(p.x, p.y, 10);
+      g.lineBetween(p.x - 13, p.y, p.x + 13, p.y);
+      g.lineBetween(p.x, p.y - 13, p.x, p.y + 13);
+    }
+
+    // Editable interactable rects; the selected one gets a brighter outline and
+    // draggable corner handles.
+    for (let i = 0; i < this.rects.length; i += 1) {
+      const rect = this.rects[i];
+      const selected = i === this.selectedRect;
+      const color = selected ? COLOR_SELECTED : COLOR_INTERACTABLE;
+      this.strokeRectMap(g, rect, color, selected ? 0.3 : 0.2);
+      if (selected) {
+        g.fillStyle(COLOR_SELECTED, 1);
+        g.lineStyle(2, 0x14261f, 1);
+        for (const corner of this.rectCornersMap(rect)) {
+          const p = this.projection.project(corner.x, corner.y);
+          g.fillRect(p.x - 6, p.y - 6, 12, 12);
+          g.strokeRect(p.x - 6, p.y - 6, 12, 12);
+        }
+      }
+    }
+  }
+
+  private strokeRectMap(
+    g: Phaser.GameObjects.Graphics,
+    rect: { x: number; y: number; width: number; height: number },
+    color: number,
+    fillAlpha: number,
+  ): void {
+    const points = this.rectCornersMap(rect).map((c) => {
+      const p = this.projection.project(c.x, c.y);
+      return new Phaser.Geom.Point(p.x, p.y);
+    });
+    g.fillStyle(color, fillAlpha);
+    g.fillPoints(points, true);
+    g.lineStyle(2, color, 0.95);
+    g.strokePoints(points, true);
+  }
+
+  // Build the tmj patch payload and persist it via the dev endpoint. Only the
+  // editable interactable rects are saved; spawns/exits are reference-only.
+  private async saveInteractables(): Promise<void> {
+    const objects: TmjRectPatch[] = this.rects.map((rect) => ({
+      layer: INTERACTABLES_LAYER,
+      id: rect.id,
+      x: rect.x,
+      y: rect.y,
+      width: rect.width,
+      height: rect.height,
+    }));
+    const payload = { mapPath: mapBasename(this.options.mapUrl), objects };
+    try {
+      const res = await fetch(SAVE_MAP_OBJECTS_ROUTE, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        this.toast('Interactables saved ✓ reloading to apply');
+      } else {
+        this.toast(`Save failed (${res.status})`);
+      }
+    } catch (error) {
+      this.toast(`Save error: ${String(error)}`);
+    }
   }
 
   // --- DOM overlay ---------------------------------------------------------
@@ -472,18 +928,28 @@ class DressEditor {
 
     const hint = document.createElement('div');
     hint.className = 'dress-editor-hint';
-    hint.textContent =
-      'Drag a prop to move · arrows nudge 1px (Shift 8) · wheel or +/- resize a selected prop · ' +
-      'pan: Space-drag or wheel with nothing selected · Del/Backspace removes · Cmd/Ctrl+Z undo · ' +
-      'Save writes the layout to disk · E exports as a fallback · Esc deselects';
+    this.hintEl = hint;
+
+    const modeBtn = document.createElement('button');
+    modeBtn.type = 'button';
+    modeBtn.title = 'Toggle between editing props and interactable hotspot rects (M)';
+    modeBtn.addEventListener('click', () => this.toggleMode());
+    this.modeBtn = modeBtn;
 
     const saveBtn = document.createElement('button');
     saveBtn.type = 'button';
     saveBtn.className = 'dress-editor-save';
-    saveBtn.textContent = 'Save layout';
+    this.saveBtn = saveBtn;
     if (import.meta.env.DEV) {
-      saveBtn.title = 'Write this room’s layout to src/content/roomLayouts/<id>.json (dev server)';
-      saveBtn.addEventListener('click', () => void this.saveLayout());
+      // Save routes to the current mode's dev endpoint (props → roomLayouts,
+      // interactables → the room's tmj).
+      saveBtn.addEventListener('click', () => {
+        if (this.mode === 'interactables') {
+          void this.saveInteractables();
+        } else {
+          void this.saveLayout();
+        }
+      });
     } else {
       saveBtn.disabled = true;
       saveBtn.title = 'Save is only available on the Vite dev server';
@@ -495,9 +961,13 @@ class DressEditor {
     exportBtn.title = 'Copy the props[] as paste-ready TypeScript (fallback)';
     exportBtn.addEventListener('click', () => void this.exportProps());
 
-    panel.append(title, this.readoutEl, this.removedCountEl, hint, saveBtn, exportBtn);
+    panel.append(title, this.readoutEl, this.removedCountEl, hint, modeBtn, saveBtn, exportBtn);
     document.body.appendChild(panel);
     this.panel = panel;
+
+    this.updateModeButton();
+    this.updateSaveButton();
+    this.updateHint();
 
     this.toastEl = document.createElement('div');
     this.toastEl.className = 'dress-editor-toast';
@@ -505,6 +975,16 @@ class DressEditor {
   }
 
   private updateReadout(): void {
+    if (this.mode === 'interactables') {
+      if (this.selectedRect < 0) {
+        this.readoutEl.textContent = '(no interactable selected)';
+        return;
+      }
+      const r = this.rects[this.selectedRect];
+      this.readoutEl.textContent =
+        `${r.name}\nx ${r.x}  y ${r.y}\nw ${r.width}  h ${r.height}`;
+      return;
+    }
     if (this.selected < 0) {
       this.readoutEl.textContent = '(no prop selected)';
       return;
@@ -515,6 +995,38 @@ class DressEditor {
         ? `heightRatio ${p.heightRatio}`
         : `scale ${p.scale ?? 1}`;
     this.readoutEl.textContent = `${p.frame}\nmapX ${p.mapX}  mapY ${p.mapY}\n${size}`;
+  }
+
+  private updateModeButton(): void {
+    if (!this.modeBtn) {
+      return;
+    }
+    this.modeBtn.textContent =
+      this.mode === 'interactables' ? 'Mode: Interactables → Props (M)' : 'Mode: Props → Interactables (M)';
+  }
+
+  private updateSaveButton(): void {
+    if (!this.saveBtn || !import.meta.env.DEV) {
+      return;
+    }
+    if (this.mode === 'interactables') {
+      this.saveBtn.textContent = 'Save interactables';
+      this.saveBtn.title = 'Write the edited hotspot rects back into public/maps/<map>.tmj (dev server)';
+    } else {
+      this.saveBtn.textContent = 'Save layout';
+      this.saveBtn.title = 'Write this room’s layout to src/content/roomLayouts/<id>.json (dev server)';
+    }
+  }
+
+  private updateHint(): void {
+    this.hintEl.textContent =
+      this.mode === 'interactables'
+        ? 'M switches back to props · drag a rect to move · drag a corner handle to resize · ' +
+          'arrows nudge 1px (Shift 8) · wheel or +/- resize · pan: Space-drag or wheel with nothing selected · ' +
+          'exits (blue) and spawns (pink) are read-only reference · Save writes the tmj · Esc deselects'
+        : 'Drag a prop to move · arrows nudge 1px (Shift 8) · wheel or +/- resize a selected prop · ' +
+          'pan: Space-drag or wheel with nothing selected · Del/Backspace removes · Cmd/Ctrl+Z undo · ' +
+          'M edits interactable rects · Save writes the layout · E exports · Esc deselects';
   }
 
   private updateRemovedCount(): void {
@@ -614,6 +1126,9 @@ class DressEditor {
       this.scene.game.canvas.style.cursor = '';
     }
     this.graphics.destroy();
+    for (const rect of this.rects) rect.label.destroy();
+    for (const ref of this.exitRefs) ref.label.destroy();
+    for (const ref of this.spawnRefs) ref.label.destroy();
     this.panel?.remove();
     this.toastEl?.remove();
     this.options.setPlayerFrozen(false);
@@ -624,6 +1139,16 @@ class DressEditor {
 
 function round3(value: number): number {
   return Math.round(value * 1000) / 1000;
+}
+
+// 0xRRGGBB -> "#rrggbb" for Phaser text style colours.
+function colorToCss(color: number): string {
+  return `#${color.toString(16).padStart(6, '0')}`;
+}
+
+// "/maps/recipient-house.tmj" -> "recipient-house.tmj" (the tmj Save target basename).
+function mapBasename(mapUrl: string): string {
+  return mapUrl.split('/').pop() ?? mapUrl;
 }
 
 function serializePlacement(placement: EditablePlacement): string {

@@ -1,9 +1,15 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, resolve, sep } from 'node:path';
 import { defineConfig, type Plugin, type ViteDevServer } from 'vite';
+import {
+  applyTmjRectPatches,
+  isValidTmjSavePayload,
+  serializeTmj,
+} from './src/game/tmjRectPatch';
 
 const SAVE_ROUTE = '/__dev/save-collision-zones';
 const SAVE_LAYOUT_ROUTE = '/__dev/save-room-layout';
+const SAVE_MAP_OBJECTS_ROUTE = '/__dev/save-map-objects';
 const LOCATION_ID = /^[a-z0-9-]+$/;
 
 interface ZonePayload {
@@ -159,8 +165,63 @@ function roomLayoutSaverPlugin(): Plugin {
   };
 }
 
+// Dev-only endpoint used by the dress editor's "interactables" mode
+// (?dressEdit=1, then toggle) to persist edited interactable hotspot rects back
+// into the room's Tiled map (public/maps/<map>.tmj). Same security posture as
+// the other savers: serve-only, and writes are confined to public/maps with a
+// strictly validated basename (no path traversal). The original file is read
+// from disk and only the edited objects' x/y/width/height are overwritten
+// (applyTmjRectPatches), so every other object, layer, and property round-trips
+// unchanged and the resulting diff stays minimal and reviewable.
+function mapObjectSaverPlugin(): Plugin {
+  return {
+    name: 'map-object-saver',
+    apply: 'serve',
+    configureServer(server: ViteDevServer) {
+      server.middlewares.use(SAVE_MAP_OBJECTS_ROUTE, (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405;
+          res.end('Method Not Allowed');
+          return;
+        }
+
+        const chunks: Buffer[] = [];
+        req.on('data', (chunk: Buffer) => chunks.push(chunk));
+        req.on('end', () => {
+          try {
+            const parsed = JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
+            if (!isValidTmjSavePayload(parsed)) {
+              res.statusCode = 400;
+              res.end('Invalid payload');
+              return;
+            }
+            const mapsDir = resolve(server.config.root, 'public/maps');
+            const outPath = resolve(mapsDir, parsed.mapPath);
+            // Belt-and-suspenders: the basename regex already forbids '/' and
+            // '.', but confirm the resolved path never escapes public/maps.
+            if (outPath !== mapsDir && !outPath.startsWith(mapsDir + sep)) {
+              res.statusCode = 400;
+              res.end('Path outside public/maps');
+              return;
+            }
+            const original = JSON.parse(readFileSync(outPath, 'utf8')) as unknown;
+            const patched = applyTmjRectPatches(original, parsed.objects);
+            writeFileSync(outPath, serializeTmj(patched), 'utf8');
+            res.statusCode = 200;
+            res.setHeader('content-type', 'application/json');
+            res.end(JSON.stringify({ ok: true, path: parsed.mapPath }));
+          } catch (error) {
+            res.statusCode = 500;
+            res.end(`Error: ${String(error)}`);
+          }
+        });
+      });
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [collisionZoneSaverPlugin(), roomLayoutSaverPlugin()],
+  plugins: [collisionZoneSaverPlugin(), roomLayoutSaverPlugin(), mapObjectSaverPlugin()],
   server: {
     host: '127.0.0.1',
     port: 5173,

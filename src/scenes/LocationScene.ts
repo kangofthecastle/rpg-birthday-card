@@ -512,6 +512,8 @@ export class LocationScene extends Phaser.Scene {
         dressing,
         propHandles,
         propDepthOverrides,
+        mapJson: this.getMapJson(),
+        mapUrl: this.location.mapUrl,
         removed: getRoomLayoutRemoved(this.location.id),
         setPlayerFrozen: (frozen: boolean) => {
           this.dressEditFrozen = frozen;

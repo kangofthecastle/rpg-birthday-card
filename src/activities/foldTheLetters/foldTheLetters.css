@@ -70,130 +70,23 @@
   cursor: pointer;
 }
 
-/* --- sail-away cinematic -------------------------------------------------- */
+/* --- sail-away bridge ----------------------------------------------------- */
 
+/* The fold stage dissolves directly into the full-scene key art. Transparent
+ * host (no gradient sky/water) so the fold stage shows through as the painting
+ * cross-fades in over it. Mounted on the persistent UI root so it holds unbroken
+ * across the scene swap into the ending frame sequence. */
 .fold-sail {
   position: absolute;
   inset: 0;
   overflow: hidden;
   pointer-events: auto;
-  background: radial-gradient(circle at 50% 30%, #131a33, #06070f 75%);
 }
 
-.fold-sail__sky {
-  position: absolute;
-  top: 0;
-  right: 0;
-  left: 0;
-  height: 58%;
-  background:
-    radial-gradient(1.5px 1.5px at 20% 30%, rgba(255, 255, 235, 0.9), transparent),
-    radial-gradient(1.5px 1.5px at 70% 20%, rgba(255, 240, 210, 0.8), transparent),
-    radial-gradient(1.5px 1.5px at 45% 55%, rgba(220, 235, 255, 0.8), transparent),
-    radial-gradient(2px 2px at 85% 45%, rgba(255, 255, 240, 0.85), transparent),
-    radial-gradient(1.5px 1.5px at 33% 12%, rgba(255, 245, 220, 0.7), transparent),
-    linear-gradient(#0c1230, #1a2140);
-  opacity: 0;
-  transition: opacity 2600ms ease;
-}
-
-.fold-sail__water {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  height: 46%;
-  background: linear-gradient(#0a1226, #050912);
-  box-shadow: inset 0 40px 60px -30px rgba(120, 170, 230, 0.35);
-  opacity: 0;
-  transition: opacity 2600ms ease;
-}
-
-.fold-sail__boat {
-  position: absolute;
-  bottom: 30%;
-  left: 50%;
-  width: 120px;
-  height: 90px;
-  transform: translate(-50%, 40px) scale(0.9);
-  opacity: 0;
-  transition: transform 6800ms cubic-bezier(0.3, 0, 0.4, 1), opacity 1400ms ease;
-}
-
-.fold-sail__hull {
-  position: absolute;
-  bottom: 0;
-  left: 50%;
-  width: 108px;
-  height: 34px;
-  transform: translateX(-50%);
-  background: #f2e8cf;
-  clip-path: polygon(0 0, 100% 0, 82% 100%, 18% 100%);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
-}
-
-.fold-sail__sail {
-  position: absolute;
-  bottom: 30px;
-  left: 46%;
-  width: 40px;
-  height: 54px;
-  background: #f6ecd2;
-  clip-path: polygon(0 0, 0 100%, 100% 100%);
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
-}
-
-.fold-sail__lantern {
-  position: absolute;
-  bottom: 24px;
-  left: 12px;
-  width: 12px;
-  height: 16px;
-  border-radius: 3px;
-  background: #ffcf7a;
-  box-shadow: 0 0 18px 6px rgba(255, 190, 100, 0.8), 0 0 40px 14px rgba(255, 170, 80, 0.4);
-  animation: fold-lantern-flicker 2.4s ease-in-out infinite alternate;
-}
-
-.fold-sail__rider {
-  position: absolute;
-  bottom: 20px;
-  left: 50%;
-  width: 12px;
-  height: 26px;
-  transform: translateX(-30%);
-  border-radius: 6px 6px 3px 3px;
-  background: linear-gradient(#3a2130, #241522);
-}
-
-.fold-sail__rider::before {
-  position: absolute;
-  top: -8px;
-  left: 50%;
-  width: 8px;
-  height: 8px;
-  content: '';
-  transform: translateX(-50%);
-  border-radius: 50%;
-  background: #b5613f;
-}
-
-/* File-first art variants: when a real PNG is dropped in, the piece is an <img>
- * with no procedural background/clip so the art shows as-is at its slot. */
-.fold-sail__hull--art,
-.fold-sail__sail--art,
-.fold-sail__lantern--art,
-.fold-sail__rider--art {
-  background: none;
-  clip-path: none;
-  box-shadow: none;
-  object-fit: contain;
-}
-
-/* Optional full-scene key art. When present it cross-fades in over the
- * composited boat + procedural water as the drift begins and holds through the
- * travel — becoming the scene. Sits above the boat but below the drifting
- * petals (which match the art's own blossoms). */
+/* Full-scene key art. Fades in over the fold stage; the opacity transition
+ * DURATION is driven inline from FoldTiming.keyArtFadeMs (single source — no
+ * hand-synced ms here). object-fit:cover matches the ending frame sequence's
+ * background-size:cover so the handoff to that layer is seamless. */
 .fold-sail__keyart {
   position: absolute;
   inset: 0;
@@ -201,7 +94,6 @@
   height: 100%;
   object-fit: cover;
   opacity: 0;
-  transition: opacity 2600ms ease 1400ms;
 }
 
 .fold-sail--go .fold-sail__keyart {
@@ -224,16 +116,6 @@
   opacity: 0;
 }
 
-.fold-sail--go .fold-sail__sky,
-.fold-sail--go .fold-sail__water {
-  opacity: 1;
-}
-
-.fold-sail--go .fold-sail__boat {
-  transform: translate(-50%, -120px) scale(0.62);
-  opacity: 1;
-}
-
 .fold-sail--go .fold-sail__petal {
   animation: fold-petal-fall linear forwards;
 }
@@ -252,14 +134,7 @@
   100% { transform: translateY(115vh) translateX(-40px) rotate(220deg); opacity: 0; }
 }
 
-@keyframes fold-lantern-flicker {
-  from { box-shadow: 0 0 16px 5px rgba(255, 190, 100, 0.7), 0 0 36px 12px rgba(255, 170, 80, 0.35); }
-  to { box-shadow: 0 0 22px 8px rgba(255, 205, 120, 0.9), 0 0 48px 18px rgba(255, 180, 90, 0.5); }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .fold-sail__boat,
-  .fold-sail__lantern,
   .fold-sail__keyart,
   .fold-sail__petal {
     transition-duration: 0.001ms;

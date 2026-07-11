@@ -357,7 +357,12 @@ export class LocationScene extends Phaser.Scene {
     this.promptText?.setText('');
     const testMode =
       new URLSearchParams(window.location.search).get('testMode') === '1';
-    const settleMs = testMode ? 60 : 1000;
+    // The ending auto-start (final-keepsake-reveal) is covered by the persistent
+    // sail-away key-art bridge, so the live scene must NOT be exposed for a settle
+    // beat: collapse the settle to a minimal tick that just lets create() finish.
+    // Other auto-starts still hold on the arrival shot.
+    const endingAutoStart = activityId === 'final-keepsake-reveal';
+    const settleMs = testMode ? 60 : endingAutoStart ? 50 : 1000;
     this.time.delayedCall(settleMs, () => {
       void this.startActivity(activityId);
     });

@@ -237,14 +237,19 @@ body {
   width: 128px;
   height: 96px;
   transform: translate(-50%, 6px) scale(1);
-  opacity: 1;
-  transition: opacity 2200ms ease;
+  /* Starts hidden: fades in with the water-arrival dissolve, then fades out as
+   * the galaxy settles. The transition (durations driven from EndingTiming in
+   * JS — no hand-synced ms here) is set inline; see finalKeepsakeActivity. */
+  opacity: 0;
   filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.55));
 }
 
+/* End of the drift. Transform ONLY — the duration is synced to the frame
+ * sequence length and set inline from JS. The hull bottom lands ~64% from the
+ * frame top: on the water, receding toward the painted horizon (~58-61%) but
+ * never crossing it (the boat shrinks about a point near the horizon line). */
 .ending-frames__boat--drift {
-  transition: transform 12000ms cubic-bezier(0.3, 0, 0.4, 1), opacity 2200ms ease;
-  transform: translate(-50%, -40px) scale(0.62);
+  transform: translate(-50%, 4px) scale(0.62);
 }
 
 .ending-frames__hull {

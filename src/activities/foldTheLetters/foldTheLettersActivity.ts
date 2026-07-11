@@ -31,6 +31,7 @@ import {
 } from './foldModel';
 import { FoldStage } from './foldStage';
 import { isImageUrl } from '../../game/assetProbe';
+import { getUiRoot } from '../../ui/domRoot';
 import './foldTheLetters.css';
 
 // Optional full-scene backdrop for the sail-away cinematic. File-first: when
@@ -53,18 +54,23 @@ interface FoldTiming {
   readonly assembledHoldMs: number;
   readonly expandMs: number;
   readonly sailAwayMs: number;
+  /** Cross-fade of the sail-away key art in over the fold stage. Single source
+   *  for the bridge's key-art opacity transition (set inline from here). */
+  readonly keyArtFadeMs: number;
 }
 
 const REAL_TIMING: FoldTiming = {
   assembledHoldMs: 1000,
   expandMs: 1200,
   sailAwayMs: 7000,
+  keyArtFadeMs: 2600,
 };
 
 const TEST_TIMING: FoldTiming = {
   assembledHoldMs: 40,
   expandMs: 40,
   sailAwayMs: 80,
+  keyArtFadeMs: 40,
 };
 
 // The notes of ____'s piece, plucked one by one as the sheet music rolls. A
@@ -80,6 +86,13 @@ function isTestMode(): boolean {
   return new URL(window.location.href).searchParams.get('testMode') === '1';
 }
 
+// Reduced-motion collapses the auto beats to the near-instant test pacing so the
+// JS-driven inline transitions (which override the CSS reduced-motion block)
+// still honor the user's preference — single source, no double-maintained ms.
+function prefersReducedMotion(): boolean {
+  return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+}
+
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -88,7 +101,7 @@ export const foldTheLettersActivity: ActivityModule = {
   id: 'fold-the-letters',
   title: 'fold',
   async start({ mount, onCancel, onComplete }) {
-    const timing = isTestMode() ? TEST_TIMING : REAL_TIMING;
+    const timing = isTestMode() || prefersReducedMotion() ? TEST_TIMING : REAL_TIMING;
 
     mount.innerHTML = `
       <section class="activity-panel activity-panel--fold" role="dialog" aria-label="fold" data-fold-panel>
@@ -458,10 +471,19 @@ export const foldTheLettersActivity: ActivityModule = {
           return;
         }
       }
-      const cinematic = buildSailAwayCinematic(stage.getLoadedPieceUrls(), sailAwayKeyArtUrl);
-      mount.append(cinematic);
-      void cinematic.offsetWidth;
-      cinematic.classList.add('fold-sail--go');
+      // The fold stage dissolves DIRECTLY into the sail-away key art — the
+      // painting's boat IS the boat, so there is no composited DOM boat and no
+      // gradient starfield here. The bridge mounts on the persistent UI root (NOT
+      // this activity's mount) so it survives the mount teardown + scene restart
+      // into final-spot and covers the swap: the live scene is never exposed
+      // before the ending frame sequence, which removes the bridge once its own
+      // key-art layer is up.
+      const bridge = buildSailAwayBridge(sailAwayKeyArtUrl, timing.keyArtFadeMs);
+      if (bridge) {
+        getUiRoot().append(bridge);
+        void bridge.offsetWidth;
+        bridge.classList.add('fold-sail--go');
+      }
       playSfx('sfx-water-lap');
       await wait(timing.sailAwayMs / 2);
       playSfx('sfx-water-lap');
@@ -493,37 +515,33 @@ export const foldTheLettersActivity: ActivityModule = {
   },
 };
 
-function buildSailAwayCinematic(
-  pieces: Partial<Record<string, string>>,
-  keyArtUrl?: string,
-): HTMLElement {
+// The sail-away bridge: the fold stage dissolving into the full-scene key art
+// (the painting's boat IS the boat — no composited DOM boat, no gradient sky/
+// water). Drifting petals ride over it. Transparent host so the fold stage shows
+// through as the painting cross-fades in. Mounted on the persistent UI root so it
+// holds unbroken across the scene swap into the ending frame sequence, which
+// finds it by `data-ending-bridge` and removes it once its own key-art layer is
+// up. Absent art → no bridge (graceful degrade).
+function buildSailAwayBridge(
+  keyArtUrl: string | undefined,
+  keyArtFadeMs: number,
+): HTMLElement | null {
+  if (!keyArtUrl) {
+    return null;
+  }
   const stage = document.createElement('div');
   stage.className = 'fold-sail';
   stage.dataset.foldSail = '';
+  stage.dataset.endingBridge = '';
   stage.setAttribute('aria-hidden', 'true');
 
-  const sky = document.createElement('div');
-  sky.className = 'fold-sail__sky';
-  const water = document.createElement('div');
-  water.className = 'fold-sail__water';
-
-  const boat = document.createElement('div');
-  boat.className = 'fold-sail__boat';
-
-  // Composite the SAME three pieces as the stage: file-first <img> when the art
-  // exists, else the procedural CSS shapes. An optional recipient-in-boat overlay
-  // rides on top file-first; otherwise the CSS rider is used.
-  const hull = pieceEl('fold-sail__hull', pieces.hull);
-  const sail = pieceEl('fold-sail__sail', pieces.sail);
-  const lantern = pieceEl('fold-sail__lantern', pieces.lantern);
-  const rider = pieces['recipient-boat']
-    ? pieceEl('fold-sail__rider', pieces['recipient-boat'])
-    : (() => {
-        const r = document.createElement('span');
-        r.className = 'fold-sail__rider';
-        return r;
-      })();
-  boat.append(hull, sail, lantern, rider);
+  const keyart = document.createElement('img');
+  keyart.className = 'fold-sail__keyart';
+  keyart.src = keyArtUrl;
+  keyart.alt = '';
+  // Single-source transition: duration from FoldTiming.keyArtFadeMs, not a
+  // hand-synced value in the CSS.
+  keyart.style.transition = `opacity ${keyArtFadeMs}ms ease`;
 
   const petals = document.createElement('div');
   petals.className = 'fold-sail__petals';
@@ -533,29 +551,6 @@ function buildSailAwayCinematic(
     petals.append(petal);
   }
 
-  // Full-scene key art (file-first) cross-fades in over the boat as it drifts,
-  // becoming the held final image; layered above the boat, below the petals.
-  if (keyArtUrl) {
-    const keyart = document.createElement('img');
-    keyart.className = 'fold-sail__keyart';
-    keyart.src = keyArtUrl;
-    keyart.alt = '';
-    stage.append(sky, water, boat, keyart, petals);
-  } else {
-    stage.append(sky, water, boat, petals);
-  }
+  stage.append(keyart, petals);
   return stage;
-}
-
-function pieceEl(className: string, url?: string): HTMLElement {
-  if (url) {
-    const img = document.createElement('img');
-    img.className = `${className} ${className}--art`;
-    img.src = url;
-    img.alt = '';
-    return img;
-  }
-  const span = document.createElement('span');
-  span.className = className;
-  return span;
 }

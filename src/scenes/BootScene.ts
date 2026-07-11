@@ -59,6 +59,16 @@ export class BootScene extends Phaser.Scene {
       frameHeight: 64,
     });
     this.load.image('recipient-room-props', '/assets/props/recipient-room-props.png');
+    this.load.spritesheet('friendone-room-tiles', '/assets/tiles/friendone-room-tiles.png', {
+      frameWidth: 64,
+      frameHeight: 64,
+    });
+    this.load.image('friendone-room-props', '/assets/props/friendone-room-props.png');
+    this.load.spritesheet('friendtwo-room-tiles', '/assets/tiles/friendtwo-room-tiles.png', {
+      frameWidth: 64,
+      frameHeight: 64,
+    });
+    this.load.image('friendtwo-room-props', '/assets/props/friendtwo-room-props.png');
 
     // ____, the NPC who waits at the galaxy water for the final conversation.
     this.load.spritesheet(FRIEND_TWO_SPRITE.key, FRIEND_TWO_SPRITE.url, {

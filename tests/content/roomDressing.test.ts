@@ -28,8 +28,25 @@ function loadRecipientHouseInteractables(): readonly TiledObjectJson[] {
 describe('getRoomDressing', () => {
   it('returns undefined for undressed locations', () => {
     expect(getRoomDressing('main-outside')).toBeUndefined();
-    expect(getRoomDressing('friend-a')).toBeUndefined();
     expect(getRoomDressing('final-spot')).toBeUndefined();
+  });
+
+  it('dresses ____, ____ (friend-a) and ____ (friend-b) with valid crops', () => {
+    for (const locationId of ['recipient-house', 'friend-a', 'friend-b']) {
+      const dressing = getRoomDressing(locationId);
+      expect(dressing, locationId).toBeDefined();
+
+      for (const placement of dressing!.props) {
+        const frame = dressing!.frames[placement.frame];
+        expect(frame, `${locationId} frame "${placement.frame}"`).toBeDefined();
+        expect(frame.x, placement.frame).toBeGreaterThanOrEqual(0);
+        expect(frame.y, placement.frame).toBeGreaterThanOrEqual(0);
+        expect(frame.w, placement.frame).toBeGreaterThan(0);
+        expect(frame.h, placement.frame).toBeGreaterThan(0);
+        expect(frame.x + frame.w, placement.frame).toBeLessThanOrEqual(SHEET_SIZE);
+        expect(frame.y + frame.h, placement.frame).toBeLessThanOrEqual(SHEET_SIZE);
+      }
+    }
   });
 
   it('provides an recipient-house dressing whose props reference defined frames', () => {

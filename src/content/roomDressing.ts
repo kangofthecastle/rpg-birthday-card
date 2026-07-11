@@ -756,6 +756,16 @@ const FRIEND_TWO_HOUSE_DRESSING: RoomDressing = {
 export interface RoomLayoutFile {
   readonly locationId: string;
   readonly props: readonly PropPlacement[];
+  /**
+   * Frame ids the author has deliberately removed ("tombstones"). A singles-only
+   * prop registered in TS is normally auto-merged into the layout when the saved
+   * JSON doesn't carry it yet (so newly-registered standalone art appears without
+   * a Save) — but a tombstoned id is NOT re-merged, so a deliberate deletion in
+   * dressEdit sticks across reloads instead of resurrecting. Sheet props already
+   * delete cleanly (they simply drop out of `props`); they're tombstoned here too
+   * for consistency and to guard against any future auto-merge behavior.
+   */
+  readonly removed?: readonly string[];
 }
 
 const LAYOUT_MODULES = import.meta.glob<RoomLayoutFile>('./roomLayouts/*.json', {
@@ -781,23 +791,65 @@ export function isSinglesOnlyProp(dressing: RoomDressing, placement: PropPlaceme
 }
 
 /**
- * Apply an authored layout override for a room, if one exists on disk. The
- * saved JSON replaces the TS `props` fallback — but any singles-only prop
- * declared in TS that the JSON does not yet carry is merged in (appended), so a
- * newly registered standalone-art slot appears without the author having to
- * Save first. Once the author arranges and Saves, the prop is written into the
- * JSON and this merge no longer re-adds it (matched by `frame` id).
+ * Merge a persisted layout into a dressing. The saved `props` replace the TS
+ * fallback; any singles-only prop declared in TS that the layout does not yet
+ * carry is appended, so a newly-registered standalone-art slot appears without a
+ * Save first — UNLESS its frame id is tombstoned in the layout's `removed`, in
+ * which case it stays gone (a deliberate deletion the author made in dressEdit).
+ * Once the author arranges and Saves, a kept prop is written into `props` and
+ * this merge no longer re-adds it (matched by `frame` id).
  */
+export function applyRoomLayout(
+  dressing: RoomDressing,
+  layout: Pick<RoomLayoutFile, 'props' | 'removed'>,
+): RoomDressing {
+  const savedFrames = new Set(layout.props.map((prop) => prop.frame));
+  const removed = new Set(layout.removed ?? []);
+  const newSinglesOnly = dressing.props.filter(
+    (prop) =>
+      isSinglesOnlyProp(dressing, prop) && !savedFrames.has(prop.frame) && !removed.has(prop.frame),
+  );
+  return { ...dressing, props: [...layout.props, ...newSinglesOnly] };
+}
+
 function withLayoutOverride(locationId: string, dressing: RoomDressing): RoomDressing {
   const layout = LAYOUTS_BY_LOCATION[locationId];
   if (!layout) {
     return dressing;
   }
-  const savedFrames = new Set(layout.props.map((prop) => prop.frame));
-  const newSinglesOnly = dressing.props.filter(
-    (prop) => isSinglesOnlyProp(dressing, prop) && !savedFrames.has(prop.frame),
-  );
-  return { ...dressing, props: [...layout.props, ...newSinglesOnly] };
+  return applyRoomLayout(dressing, layout);
+}
+
+/** Frame ids the author has tombstoned (deliberately removed) for a room. */
+export function getRoomLayoutRemoved(locationId: string): readonly string[] {
+  return LAYOUTS_BY_LOCATION[locationId]?.removed ?? [];
+}
+
+/**
+ * The `removed[]` tombstone set to persist for a room. A frame id is tombstoned
+ * when it was deliberately removed — either previously (persisted in the loaded
+ * layout's `removed`) or during the working edit session — AND is not currently
+ * present among the room's props. Undoing a session removal re-adds the prop, so
+ * its frame becomes "present" and drops out of the set (its tombstone cleared).
+ */
+export function computeRemovedTombstones(
+  presentFrames: Iterable<string>,
+  previousRemoved: Iterable<string>,
+  sessionRemoved: Iterable<string>,
+): string[] {
+  const present = new Set(presentFrames);
+  const out = new Set<string>();
+  for (const frame of previousRemoved) {
+    if (!present.has(frame)) {
+      out.add(frame);
+    }
+  }
+  for (const frame of sessionRemoved) {
+    if (!present.has(frame)) {
+      out.add(frame);
+    }
+  }
+  return [...out];
 }
 
 const ROOM_DRESSINGS: Readonly<Record<string, RoomDressing>> = {
@@ -882,6 +934,11 @@ export function isValidRoomLayoutFile(value: unknown): value is RoomLayoutFile {
     }
     const p = prop as Record<string, unknown>;
     if (typeof p.frame !== 'string' || typeof p.mapX !== 'number' || typeof p.mapY !== 'number') {
+      return false;
+    }
+  }
+  if (file.removed !== undefined) {
+    if (!Array.isArray(file.removed) || file.removed.some((id) => typeof id !== 'string')) {
       return false;
     }
   }

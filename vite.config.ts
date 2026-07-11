@@ -86,6 +86,7 @@ function collisionZoneSaverPlugin(): Plugin {
 interface RoomLayoutPayload {
   locationId: string;
   props: Array<Record<string, unknown>>;
+  removed?: string[];
 }
 
 function isValidLayoutPayload(value: unknown): value is RoomLayoutPayload {
@@ -97,6 +98,13 @@ function isValidLayoutPayload(value: unknown): value is RoomLayoutPayload {
     if (typeof prop !== 'object' || prop === null) return false;
     const p = prop as Record<string, unknown>;
     if (typeof p.frame !== 'string' || typeof p.mapX !== 'number' || typeof p.mapY !== 'number') {
+      return false;
+    }
+  }
+  // Optional tombstone list: frame ids the author deliberately removed, so the
+  // roomDressing merge won't resurrect singles-only props on the next reload.
+  if (file.removed !== undefined) {
+    if (!Array.isArray(file.removed) || file.removed.some((id) => typeof id !== 'string')) {
       return false;
     }
   }

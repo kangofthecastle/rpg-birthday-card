@@ -28,7 +28,7 @@ import {
   type PlayerFacing,
 } from '../assets/recipientSpriteConfig';
 import { getLocation } from '../content/locations';
-import { getRoomDressing, type RoomDressing } from '../content/roomDressing';
+import { getRoomDressing, getRoomLayoutRemoved, type RoomDressing } from '../content/roomDressing';
 import {
   renderExitDoormat,
   renderInteriorAwakening,
@@ -512,6 +512,7 @@ export class LocationScene extends Phaser.Scene {
         dressing,
         propHandles,
         propDepthOverrides,
+        removed: getRoomLayoutRemoved(this.location.id),
         setPlayerFrozen: (frozen: boolean) => {
           this.dressEditFrozen = frozen;
         },

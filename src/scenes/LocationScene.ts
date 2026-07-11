@@ -1443,12 +1443,15 @@ export class LocationScene extends Phaser.Scene {
       return;
     }
 
-    // Warm tint pull, camera-fixed and low, layered under the HUD.
-    const tint = this.add
-      .rectangle(0, 0, this.cameras.main.width, this.cameras.main.height, 0xffcf7a, 0.1)
-      .setOrigin(0, 0)
-      .setScrollFactor(0)
-      .setDepth(895);
+    // Warm tint pull, camera-fixed and low, layered under the HUD. A gentle
+    // top→bottom gradient leans the warmth toward the bottom of the screen —
+    // the south, where the clearing waits — so the wash itself tips that way.
+    // Same alphas/tween character as the old flat rect; the lean is subtle by
+    // design (the motes and threshold glow carry the actual "go south" cue).
+    const tint = this.add.graphics().setScrollFactor(0).setDepth(895);
+    tint.fillGradientStyle(0xffcf7a, 0xffcf7a, 0xffd98c, 0xffd98c, 0.72, 0.72, 1, 1);
+    tint.fillRect(0, 0, this.cameras.main.width, this.cameras.main.height);
+    tint.setAlpha(0.1);
     this.tweens.add({
       targets: tint,
       alpha: { from: 0.06, to: 0.13 },
@@ -1459,6 +1462,7 @@ export class LocationScene extends Phaser.Scene {
     });
 
     this.spawnLightMotes();
+    this.createSouthThresholdGlow();
   }
 
   // Post-violin awakening for a dressed interior (recipient-house): golden light
@@ -1511,7 +1515,17 @@ export class LocationScene extends Phaser.Scene {
     // Seeded like the outdoor ground so the mote field is stable across reloads.
     const rng = mulberry32(fnv1a(`${this.location.id}:motes`));
     const count = 16;
+    // On the hub map, once the way south has opened, the motes stop drifting at
+    // random and stream gently toward the clearing exit — the light itself
+    // beckoning that way. Other outdoor areas keep the ambient, aimless drift.
+    const beckonSouth =
+      this.location.id === 'main-outside' &&
+      (this.location.edgeExits ?? []).some((exit) => exit.edge === 'south');
     for (let i = 0; i < count; i += 1) {
+      if (beckonSouth) {
+        this.spawnBeckoningMote(rng);
+        continue;
+      }
       const x = rng() * this.mapDims.width;
       const y = rng() * this.mapDims.height;
       const mote = this.add
@@ -1541,6 +1555,100 @@ export class LocationScene extends Phaser.Scene {
         ease: 'Sine.easeInOut',
       });
     }
+  }
+
+  // One mote in the southward-streaming field. It rides a slow, continuous
+  // downward drift (looping — a stream, not a one-shot), biased into the
+  // southern half of the map so the flow reads clearly toward the clearing
+  // exit. A synced alpha cycle fades it up at the top of its run and back to
+  // zero at the bottom, so the loop's snap-back never shows. Gentle by design:
+  // a quiet current in the air, not a particle storm.
+  private spawnBeckoningMote(rng: () => number): void {
+    const width = this.mapDims.width;
+    const height = this.mapDims.height;
+    const x = rng() * width;
+    // Spawn biased into the southern ~two-thirds so the field leans that way.
+    const startY = height * (0.3 + rng() * 0.55);
+    const travel = height * (0.22 + rng() * 0.16);
+    const sway = 12 + rng() * 20;
+    const runMs = 6400 + rng() * 3600;
+    const delay = rng() * runMs;
+    const mote = this.add
+      .image(x, startY, 'awaken-mote')
+      .setDepth(startY + travel + 6)
+      .setAlpha(0)
+      .setScale(0.5 + rng() * 0.9);
+    // Steady southward drift; on each loop the position snaps back up while the
+    // alpha cycle (below) has it at zero, so the reset is invisible.
+    this.tweens.add({
+      targets: mote,
+      y: startY + travel,
+      duration: runMs,
+      repeat: -1,
+      delay,
+      ease: 'Linear',
+    });
+    // Gentle side-to-side sway layered over the descent.
+    this.tweens.add({
+      targets: mote,
+      x: x + (rng() - 0.5) * sway * 2,
+      duration: runMs * 0.5,
+      yoyo: true,
+      repeat: -1,
+      delay,
+      ease: 'Sine.easeInOut',
+    });
+    // Fade up over the first half of the run and back down over the second, so
+    // one alpha cycle == one descent: brightest mid-stream, dark at both ends.
+    this.tweens.add({
+      targets: mote,
+      alpha: { from: 0, to: 0.4 + rng() * 0.25 },
+      duration: runMs * 0.5,
+      yoyo: true,
+      repeat: -1,
+      delay,
+      ease: 'Sine.easeInOut',
+    });
+  }
+
+  // A soft, pulsing warm band across the south exit once the way has opened —
+  // the same door-glow language players already know (createOutdoorDoorMarkers'
+  // 0xffca74/0xffe1a1), read as "a way through" toward the clearing. The band's
+  // rect is derived from the south edgeExit and the map dims, not hardcoded.
+  // Gentle by design: a low glow on the ground, layered like the door markers.
+  private createSouthThresholdGlow(): void {
+    if (this.location.id !== 'main-outside') {
+      return;
+    }
+    const southExit = (this.location.edgeExits ?? []).find((exit) => exit.edge === 'south');
+    if (!southExit) {
+      return;
+    }
+    const tile = this.mapDims.tileSize;
+    const width = this.mapDims.width;
+    const height = this.mapDims.height;
+    // Band across the walkable span (one tile inset from each border corner),
+    // rising a couple of tiles up from the very bottom edge.
+    const x0 = tile;
+    const x1 = width - tile;
+    const bandHeight = tile * 2.5;
+    const top = height - bandHeight;
+
+    const glow = this.add.graphics().setDepth(-8);
+    // Warm wash, transparent at the top of the band and strongest at the edge.
+    glow.fillGradientStyle(0xffca74, 0xffca74, 0xffca74, 0xffca74, 0, 0, 0.34, 0.34);
+    glow.fillRect(x0, top, x1 - x0, bandHeight);
+    // A brighter threshold line low in the band — the door-marker stroke colour.
+    glow.fillStyle(0xffe1a1, 0.5);
+    glow.fillRect(x0, height - tile * 0.7, x1 - x0, tile * 0.28);
+    this.tweens.add({
+      targets: glow,
+      alpha: { from: 0.55, to: 1 },
+      duration: 1600,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
   }
 
   private createMoteTexture(): void {

@@ -19,6 +19,7 @@ import {
   GROUND_TILE_SIZE,
 } from '../content/outdoorScenery';
 import { DOORMAT_DROP_KEY } from '../game/roomRenderer';
+import { listPropOverrideCandidates } from '../content/roomDressing';
 import { isImageUrl } from '../game/assetProbe';
 import {
   FRIEND_TWO_SPRITE,
@@ -97,13 +98,32 @@ export class BootScene extends Phaser.Scene {
   // keys. Absent files are silently skipped; downstream renderers fall back to
   // their procedural textures when a key is missing.
   private async loadOptionalDropIns(): Promise<void> {
-    const [hasTileset, hasDoormat, hasGalaxyGround, hasShoreWater] = await Promise.all([
-      isImageUrl(GROUND_TILESET_URL),
-      isImageUrl(DOORMAT_DROP_URL),
-      isImageUrl(GALAXY_GROUND_URL),
-      isImageUrl(SHORE_WATER_URL),
-    ]);
-    if (!hasTileset && !hasDoormat && !hasGalaxyGround && !hasShoreWater) {
+    // Per-prop standalone art overrides: one optional PNG per (room, prop) at
+    // /assets/props/singles/<locationId>-<frame>.png. Probed alongside the other
+    // drop-ins so an absent slot never errors the loader; present ones load into
+    // their override texture key and the renderer draws that prop from the
+    // standalone image instead of its sheet crop (singles-only props render only
+    // when their slot is present).
+    const propOverrides = listPropOverrideCandidates();
+
+    const [hasTileset, hasDoormat, hasGalaxyGround, hasShoreWater, propOverridePresence] =
+      await Promise.all([
+        isImageUrl(GROUND_TILESET_URL),
+        isImageUrl(DOORMAT_DROP_URL),
+        isImageUrl(GALAXY_GROUND_URL),
+        isImageUrl(SHORE_WATER_URL),
+        Promise.all(propOverrides.map((candidate) => isImageUrl(candidate.url))),
+      ]);
+
+    const presentOverrides = propOverrides.filter((_, index) => propOverridePresence[index]);
+
+    if (
+      !hasTileset &&
+      !hasDoormat &&
+      !hasGalaxyGround &&
+      !hasShoreWater &&
+      presentOverrides.length === 0
+    ) {
       return;
     }
     await new Promise<void>((resolve) => {
@@ -123,6 +143,9 @@ export class BootScene extends Phaser.Scene {
       // Optional tileable shore-water band texture for the clearing's shore.
       if (hasShoreWater) {
         this.load.image(SHORE_WATER_KEY, SHORE_WATER_URL);
+      }
+      for (const candidate of presentOverrides) {
+        this.load.image(candidate.key, candidate.url);
       }
       this.load.once(Phaser.Loader.Events.COMPLETE, () => resolve());
       this.load.start();

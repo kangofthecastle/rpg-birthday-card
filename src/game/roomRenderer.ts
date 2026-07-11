@@ -4,6 +4,7 @@ import { projectToIso, type IsoOrigin, type IsoPoint } from './isometricProjecti
 import { fnv1a, mulberry32 } from './rng';
 import {
   getPropColliders,
+  propOverrideTextureKey,
   type PropColliderRect,
   type PropPlacement,
   type RoomDressing,
@@ -960,10 +961,16 @@ function renderProps(
   origin: IsoOrigin,
   propDepthOverrides: Readonly<Record<string, number>>,
 ): PropHandle[] {
-  return dressing.props.map((placement) => ({
-    placement,
-    image: renderProp(scene, dressing, placement, origin, propDepthOverrides[placement.frame]),
-  }));
+  const handles: PropHandle[] = [];
+  for (const placement of dressing.props) {
+    const image = renderProp(scene, dressing, placement, origin, propDepthOverrides[placement.frame]);
+    // A singles-only prop whose standalone art is absent renders nothing (and so
+    // never enters propHandles / the dressEdit list).
+    if (image) {
+      handles.push({ placement, image });
+    }
+  }
+  return handles;
 }
 
 function renderProp(
@@ -972,12 +979,27 @@ function renderProp(
   placement: PropPlacement,
   origin: IsoOrigin,
   depthOverride?: number,
-): Phaser.GameObjects.Image {
+): Phaser.GameObjects.Image | undefined {
+  const overrideKey = propOverrideTextureKey(dressing.locationId, placement.frame);
+  const hasOverride = scene.textures.exists(overrideKey);
+  const hasSheetCrop = dressing.frames[placement.frame] !== undefined;
+
+  // Singles-only prop with no drop-in file: nothing to draw.
+  if (!hasSheetCrop && !hasOverride) {
+    return undefined;
+  }
+
   // Origin/flip are placement-fixed; position, scale, texture and depth are
   // applied by positionPropImage so the dressEdit editor can re-run the exact
-  // same transform when a prop is dragged or resized.
+  // same transform when a prop is dragged or resized. Create against whichever
+  // source will be used so positionPropImage never has to swap textures.
   const image = scene.add
-    .image(0, 0, dressing.propsTextureKey, placement.frame)
+    .image(
+      0,
+      0,
+      hasOverride ? overrideKey : dressing.propsTextureKey,
+      hasOverride ? undefined : placement.frame,
+    )
     .setOrigin(placement.originX ?? 0.5, placement.originY ?? 1)
     .setFlipX(placement.flipX ?? false);
 
@@ -1002,21 +1024,34 @@ export function positionPropImage(
   depthOverride?: number,
 ): void {
   const point = projectToIso(placement.mapX, placement.mapY, origin);
-  const scale = resolvePropScale(dressing, placement);
-  let textureKey = dressing.propsTextureKey;
-  let frameName: string | undefined = placement.frame;
+
+  // A standalone override (or singles-only) prop draws from its own full-frame
+  // texture; otherwise the prop's crop on the room sheet. Sizing/anchor/depth
+  // math is identical either way — only the effective source width/height differ.
+  const overrideKey = propOverrideTextureKey(dressing.locationId, placement.frame);
+  const hasOverride = scene.textures.exists(overrideKey);
+  const sheetCrop = dressing.frames[placement.frame];
+  const overrideFrame = hasOverride ? scene.textures.getFrame(overrideKey) : undefined;
+  const srcW = overrideFrame?.width ?? sheetCrop?.w ?? 1;
+  const srcH = overrideFrame?.height ?? sheetCrop?.h ?? 1;
+
+  const scale = resolvePropScale(placement, srcH);
+  let textureKey = hasOverride ? overrideKey : dressing.propsTextureKey;
+  let frameName: string | undefined = hasOverride ? undefined : placement.frame;
   let screenY = point.y - (placement.screenYRaise ?? 0);
 
   if (placement.wallShear) {
     // Wall-hung props shear to follow the sloped wall band. The sheared
     // content's bottom-center sits |slope|*w/2 above the canvas bottom, so
     // compensate to keep the configured raise measured from the wall base.
-    const frame = dressing.frames[placement.frame];
-    textureKey = buildShearedPropTexture(scene, dressing, placement.frame, placement.wallShear);
+    const sourceKey = hasOverride ? overrideKey : dressing.propsTextureKey;
+    const sourceFrame = hasOverride ? undefined : placement.frame;
+    const shearedKey = buildShearedPropTexture(scene, placement.wallShear, sourceKey, sourceFrame);
 
-    if (textureKey !== dressing.propsTextureKey) {
+    if (shearedKey !== sourceKey) {
+      textureKey = shearedKey;
       frameName = undefined;
-      screenY += (scale * Math.abs(placement.wallShear) * frame.w) / 2;
+      screenY += (scale * Math.abs(placement.wallShear) * srcW) / 2;
     }
   }
 
@@ -1038,28 +1073,30 @@ export function positionPropImage(
  * height, so props read at a consistent size relative to ____ regardless of
  * their sheet crop. Flat/wall props fall back to an explicit `scale`.
  */
-function resolvePropScale(dressing: RoomDressing, placement: PropPlacement): number {
+function resolvePropScale(placement: PropPlacement, frameHeight: number): number {
   if (placement.heightRatio !== undefined) {
-    const frame = dressing.frames[placement.frame];
-    return (PLAYER_VISUAL_HEIGHT_PX * placement.heightRatio) / frame.h;
+    return (PLAYER_VISUAL_HEIGHT_PX * placement.heightRatio) / frameHeight;
   }
 
   return placement.scale ?? 1;
 }
 
+// Pre-shears a prop's art onto a canvas following a wall slope. Works from any
+// source texture + frame (the room sheet crop, or a standalone override's full
+// frame), keyed on both so the sheet and override variants never collide.
 function buildShearedPropTexture(
   scene: Phaser.Scene,
-  dressing: RoomDressing,
-  frameName: string,
   slope: number,
+  sourceKey: string,
+  sourceFrame: string | undefined,
 ): string {
-  const key = `${dressing.propsTextureKey}-${frameName}-sheared`;
+  const key = `${sourceKey}-${sourceFrame ?? 'full'}-sheared`;
 
   if (scene.textures.exists(key)) {
     return key;
   }
 
-  const frame = scene.textures.getFrame(dressing.propsTextureKey, frameName);
+  const frame = scene.textures.getFrame(sourceKey, sourceFrame);
   const source = frame.source.image as CanvasImageSource;
   const drop = Math.abs(slope) * frame.width;
   const canvasTexture = scene.textures.createCanvas(
@@ -1069,7 +1106,7 @@ function buildShearedPropTexture(
   );
 
   if (!canvasTexture) {
-    return dressing.propsTextureKey;
+    return sourceKey;
   }
 
   const ctx = canvasTexture.getContext();

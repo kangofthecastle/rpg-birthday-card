@@ -347,11 +347,25 @@ export const foldTheLettersActivity: ActivityModule = {
       }
       assembling = true;
       const assembledComponent = currentComponent(state);
-      stage.setAssembled(assembledComponentCount(state));
+      // Push the COMPLETED silhouette so the hand-down captures the finished piece
+      // (the hull's last fold settles to 'boat', not the stale 'peak'), then hand
+      // the full-size piece DOWN into its tray anchor across the hold window — it
+      // shrinks/moves into place, and the tray piece only appears when it lands
+      // (no doubling of the big view and the small tray piece).
       stage.setCrease(undefined);
+      if (assembledComponent?.id === 'hull') {
+        stage.setHullShape('boat');
+      }
       stage.setHoist(1, false);
       stage.setRoll(1);
       stage.setKindle(1);
+      if (assembledComponent) {
+        stage.playHandDown(
+          assembledComponent.id,
+          assembledComponentCount(state),
+          Math.max(1, timing.assembledHoldMs * 0.85),
+        );
+      }
       // Each component clicks together with its own voice.
       if (assembledComponent?.id === 'sail') {
         playSfx('sfx-sail-hoist');

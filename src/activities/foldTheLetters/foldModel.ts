@@ -189,6 +189,11 @@ export const SAIL_WOBBLE_WINDOWS: readonly (readonly [number, number])[] = [
   [0.66, 0.82],
 ];
 
+/** Snap tolerance for the hoist reaching the masthead: a drag that lands this
+ * close to the very top (a near-masthead release, ~0.9996 in practice) counts as
+ * fully home, so the sail clicks into place instead of stalling a pixel short. */
+export const HOIST_COMPLETE_THRESHOLD = 0.985;
+
 /** Total swept angle (radians) that rolls the sheet fully into the lantern. */
 export const ROLL_TARGET = Math.PI * 3;
 /** How many plucked notes sound across a full roll. */
@@ -375,7 +380,9 @@ export function setHoistProgress(state: RitualState, progress: number): RitualSt
     return state;
   }
   const next = clamp01(progress);
-  if (next >= 1) {
+  // Snap the last sliver home: a release at the masthead lands a hair under 1
+  // (e.g. 0.9996), so anything past the tolerance counts as fully hoisted.
+  if (next >= HOIST_COMPLETE_THRESHOLD) {
     return { ...state, hoistProgress: 1, phase: 'assembled' };
   }
   if (next === state.hoistProgress) {

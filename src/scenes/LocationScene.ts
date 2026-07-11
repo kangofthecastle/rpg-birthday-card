@@ -373,7 +373,12 @@ export class LocationScene extends Phaser.Scene {
   }
 
   create(): void {
-    clearUiRoot();
+    // Preserve the persistent sail-away bridge (data-ending-bridge) across this
+    // restart: on the auto-start into final-spot it must keep covering the swap
+    // until finalKeepsakeActivity mounts frame 0 and removes it. Every other
+    // clearUiRoot (including the terminal goHome) still does a full wipe, so the
+    // bridge can never survive past its one hand-off.
+    clearUiRoot(true);
     const params = new URLSearchParams(window.location.search);
     // The zone editor forces the collider/zone debug overlay on so the author
     // always sees current collision truth while editing.

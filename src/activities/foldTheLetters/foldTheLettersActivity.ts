@@ -497,6 +497,25 @@ export const foldTheLettersActivity: ActivityModule = {
         getUiRoot().append(bridge);
         void bridge.offsetWidth;
         bridge.classList.add('fold-sail--go');
+        // Fade the fold modal chrome AND its canvas (the assembled boat is drawn
+        // on that canvas, inside the panel) out in lockstep with the key art
+        // fading IN — same duration/easing — so the painting REPLACES the modal
+        // rather than blending through it, and there is never a second boat under
+        // the transparent-host bridge. Disable + hide the buttons first so a ghost
+        // Cancel/Fold can't be clicked as the panel recedes.
+        // Non-null: the mount guard above throws if either is missing (asserted
+        // here because sailAway is a hoisted declaration, so TS widens them back).
+        const foldPanel = panel!;
+        const foldCancel = cancelButton!;
+        foldCancel.disabled = true;
+        const testCompleteButton = mount.querySelector<HTMLButtonElement>('[data-fold-test-complete]');
+        if (testCompleteButton) {
+          testCompleteButton.disabled = true;
+        }
+        foldPanel.style.pointerEvents = 'none';
+        foldPanel.style.transition = `opacity ${timing.keyArtFadeMs}ms ease`;
+        void foldPanel.offsetWidth;
+        foldPanel.style.opacity = '0';
       }
       playSfx('sfx-water-lap');
       await wait(timing.sailAwayMs / 2);

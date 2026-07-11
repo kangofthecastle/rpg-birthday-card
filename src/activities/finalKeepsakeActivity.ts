@@ -47,6 +47,14 @@ interface EndingTiming {
   readonly galaxyHoldMs: number;
 }
 
+// Single-boat handoff tuning for the key-art → water dissolve (fractions of that
+// dissolve). Frame 0 (the painted key art, whose painted boat is the "boat")
+// fades OUT over the back portion so it has receded before the composited drift
+// boat appears; the drift boat holds hidden until near the end, then fades in
+// quickly — so the painted boat is essentially gone first (only a trace overlap).
+const FRAME0_FADE_START_FRAC = 0.5;
+const BOAT_REVEAL_START_FRAC = 0.75;
+
 const REAL_TIMING: EndingTiming = {
   keyArtToWaterMs: 3200,
   waterToGalaxyMs: 3200,
@@ -130,13 +138,17 @@ export const finalKeepsakeActivity: ActivityModule = {
     // them and lands exactly as the galaxy settles. Synced to the frame-sequence
     // length from one JS source (the CSS drift no longer hard-codes a duration).
     const driftMs = frameFades.slice(1).reduce((sum, ms) => sum + ms, 0);
-    // Fade the composited boat in during the SECOND HALF of the water-arrival
-    // dissolve: the key art's (large, foreground) painted boat is mostly covered
-    // by the empty ocean before the (small, distant) composited boat becomes
-    // visible, so the two never read as two boats at once — a clean recede. In
-    // the degraded frame-0 path there is no dissolve, so just plain-fade it in.
+    // Hold the composited boat hidden until the LAST quarter of the water-arrival
+    // dissolve, then fade it in over that quarter: by then the empty-ocean frame
+    // has all but covered the key art's (large, foreground) painted boat AND the
+    // key art itself is fading out (see below), so the painted boat is essentially
+    // gone before the (small, distant) composited boat appears — never two boats
+    // at once. In the degraded frame-0 path there is no dissolve, so plain-fade it.
     const boatDissolveMs = boatAppearIndex >= 1 ? frameFades[boatAppearIndex]! : timing.boatFadeMs;
-    const boatFadeInMs = boatAppearIndex >= 1 ? Math.round(boatDissolveMs * 0.5) : timing.boatFadeMs;
+    const boatFadeInMs =
+      boatAppearIndex >= 1
+        ? Math.round(boatDissolveMs * (1 - BOAT_REVEAL_START_FRAC))
+        : timing.boatFadeMs;
     const boatFadeInDelayMs = boatAppearIndex >= 1 ? boatDissolveMs - boatFadeInMs : 0;
 
     const appearBoat = (): void => {
@@ -156,8 +168,15 @@ export const finalKeepsakeActivity: ActivityModule = {
 
     // Frame 0 comes up at full opacity IMMEDIATELY — the sail-away key art holds
     // unbroken (the bridge on the UI root has been covering the scene swap). No
-    // re-fade, no opening hold. Set opacity before any forced reflow so the layer
-    // never paints transparent, then remove the bridge now that we cover it.
+    // re-fade, no opening hold. The bridge key art is STATIC (no Ken-Burns), so
+    // pin frame 0 to the same static scale (kill the ending-frame-drift it would
+    // otherwise inherit) — otherwise the swap pops from scale 1.0 to the drift's
+    // 1.015 start. Subsequent frames keep their drift. Set opacity before any
+    // forced reflow so the layer never paints transparent, then remove the bridge
+    // now that we cover it. (Degraded path: no bridge/key art, keep the drift.)
+    if (assets.keyArt) {
+      frame(0).style.animation = 'none';
+    }
     frame(0).style.opacity = '1';
     void frame(0).offsetWidth;
     document.querySelector('[data-ending-bridge]')?.remove();
@@ -169,6 +188,18 @@ export const finalKeepsakeActivity: ActivityModule = {
     // Cross-fade through each subsequent painted frame, ending on the galaxy.
     for (let index = 1; index < layers; index += 1) {
       frame(index).style.opacity = '1';
+      // As the water frame dissolves in over the painted key art (the boat-reveal
+      // dissolve), fade the key art (frame 0) OUT over the back portion of the
+      // SAME dissolve — it is never left pinned at 1 under the stack, and its
+      // painted boat has receded by the time the composited boat appears.
+      if (index === boatAppearIndex && assets.keyArt) {
+        const dissolveMs = frameFades[index]!;
+        const frame0FadeMs = Math.round(dissolveMs * (1 - FRAME0_FADE_START_FRAC));
+        const frame0FadeDelayMs = dissolveMs - frame0FadeMs;
+        frame(0).style.transition = `opacity ${frame0FadeMs}ms ease ${frame0FadeDelayMs}ms`;
+        void frame(0).offsetWidth;
+        frame(0).style.opacity = '0';
+      }
       if (index === boatAppearIndex) {
         appearBoat();
       }

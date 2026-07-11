@@ -224,6 +224,74 @@ function locationMusicKey(locationId: string): MusicKey {
   return MUSIC_BY_LOCATION_ID[locationId] ?? 'music-path';
 }
 
+// ── Galaxy-vibe layer ────────────────────────────────────────────────────────
+// A restrained cosmic-atmosphere layer laid OVER the painted final-spot backdrop
+// (ending-sky.png + ending-water.png), so the water reads as "standing IN a
+// galaxy" rather than "a sea at night" — WITHOUT burying the paintings the way
+// the earlier rejected pass did (74 twinkle stars, heavy vignette, alpha-0.14+
+// light pools). Everything here is deliberately low-alpha and slow. Every alpha
+// and count is scaled by the single master INTENSITY knob so the author can dial
+// the whole layer up or down from one number. Layout is keyed to the 1408×1024
+// final-spot map: the painted horizon sits ~y307–440, so the "water region"
+// (where all these effects live) is everything below ~y440. ____'s warm glow
+// sits at (704, 464); the star field keeps a keep-out radius around it so the
+// cool shimmer never fights the one warm point in the dark.
+const GALAXY_VIBE = {
+  // Master knob. 1.0 = shipped default. Scales alphas AND star/nebula counts.
+  INTENSITY: 1.0,
+
+  // ____'s warm glow centre (mirrors createGalaxyScenery's `pos`) — the star
+  // field avoids clustering here so cool motes never crowd the warm point.
+  warmGlow: { x: 704, y: 464, clearRadius: 190 },
+
+  // Depths: all above the painted backdrop (−20) and below ____'s glow (~462)
+  // and sprite (~468), so the layer reads as light ON the water, behind ____.
+  depth: { grade: -19, nebula: -18, stars: -17 },
+
+  // 1. Sparse star shimmer on the water: seeded twinkling motes, additive, LOW
+  //    alpha (peak ~0.5× the rejected pass), slow gentle twinkle, water only.
+  stars: {
+    count: 30,
+    minYFrac: 0.46, // fraction of map height — below the painted horizon
+    peakAlphaMin: 0.16,
+    peakAlphaMax: 0.24, // rejected pass peaked ~0.5; this is ~half
+    scaleMin: 0.35,
+    scaleMax: 0.85,
+    tint: 0xbcd4ff, // cool starlight (awaken-mote is warm; tint cools it)
+    twinkleMinMs: 2600,
+    twinkleMaxMs: 4200,
+    holdMinMs: 500,
+    holdMaxMs: 1400,
+  },
+
+  // 2. Nebula drift: a few large, very soft violet/indigo additive pools crawling
+  //    extremely slowly across the water — atmosphere, not spotlights.
+  nebula: {
+    count: 3,
+    alphaMin: 0.06,
+    alphaMax: 0.09,
+    colors: [0x8b5cf6, 0x4c3f9e, 0x6d5ce0],
+    radiusMin: 240,
+    radiusMax: 420,
+    driftPx: 90, // total crawl distance across a full (very long) cycle
+    driftMinMs: 26000,
+    driftMaxMs: 42000,
+  },
+
+  // 3. Cool grade with depth: a subtle indigo tint over the water that deepens
+  //    toward the bottom/far edges so the expanse reads "cosmic void reflection."
+  //    A COLOUR shift, not the old brightness-crushing vignette — only the
+  //    extreme bottom edge takes a small genuine darkening.
+  grade: {
+    tint: 0x2a2160, // indigo
+    bottomAlpha: 0.16, // strength at the very bottom of the map
+    edgeAlpha: 0.08, // extra indigo drawn inward from the far left/right edges
+    bottomEdgeDarken: 0x0a0716, // near-black indigo for the extreme bottom band
+    bottomEdgeAlpha: 0.14, // small acceptable darkening at the very bottom
+    bottomEdgeFrac: 0.14, // height fraction of the extreme-bottom darken band
+  },
+} as const;
+
 export class LocationScene extends Phaser.Scene {
   private location!: LocationDefinition;
   private state: RunState = createInitialRunState('recipient-house');
@@ -1280,10 +1348,181 @@ export class LocationScene extends Phaser.Scene {
         .setOrigin(0, 0)
         .setDepth(-20)
         .setDisplaySize(width, height);
-      return;
+    } else {
+      this.composeGalaxyGround(width, height);
     }
 
-    this.composeGalaxyGround(width, height);
+    // Restrained cosmic atmosphere over the painted backdrop (see GALAXY_VIBE).
+    this.createGalaxyVibe(width, height);
+  }
+
+  // Lays the restrained galaxy-vibe layer (grade → nebula → stars) OVER the
+  // painted final-spot backdrop. Additive, low-alpha, slow: the paintings stay
+  // clearly the base. Everything scales off GALAXY_VIBE.INTENSITY. No-op if the
+  // knob is dialled to (or below) zero — the "before" state the author compares.
+  private createGalaxyVibe(width: number, height: number): void {
+    const intensity = GALAXY_VIBE.INTENSITY;
+    if (intensity <= 0) {
+      return;
+    }
+    this.createGalaxyCoolGrade(width, height, intensity);
+    this.createGalaxyNebula(width, height, intensity);
+    this.createGalaxyStarShimmer(width, height, intensity);
+  }
+
+  // 3. Cool grade with depth. A single graphics: an indigo vertical wash over the
+  // water region that is fully transparent at the painted horizon and reaches
+  // GALAXY_VIBE.grade.bottomAlpha at the map's bottom (a colour shift, not a
+  // darkener), plus faint indigo deepening drawn inward from the far left/right
+  // edges, plus a small genuine darkening confined to the extreme bottom band.
+  private createGalaxyCoolGrade(width: number, height: number, intensity: number): void {
+    const g = GALAXY_VIBE.grade;
+    const waterTop = height * GALAXY_VIBE.stars.minYFrac;
+    const waterH = height - waterTop;
+    const gfx = this.add.graphics().setDepth(GALAXY_VIBE.depth.grade);
+
+    // Vertical indigo wash: 0 at the horizon, bottomAlpha at the bottom.
+    const bottomA = Math.min(1, g.bottomAlpha * intensity);
+    gfx.fillGradientStyle(g.tint, g.tint, g.tint, g.tint, 0, 0, bottomA, bottomA);
+    gfx.fillRect(0, waterTop, width, waterH);
+
+    // Far-edge deepening: indigo fading inward from each side over the water, so
+    // the expanse falls off into void at its far reaches (not a full vignette).
+    const edgeA = Math.min(1, g.edgeAlpha * intensity);
+    const edgeW = width * 0.22;
+    gfx.fillGradientStyle(g.tint, g.tint, g.tint, g.tint, edgeA, 0, edgeA, 0);
+    gfx.fillRect(0, waterTop, edgeW, waterH);
+    gfx.fillGradientStyle(g.tint, g.tint, g.tint, g.tint, 0, edgeA, 0, edgeA);
+    gfx.fillRect(width - edgeW, waterTop, edgeW, waterH);
+
+    // Extreme-bottom darken: the only genuine brightness drop, confined low.
+    const bandH = height * g.bottomEdgeFrac;
+    const darkA = Math.min(1, g.bottomEdgeAlpha * intensity);
+    gfx.fillGradientStyle(
+      g.bottomEdgeDarken,
+      g.bottomEdgeDarken,
+      g.bottomEdgeDarken,
+      g.bottomEdgeDarken,
+      0,
+      0,
+      darkA,
+      darkA,
+    );
+    gfx.fillRect(0, height - bandH, width, bandH);
+  }
+
+  // 2. Nebula drift. A few large, very soft violet/indigo additive pools crawling
+  // extremely slowly across the water. Seeded so the field is stable per reload;
+  // biased into the water region and nudged clear of ____'s warm centre.
+  private createGalaxyNebula(width: number, height: number, intensity: number): void {
+    const n = GALAXY_VIBE.nebula;
+    this.createNebulaTexture();
+    const rng = mulberry32(fnv1a('final-spot:galaxy-nebula'));
+    const count = Math.max(1, Math.round(n.count * intensity));
+    const waterTop = height * GALAXY_VIBE.stars.minYFrac;
+    for (let i = 0; i < count; i += 1) {
+      const color = n.colors[Math.floor(rng() * n.colors.length)] ?? n.colors[0];
+      const radius = n.radiusMin + rng() * (n.radiusMax - n.radiusMin);
+      // Spread across the width; keep the centre a touch clearer of ____.
+      let x = rng() * width;
+      if (Math.abs(x - GALAXY_VIBE.warmGlow.x) < radius * 0.4) {
+        x = x < GALAXY_VIBE.warmGlow.x ? x - radius * 0.4 : x + radius * 0.4;
+      }
+      const y = waterTop + rng() * (height - waterTop);
+      const alpha = Math.min(1, (n.alphaMin + rng() * (n.alphaMax - n.alphaMin)) * intensity);
+      const pool = this.add
+        .image(x, y, 'galaxy-nebula')
+        .setDepth(GALAXY_VIBE.depth.nebula)
+        .setDisplaySize(radius * 2, radius * 2)
+        .setTint(color)
+        .setAlpha(alpha)
+        .setBlendMode(Phaser.BlendModes.ADD);
+      const drift = n.driftPx;
+      const dur = n.driftMinMs + rng() * (n.driftMaxMs - n.driftMinMs);
+      this.tweens.add({
+        targets: pool,
+        x: x + (rng() - 0.5) * drift * 2,
+        y: y + (rng() - 0.5) * drift,
+        duration: dur,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+      });
+      // A very slow alpha breathe so the pools feel alive, never static.
+      this.tweens.add({
+        targets: pool,
+        alpha: { from: alpha * 0.7, to: alpha },
+        duration: dur * 0.6,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+      });
+    }
+  }
+
+  // 1. Sparse star shimmer on the water. Seeded twinkling motes, additive, LOW
+  // alpha, slow gentle twinkle — water region only, avoiding ____'s warm glow.
+  private createGalaxyStarShimmer(width: number, height: number, intensity: number): void {
+    const s = GALAXY_VIBE.stars;
+    this.createMoteTexture();
+    const rng = mulberry32(fnv1a('final-spot:galaxy-stars'));
+    const count = Math.max(1, Math.round(s.count * intensity));
+    const minY = height * s.minYFrac;
+    const glow = GALAXY_VIBE.warmGlow;
+    let placed = 0;
+    let guard = 0;
+    while (placed < count && guard < count * 12) {
+      guard += 1;
+      const x = rng() * width;
+      const y = minY + rng() * (height - minY);
+      // Keep the cool field clear of ____'s warm point.
+      if (Math.hypot(x - glow.x, y - glow.y) < glow.clearRadius) {
+        continue;
+      }
+      placed += 1;
+      const peak = Math.min(
+        1,
+        (s.peakAlphaMin + rng() * (s.peakAlphaMax - s.peakAlphaMin)) * intensity,
+      );
+      const mote = this.add
+        .image(x, y, 'awaken-mote')
+        .setDepth(GALAXY_VIBE.depth.stars)
+        .setScale(s.scaleMin + rng() * (s.scaleMax - s.scaleMin))
+        .setTint(s.tint)
+        .setAlpha(0)
+        .setBlendMode(Phaser.BlendModes.ADD);
+      this.tweens.add({
+        targets: mote,
+        alpha: { from: peak * 0.25, to: peak },
+        duration: s.twinkleMinMs + rng() * (s.twinkleMaxMs - s.twinkleMinMs),
+        yoyo: true,
+        hold: s.holdMinMs + rng() * (s.holdMaxMs - s.holdMinMs),
+        repeat: -1,
+        repeatDelay: rng() * 1800,
+        delay: rng() * 2600,
+        ease: 'Sine.easeInOut',
+      });
+    }
+  }
+
+  // A soft round radial-gradient blob (transparent edges) for the nebula pools —
+  // awaken-mote is too small/hard-cored to scale up into a diffuse cloud.
+  private createNebulaTexture(): void {
+    if (this.textures.exists('galaxy-nebula')) {
+      return;
+    }
+    const size = 256;
+    const canvas = this.textures.createCanvas('galaxy-nebula', size, size);
+    const ctx = canvas?.getContext();
+    if (canvas && ctx) {
+      const grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+      grad.addColorStop(0, 'rgba(255,255,255,0.9)');
+      grad.addColorStop(0.5, 'rgba(255,255,255,0.35)');
+      grad.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, size, size);
+      canvas.refresh();
+    }
   }
 
   // Bakes the painted galaxy backdrop into a single canvas texture and lays it at

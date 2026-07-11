@@ -39,6 +39,60 @@ boxes measured on the sheet and listed as `frames` in `roomDressing.ts`.
 | `/assets/tiles/friendtwo-room-tiles.png` | **128×64** — left floor tile, right wall + baseboard | ____'s room (`friend-b`) floor/wall (navy) |
 | `/assets/props/friendtwo-room-props.png` | **1024×1024**, alpha | ____'s room props (dual-monitor battlestation, 2 gaming chairs, bed, game-box shelf, poster cluster, mini fridge, beanbag, second desk, snack table, rug, blinds window, cactus) |
 
+## Per-prop standalone art overrides (`props/singles/`)
+
+Individual room props can be regenerated as **standalone images** without
+re-cutting the 1024×1024 prop sheet. Drop a PNG at:
+
+```
+/assets/props/singles/<locationId>-<propId>.png
+```
+
+where `<propId>` is the prop's `frame` id in `src/content/roomDressing.ts`
+(`bed`, `desk`, `kitchen`, …). When the file is present, that prop renders from
+the standalone image's **full frame** instead of its sheet crop, sized by the
+**same** height-ratio-against-the-player math and anchored/depth-sorted exactly
+as before — so a differently shaped replacement (e.g. a wide isometric bed) is
+sized by its height and still lands at its `mapX/mapY` floor anchor. New art does
+**not** need to match the old crop's aspect ratio. Probed in `BootScene.ts`; an
+absent slot silently keeps the sheet crop. Works live in the `?dressEdit=1`
+editor (select/drag/resize/Save).
+
+**First expected drop-ins — the three beds:**
+
+| Drop a PNG at | Replaces |
+| --- | --- |
+| `/assets/props/singles/recipient-house-bed.png` | ____'s bed |
+| `/assets/props/singles/friend-a-bed.png` | ____'s bed (`friend-a`) |
+| `/assets/props/singles/friend-b-bed.png` | ____'s bed (`friend-b`) |
+
+### Singles-only NEW props (art has no sheet crop at all)
+
+Some props are pre-registered in `roomDressing.ts` with **no** sheet crop — their
+`frame` id has no entry in the room's `frames` map, so their art lives *only* in
+`props/singles/`. Until the file exists they simply don't render (and don't
+appear in dressEdit); no fallback, no error. Drop the matching PNG in and the
+prop appears at its default placement, ready to arrange + Save. Currently
+registered slots awaiting art:
+
+| Drop a PNG at | New prop |
+| --- | --- |
+| `/assets/props/singles/recipient-house-bedside-table.png` | ____ — bedside table |
+| `/assets/props/singles/recipient-house-armchair.png` | ____ — reading armchair |
+| `/assets/props/singles/friend-a-plant-1.png` | ____ — leafy floor plant |
+| `/assets/props/singles/friend-a-plant-2.png` | ____ — second floor plant |
+| `/assets/props/singles/friend-a-fishbowl-table.png` | ____ — table under the koi bowl |
+| `/assets/props/singles/friend-b-plant-1.png` | ____ — large cactus |
+| `/assets/props/singles/friend-b-plant-2.png` | ____ — snake plant |
+| `/assets/props/singles/friend-b-bookshelf.png` | ____ — bookshelf (upper-right wall) |
+| `/assets/props/singles/friend-b-floor-lamp.png` | ____ — floor lamp |
+| `/assets/props/singles/friend-b-game-stack.png` | ____ — floor stack of game boxes |
+
+Newly registered singles-only props show up immediately (even though each room
+already has a saved `roomLayouts/<id>.json` layout): they are merged into the
+loaded layout until the author arranges and **Saves**, which writes them into the
+JSON so their placement persists.
+
 ## ⚠️ The doormat must be drawn FLAT / straight-on
 
 `/assets/doormat.png` is special: the engine does **not** paste it onto the

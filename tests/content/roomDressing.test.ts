@@ -4,7 +4,11 @@ import { describe, expect, it } from 'vitest';
 import {
   getPropColliders,
   getRoomDressing,
+  isSinglesOnlyProp,
   isValidRoomLayoutFile,
+  listPropOverrideCandidates,
+  propOverrideTextureKey,
+  propOverrideUrl,
 } from '../../src/content/roomDressing';
 
 const SHEET_SIZE = 1024;
@@ -42,7 +46,12 @@ describe('getRoomDressing', () => {
 
       for (const placement of dressing!.props) {
         const frame = dressing!.frames[placement.frame];
-        expect(frame, `${locationId} frame "${placement.frame}"`).toBeDefined();
+        // Singles-only props (standalone art, no sheet crop) legitimately have
+        // no frame entry — skip the crop-bounds checks for them.
+        if (!frame) {
+          expect(isSinglesOnlyProp(dressing!, placement), placement.frame).toBe(true);
+          continue;
+        }
         expect(frame.x, placement.frame).toBeGreaterThanOrEqual(0);
         expect(frame.y, placement.frame).toBeGreaterThanOrEqual(0);
         expect(frame.w, placement.frame).toBeGreaterThan(0);
@@ -53,12 +62,14 @@ describe('getRoomDressing', () => {
     }
   });
 
-  it('provides an recipient-house dressing whose props reference defined frames', () => {
+  it('provides an recipient-house dressing whose sheet props reference defined frames', () => {
     const dressing = getRoomDressing('recipient-house');
     expect(dressing).toBeDefined();
 
     for (const placement of dressing!.props) {
-      expect(dressing!.frames[placement.frame], `frame "${placement.frame}"`).toBeDefined();
+      // Every prop either has a real sheet crop or is singles-only.
+      const hasFrame = dressing!.frames[placement.frame] !== undefined;
+      expect(hasFrame || isSinglesOnlyProp(dressing!, placement), placement.frame).toBe(true);
     }
   });
 
@@ -170,9 +181,36 @@ describe('room layout overrides', () => {
       expect(layout.locationId, locationId).toBe(locationId);
       const dressing = getRoomDressing(locationId);
       expect(dressing, locationId).toBeDefined();
-      // The loaded props must be exactly the JSON's props (deep equality proves
-      // the override path is what normal play renders).
-      expect(dressing!.props, locationId).toEqual(layout.props);
+      // The saved JSON props render verbatim as the leading run of the layout
+      // (deep equality proves the override path is what normal play renders)...
+      expect(dressing!.props.slice(0, layout.props.length), locationId).toEqual(layout.props);
+      // ...and any trailing props are singles-only slots merged in from TS (new
+      // standalone-art props the author has not yet arranged + Saved).
+      for (const extra of dressing!.props.slice(layout.props.length)) {
+        expect(isSinglesOnlyProp(dressing!, extra), `${locationId} ${extra.frame}`).toBe(true);
+      }
+    }
+  });
+
+  it('merges TS-declared singles-only props not yet in the saved JSON layout', () => {
+    // These new standalone-art props are registered in TS but absent from the
+    // saved JSON; the merge appends them so they appear without a Save first.
+    const expected: Record<string, readonly string[]> = {
+      'recipient-house': ['bedside-table', 'armchair'],
+      'friend-a': ['plant-1', 'plant-2', 'fishbowl-table'],
+      'friend-b': ['plant-1', 'plant-2', 'bookshelf', 'floor-lamp', 'game-stack'],
+    };
+    for (const [locationId, frames] of Object.entries(expected)) {
+      const dressing = getRoomDressing(locationId)!;
+      for (const frame of frames) {
+        const prop = dressing.props.find((p) => p.frame === frame);
+        expect(prop, `${locationId} ${frame}`).toBeDefined();
+        expect(isSinglesOnlyProp(dressing, prop!), `${locationId} ${frame}`).toBe(true);
+        expect(prop!.heightRatio, `${locationId} ${frame}`).toBeGreaterThan(0);
+        // No footprint: placeholder decor, so an absent art file leaves no
+        // invisible collider (and dressEdit cannot author footprints anyway).
+        expect(prop!.footprint, `${locationId} ${frame}`).toBeUndefined();
+      }
     }
   });
 
@@ -187,6 +225,40 @@ describe('room layout overrides', () => {
     expect(
       isValidRoomLayoutFile({ locationId: 'x', props: [{ frame: 'a', mapX: 'no', mapY: 2 }] }),
     ).toBe(false);
+  });
+});
+
+describe('per-prop standalone override slots', () => {
+  it('builds the slot key/url convention as <locationId>-<frame>', () => {
+    expect(propOverrideUrl('recipient-house', 'bed')).toBe('/assets/props/singles/recipient-house-bed.png');
+    expect(propOverrideUrl('friend-a', 'bed')).toBe('/assets/props/singles/friend-a-bed.png');
+    expect(propOverrideUrl('friend-b', 'bed')).toBe('/assets/props/singles/friend-b-bed.png');
+    expect(propOverrideTextureKey('recipient-house', 'bed')).toBe('prop-override:recipient-house:bed');
+  });
+
+  it('lists a de-duplicated override candidate for every room prop, including the beds', () => {
+    const candidates = listPropOverrideCandidates();
+
+    // Unique per (location, frame).
+    const ids = candidates.map((c) => `${c.locationId}:${c.frame}`);
+    expect(new Set(ids).size).toBe(ids.length);
+
+    // Each candidate's key/url follows the convention.
+    for (const c of candidates) {
+      expect(c.key).toBe(propOverrideTextureKey(c.locationId, c.frame));
+      expect(c.url).toBe(propOverrideUrl(c.locationId, c.frame));
+    }
+
+    // The three beds each get a slot (the first expected real drop-ins).
+    for (const locationId of ['recipient-house', 'friend-a', 'friend-b']) {
+      expect(
+        candidates.some((c) => c.locationId === locationId && c.frame === 'bed'),
+        `${locationId} bed slot`,
+      ).toBe(true);
+    }
+
+    // Singles-only props expose a slot too (their only art source).
+    expect(candidates.some((c) => c.locationId === 'friend-b' && c.frame === 'bookshelf')).toBe(true);
   });
 });
 

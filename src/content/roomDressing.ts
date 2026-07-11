@@ -90,6 +90,9 @@ export interface PropPlacement {
 }
 
 export interface RoomDressing {
+  /** Location id this dressing belongs to (e.g. 'recipient-house'). Used to resolve
+   *  per-prop standalone art overrides (see propOverrideTextureKey). */
+  readonly locationId: string;
   /** Spritesheet key holding the two 64x64 tiles (frame 0 floor, 1 wall). */
   readonly tilesTextureKey: string;
   readonly floorFrame: number;
@@ -135,6 +138,7 @@ const RECIPIENT_PROP_FRAMES = {
 } as const satisfies Record<string, PropFrame>;
 
 const RECIPIENT_HOUSE_DRESSING: RoomDressing = {
+  locationId: 'recipient-house',
   tilesTextureKey: 'recipient-room-tiles',
   floorFrame: 0,
   wallFrame: 1,
@@ -282,6 +286,26 @@ const RECIPIENT_HOUSE_DRESSING: RoomDressing = {
       colliderOffsetX: -34,
       note: 'desk + PC + chair -> recipient-pc',
     },
+
+    // --- Singles-only props (art lives ONLY at
+    // public/assets/props/singles/recipient-house-<frame>.png; no sheet crop). They
+    // stay hidden until that file is dropped in; see the singles-only note near
+    // the bottom of this file. Default placements below are rough — the author
+    // arranges them in the ?dressEdit=1 editor and Saves. ---
+    {
+      frame: 'bedside-table',
+      mapX: 250,
+      mapY: 620,
+      heightRatio: 0.7,
+      note: 'bedside table (singles-only; beside the bed)',
+    },
+    {
+      frame: 'armchair',
+      mapX: 900,
+      mapY: 720,
+      heightRatio: 1.1,
+      note: 'reading armchair (singles-only)',
+    },
   ],
 };
 
@@ -310,6 +334,7 @@ const FRIEND_ONE_PROP_FRAMES = {
 } as const satisfies Record<string, PropFrame>;
 
 const FRIEND_ONE_HOUSE_DRESSING: RoomDressing = {
+  locationId: 'friend-a',
   tilesTextureKey: 'friendone-room-tiles',
   floorFrame: 0,
   wallFrame: 1,
@@ -461,6 +486,31 @@ const FRIEND_ONE_HOUSE_DRESSING: RoomDressing = {
       colliderOffsetY: -8,
       note: 'desk + PC + chair -> friendone-pc (fishing game)',
     },
+
+    // --- Singles-only props (art lives ONLY at
+    // public/assets/props/singles/friend-a-<frame>.png; no sheet crop). Hidden
+    // until the file exists; rough defaults, author arranges via dressEdit. ---
+    {
+      frame: 'plant-1',
+      mapX: 1240,
+      mapY: 560,
+      heightRatio: 1.1,
+      note: 'leafy floor plant (singles-only)',
+    },
+    {
+      frame: 'plant-2',
+      mapX: 400,
+      mapY: 240,
+      heightRatio: 1.0,
+      note: 'second floor plant (singles-only)',
+    },
+    {
+      frame: 'fishbowl-table',
+      mapX: 1120,
+      mapY: 485,
+      heightRatio: 0.55,
+      note: 'small side table under the koi fishbowl (singles-only; bowl sits on it after rearrange)',
+    },
   ],
 };
 
@@ -488,6 +538,7 @@ const FRIEND_TWO_PROP_FRAMES = {
 } as const satisfies Record<string, PropFrame>;
 
 const FRIEND_TWO_HOUSE_DRESSING: RoomDressing = {
+  locationId: 'friend-b',
   tilesTextureKey: 'friendtwo-room-tiles',
   floorFrame: 0,
   wallFrame: 1,
@@ -649,6 +700,45 @@ const FRIEND_TWO_HOUSE_DRESSING: RoomDressing = {
       footprint: { w: 60, d: 40 },
       note: 'third gaming chair, pulled close facing the second (easter egg)',
     },
+
+    // --- Singles-only props (art lives ONLY at
+    // public/assets/props/singles/friend-b-<frame>.png; no sheet crop). Hidden
+    // until the file exists; rough defaults, author arranges via dressEdit. ---
+    {
+      frame: 'plant-1',
+      mapX: 150,
+      mapY: 460,
+      heightRatio: 1.3,
+      note: 'large cactus (singles-only)',
+    },
+    {
+      frame: 'plant-2',
+      mapX: 1240,
+      mapY: 470,
+      heightRatio: 1.2,
+      note: 'snake plant (singles-only)',
+    },
+    {
+      frame: 'bookshelf',
+      mapX: 1080,
+      mapY: 200,
+      heightRatio: 1.7,
+      note: 'bookshelf along the upper-right (north-east) wall (singles-only)',
+    },
+    {
+      frame: 'floor-lamp',
+      mapX: 1150,
+      mapY: 340,
+      heightRatio: 1.5,
+      note: 'floor lamp (singles-only)',
+    },
+    {
+      frame: 'game-stack',
+      mapX: 1150,
+      mapY: 760,
+      heightRatio: 0.7,
+      note: 'stack of game boxes on the floor (singles-only)',
+    },
   ],
 };
 
@@ -679,10 +769,35 @@ const LAYOUTS_BY_LOCATION: Readonly<Record<string, RoomLayoutFile>> = Object.fro
     .map((file) => [file.locationId, file]),
 );
 
-/** Apply an authored layout override for a room, if one exists on disk. */
+/**
+ * A prop is "singles-only" when its `frame` id has no crop in the sheet's
+ * `frames` map: its art exists solely as a standalone drop-in at
+ * public/assets/props/singles/<locationId>-<frame>.png. Such props render only
+ * when that file is present (BootScene probes/loads it into the override texture
+ * key); absent, they simply don't render and never appear in the dressEdit list.
+ */
+export function isSinglesOnlyProp(dressing: RoomDressing, placement: PropPlacement): boolean {
+  return dressing.frames[placement.frame] === undefined;
+}
+
+/**
+ * Apply an authored layout override for a room, if one exists on disk. The
+ * saved JSON replaces the TS `props` fallback — but any singles-only prop
+ * declared in TS that the JSON does not yet carry is merged in (appended), so a
+ * newly registered standalone-art slot appears without the author having to
+ * Save first. Once the author arranges and Saves, the prop is written into the
+ * JSON and this merge no longer re-adds it (matched by `frame` id).
+ */
 function withLayoutOverride(locationId: string, dressing: RoomDressing): RoomDressing {
   const layout = LAYOUTS_BY_LOCATION[locationId];
-  return layout ? { ...dressing, props: layout.props } : dressing;
+  if (!layout) {
+    return dressing;
+  }
+  const savedFrames = new Set(layout.props.map((prop) => prop.frame));
+  const newSinglesOnly = dressing.props.filter(
+    (prop) => isSinglesOnlyProp(dressing, prop) && !savedFrames.has(prop.frame),
+  );
+  return { ...dressing, props: [...layout.props, ...newSinglesOnly] };
 }
 
 const ROOM_DRESSINGS: Readonly<Record<string, RoomDressing>> = {
@@ -693,6 +808,59 @@ const ROOM_DRESSINGS: Readonly<Record<string, RoomDressing>> = {
 
 export function getRoomDressing(locationId: string): RoomDressing | undefined {
   return ROOM_DRESSINGS[locationId];
+}
+
+// --- Per-prop standalone art overrides -------------------------------------
+// A prop normally renders from a crop of its room's 1024×1024 prop sheet. When a
+// standalone PNG exists at public/assets/props/singles/<locationId>-<frame>.png,
+// the renderer draws that prop from the standalone texture's FULL frame instead,
+// sized by the same heightRatio-vs-player-yardstick math (so a differently
+// shaped replacement — e.g. a wide isometric bed — still sizes by height and
+// anchors at its mapX/mapY). Singles-only props (no sheet crop at all) use the
+// exact same slot as their only source. BootScene probes each slot up front so a
+// missing file never errors the loader.
+
+/** Texture key an override PNG is loaded into for `<locationId>-<frame>`. */
+export function propOverrideTextureKey(locationId: string, frame: string): string {
+  return `prop-override:${locationId}:${frame}`;
+}
+
+/** Public URL of a prop's standalone override slot. */
+export function propOverrideUrl(locationId: string, frame: string): string {
+  return `/assets/props/singles/${locationId}-${frame}.png`;
+}
+
+export interface PropOverrideCandidate {
+  readonly locationId: string;
+  readonly frame: string;
+  readonly key: string;
+  readonly url: string;
+}
+
+/**
+ * Every (location, prop) standalone-override slot across the dressed rooms,
+ * de-duplicated by (locationId, frame). BootScene probes these and loads the
+ * ones whose file is present into their override texture key.
+ */
+export function listPropOverrideCandidates(): PropOverrideCandidate[] {
+  const seen = new Set<string>();
+  const candidates: PropOverrideCandidate[] = [];
+  for (const [locationId, dressing] of Object.entries(ROOM_DRESSINGS)) {
+    for (const placement of dressing.props) {
+      const id = `${locationId}:${placement.frame}`;
+      if (seen.has(id)) {
+        continue;
+      }
+      seen.add(id);
+      candidates.push({
+        locationId,
+        frame: placement.frame,
+        key: propOverrideTextureKey(locationId, placement.frame),
+        url: propOverrideUrl(locationId, placement.frame),
+      });
+    }
+  }
+  return candidates;
 }
 
 /**

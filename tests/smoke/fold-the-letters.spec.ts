@@ -84,6 +84,32 @@ test('makes the boat with real gestures and arrives at the lantern clearing WITH
   const attr = async (n: string): Promise<string | null> =>
     (await panel.count()) === 0 ? null : panel.getAttribute(n).catch(() => null);
 
+  // FIRST: prove the fold is DIRECT — the paper tracks the pointer mid-drag, and
+  // an early release falls the flap back open with no penalty. Drag the top edge
+  // partway down (not past the commit threshold), watch the live fold-progress
+  // rise under the finger, then let go early.
+  expect(await attr('data-fold-verb')).toBe('fold');
+  {
+    // Stay short of the commit threshold: the top edge only comes partway down.
+    const a = await toClient(CX, 70);
+    const b = await toClient(CX, 150);
+    await page.mouse.move(a.x, a.y);
+    await page.mouse.down();
+    let sawProgress = 0;
+    for (let s = 1; s <= 10; s += 1) {
+      await page.mouse.move(a.x + (b.x - a.x) * (s / 10), a.y + (b.y - a.y) * (s / 10));
+      await page.waitForTimeout(10);
+      sawProgress = Math.max(sawProgress, Number((await attr('data-fold-fold-progress')) ?? '0'));
+    }
+    // The paper visibly folded partway under the pointer …
+    expect(sawProgress).toBeGreaterThan(0.1);
+    await page.mouse.up();
+    await page.waitForTimeout(300);
+    // … and, released early, it fell back open — the hull did not advance.
+    expect(Number((await attr('data-fold-progress')) ?? '1')).toBeLessThan(0.15);
+    expect(await attr('data-fold-verb')).toBe('fold');
+  }
+
   // Drive each verb with the gesture it actually expects, reading the current
   // verb (and the pending hull crease's required drag axis) off the panel.
   let sawHoist = false;
@@ -95,18 +121,23 @@ test('makes the boat with real gestures and arrives at the lantern clearing WITH
     if ((await page.locator('[data-fold-sail]').count()) > 0) break;
     const verb = await attr('data-fold-verb');
     if (verb === 'fold') {
+      // A continuous drag that carries the flap past the commit threshold; the
+      // exact stroke depends on the pending fold (read off the panel).
       const axis = await attr('data-fold-crease-axis');
-      if (axis === 'vertical') await dragLine({ x: CX, y: CY - 55 }, { x: CX, y: CY + 55 });
-      else if (axis === 'horizontal') await dragLine({ x: CX - 70, y: CY }, { x: CX + 70, y: CY });
-      else await dragLine({ x: CX - 55, y: CY - 55 }, { x: CX + 55, y: CY + 55 });
-      await page.waitForTimeout(520); // let the flip animation settle
+      const kind = await attr('data-fold-crease-kind');
+      if (kind === 'open') await dragLine({ x: CX - 78, y: CY }, { x: CX + 78, y: CY }, 18);
+      else if (axis === 'vertical') await dragLine({ x: CX, y: CY - 75 }, { x: CX, y: CY + 75 }, 18);
+      else if (axis === 'horizontal') await dragLine({ x: CX - 84, y: CY }, { x: CX + 84, y: CY }, 18);
+      else await dragLine({ x: CX - 62, y: CY - 62 }, { x: CX + 62, y: CY + 62 }, 18);
+      await page.waitForTimeout(520); // let the fold settle home
     } else if (verb === 'hoist') {
       sawHoist = true;
-      await dragLine({ x: CX, y: CY + 95 }, { x: CX, y: CY - 95 }, 18);
+      // Pull the sail up the mast, pinned to the pointer (kept in the visible band).
+      await dragLine({ x: CX, y: 215 }, { x: CX, y: 45 }, 20);
       await page.waitForTimeout(70);
     } else if (verb === 'roll') {
       sawRoll = true;
-      await circleDrag(70);
+      await circleDrag(55);
       await page.waitForTimeout(50);
     } else if (verb === 'kindle') {
       sawKindle = true;

@@ -3,15 +3,14 @@ import { addKeyboardActivation } from '../activityDom';
 import { playSfx, playViolinNote } from '../../game/audio';
 import {
   advanceComponent,
-  applyFoldDrag,
-  applyHoist,
   applyKindle,
   applyRoll,
   assembledComponentCount,
+  commitFold,
   componentProgress,
   createRitualState,
   currentComponent,
-  currentHullCrease,
+  currentFoldCrease,
   currentHullShape,
   currentVerb,
   FOLD_COMPONENTS,
@@ -21,11 +20,13 @@ import {
   isComplete,
   kindleProgress,
   LANTERN_STAVES,
+  releaseFold,
   rollNoteIndex,
   rollProgress,
   SAIL_FACE_LINES,
-  SAIL_FOLD_CREASE,
-  type HullCrease,
+  setFoldProgress,
+  setHoistProgress,
+  willCommitFold,
   type RitualState,
 } from './foldModel';
 import { FoldStage } from './foldStage';
@@ -71,7 +72,7 @@ const TEST_TIMING: FoldTiming = {
 const ROLL_NOTE_FREQS = [293.66, 440, 587.33, 739.99, 880, 1108.73];
 
 // Keyboard-assist gesture sizes (accessibility + deterministic driving).
-const KEY_HOIST_PX = 130;
+const KEY_HOIST_STEP = 0.34;
 const KEY_ROLL_RAD = Math.PI * 0.85;
 const KEY_KINDLE_MS = 420;
 
@@ -118,8 +119,9 @@ export const foldTheLettersActivity: ActivityModule = {
     let state: RitualState = createRitualState();
 
     const stage = new FoldStage(canvas, {
-      onFoldDrag: (dx, dy) => handleFoldDrag(dx, dy),
-      onHoist: (px) => handleHoist(px),
+      onFoldProgress: (t) => handleFoldProgress(t),
+      onFoldRelease: () => handleFoldRelease(),
+      onHoistProgress: (progress) => handleHoistProgress(progress),
       onRoll: (angle) => handleRoll(angle),
       onKindleChange: (held) => {
         kindleHeld = held;
@@ -153,11 +155,11 @@ export const foldTheLettersActivity: ActivityModule = {
         return '';
       }
       if (verb === 'fold') {
-        const crease = component.id === 'hull' ? currentHullCrease(state) : SAIL_FOLD_CREASE;
+        const crease = currentFoldCrease(state);
         return `${component.label} — ${crease?.hint ?? ''}`;
       }
       if (verb === 'hoist') {
-        return `${component.label} — hoist the sail: drag up the mast, ride the wind as it catches`;
+        return `${component.label} — hoist the sail: drag it up the mast to the top`;
       }
       if (verb === 'roll') {
         return `${component.label} — roll the page: circle it into a lantern`;
@@ -175,13 +177,18 @@ export const foldTheLettersActivity: ActivityModule = {
       panel.dataset.foldVerb = verb ?? '';
       panel.dataset.foldAssembled = String(assembledComponentCount(state));
       panel.dataset.foldProgress = componentProgress(state).toFixed(3);
+      // The live 0..1 progress of the fold currently under the pointer — the
+      // observability hook the smoke reads to prove the paper tracks the drag.
+      panel.dataset.foldFoldProgress = state.foldProgress.toFixed(3);
       if (verb === 'fold') {
-        const crease = component?.id === 'hull' ? currentHullCrease(state) : SAIL_FOLD_CREASE;
+        const crease = currentFoldCrease(state);
         panel.dataset.foldCreaseAxis = crease?.dragAxis ?? '';
         panel.dataset.foldCreaseToward = crease?.toward ?? '';
+        panel.dataset.foldCreaseKind = crease?.kind ?? '';
       } else {
         delete panel.dataset.foldCreaseAxis;
         delete panel.dataset.foldCreaseToward;
+        delete panel.dataset.foldCreaseKind;
       }
       panel.dataset.ritualComplete = isComplete(state) ? '1' : '0';
     };
@@ -189,10 +196,10 @@ export const foldTheLettersActivity: ActivityModule = {
     const syncStage = (): void => {
       stage.setVerb(currentVerb(state) ?? 'fold');
       const component = currentComponent(state);
-      stage.setCrease(component?.id === 'hull' ? currentHullCrease(state) : undefined);
       if (component?.id === 'hull') {
         stage.setHullShape(currentHullShape(state));
       }
+      stage.setCrease(currentFoldCrease(state));
       stage.setHoist(state.hoistProgress, isCatchingWind(state.hoistProgress));
       stage.setRoll(rollProgress(state));
       stage.setKindle(kindleProgress(state));
@@ -244,34 +251,43 @@ export const foldTheLettersActivity: ActivityModule = {
 
     // --- gesture handlers ---------------------------------------------------
 
-    function handleFoldDrag(dx: number, dy: number): void {
+    // A fold is now DIRECT: the flap tracks the pointer continuously (progress),
+    // and only on release do we decide commit (past the threshold) vs fall back
+    // open. No threshold-triggered canned tween.
+    function handleFoldProgress(t: number): void {
       if (finished || sailingAway || assembling || currentVerb(state) !== 'fold') {
         return;
       }
-      const component = currentComponent(state);
-      const foldingCrease: HullCrease | undefined =
-        component?.id === 'hull' ? currentHullCrease(state) : SAIL_FOLD_CREASE;
-      const next = applyFoldDrag(state, dx, dy);
-      if (next === state || !foldingCrease) {
-        return; // wrong direction / too short — no-op, try again
+      state = setFoldProgress(state, t);
+      syncDataAttrs();
+    }
+
+    function handleFoldRelease(): void {
+      if (finished || sailingAway || assembling || currentVerb(state) !== 'fold') {
+        return;
       }
-      state = next;
-      playSfx('sfx-paper-fold');
-      // Animate the flip of the crease that just took, then continue.
-      stage.playFold(foldingCrease, () => {
+      const commit = willCommitFold(state);
+      if (commit) {
+        playSfx('sfx-paper-fold');
+      }
+      // The stage eases the flap the rest of the way home (commit) or back open
+      // (fall back), then we settle the model. Seamless: at progress 1 the flap's
+      // silhouette already equals the next shape, so the swap doesn't jump.
+      stage.settleFold(commit, () => {
         if (finished) {
           return;
         }
+        state = commit ? commitFold(state) : releaseFold(state);
         afterGesture();
       });
     }
 
     let wasCatching = false;
-    function handleHoist(px: number): void {
+    function handleHoistProgress(progress: number): void {
       if (finished || sailingAway || assembling || currentVerb(state) !== 'hoist') {
         return;
       }
-      const next = applyHoist(state, px);
+      const next = setHoistProgress(state, progress);
       if (next === state) {
         return;
       }
@@ -392,15 +408,17 @@ export const foldTheLettersActivity: ActivityModule = {
       }
       event.preventDefault();
       if (verb === 'fold') {
-        const component = currentComponent(state);
-        const crease = component?.id === 'hull' ? currentHullCrease(state) : SAIL_FOLD_CREASE;
-        if (!crease) {
-          return;
-        }
-        const drag = validDragFor(crease);
-        handleFoldDrag(drag.dx, drag.dy);
+        // Play the whole fold as an animation, then settle it home.
+        playSfx('sfx-paper-fold');
+        stage.playAutoFold(() => {
+          if (finished) {
+            return;
+          }
+          state = commitFold(state);
+          afterGesture();
+        });
       } else if (verb === 'hoist') {
-        handleHoist(KEY_HOIST_PX);
+        handleHoistProgress(state.hoistProgress + KEY_HOIST_STEP);
       } else if (verb === 'roll') {
         handleRoll(KEY_ROLL_RAD);
       } else if (verb === 'kindle') {
@@ -474,17 +492,6 @@ export const foldTheLettersActivity: ActivityModule = {
     showComponent();
   },
 };
-
-/** A drag vector guaranteed valid for the given crease's required axis. */
-function validDragFor(crease: HullCrease): { dx: number; dy: number } {
-  if (crease.dragAxis === 'horizontal') {
-    return { dx: crease.toward === 'left' ? -60 : 60, dy: 3 };
-  }
-  if (crease.dragAxis === 'vertical') {
-    return { dx: 3, dy: crease.toward === 'up' ? -60 : 60 };
-  }
-  return { dx: 50, dy: 50 };
-}
 
 function buildSailAwayCinematic(
   pieces: Partial<Record<string, string>>,

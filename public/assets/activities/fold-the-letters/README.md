@@ -15,6 +15,23 @@ composites with the others; there is no single monolithic boat sprite.
 | `lantern.png` | The paper lantern (____'s sheet music), glowing. Hangs at the bow. | 60×80 (2×) | 30×40 | tray `(−52, −26)`, centred |
 | `recipient-boat.png` | OPTIONAL. ____ sitting in the finished boat, used only in the sail-away cinematic as an overlay rider. | 240×180 | fits `.fold-sail__boat` (120×90) | rider slot |
 
+## Paper textures (the sheet each piece is folded from)
+
+Optional drop-in textures for the **flat paper** worked during each verb — the
+printed face that folds, hoists and rolls with the geometry. Drop any of these in
+and it replaces the procedural paper + handwriting for that piece in **every fold
+state** (file-first probe, zero code changes); procedural paper is the fallback
+when a file is absent. Each must be **flat and straight-on (no perspective/tilt)**
+with the **paper filling the whole image edge-to-edge** (no margins) — the stage
+maps it onto the sheet frame and clips/reflects it through the same fold math, so
+it visibly halves and mirrors as the paper folds.
+
+| Filename | Piece / verb | Dimensions | Requirement |
+| --- | --- | --- | --- |
+| `paper-friendone.png` | hull — ____'s letter (FOLD) | 512×640 | Flat, straight-on, fills the frame edge-to-edge |
+| `paper-friendtwo.png` | sail — ____'s letter (HOIST) | 512×640 | Flat, straight-on, fills the frame edge-to-edge |
+| `paper-sheetmusic.png` | lantern — ____'s sheet music (ROLL) | 512×640 | Flat, straight-on, fills the frame edge-to-edge |
+
 ## Coordinate system
 
 - The fold stage canvas is a fixed **640×400** logical space.

@@ -3,64 +3,70 @@
 // No DOM, no canvas, no audio: the whole ritual is a deterministic state machine
 // over three components, each with its OWN verb and feel:
 //
-//   1. ____'s letter  → the HULL   — FOLD:  direction-aware creases. A fold only
-//      takes if you drag roughly perpendicular ACROSS the pulsing crease.
-//   2. ____'s letter → the SAIL  — HOIST: one crease to make the triangle, then
-//      drag UPWARD along the mast against resistance; the sail catches wind in
-//      "wobble windows" partway up and tugs, and you ride it to the top.
-//   3. ____'s sheet music → the LANTERN — ROLL then LIGHT: a circular drag rolls
+//   1. ____'s letter  → the HULL   — FOLD:  three direct-manipulation folds. Each
+//      fold is a CONTINUOUS gesture: the flap tracks the pointer, folding a little
+//      more with every pixel of drag (setFoldProgress(t), 0→1). Release past the
+//      commit threshold settles the fold home; release early falls back open — no
+//      penalty, only patience.
+//   2. ____'s letter → the SAIL  — HOIST: one continuous fold to make the
+//      triangle, then the sail rides UP pinned to the pointer's height until it
+//      reaches the masthead.
+//   3. ____'s sheet music → the LANTERN — ROLL then LIGHT: a circular drag curls
 //      the page into a cylinder (staff lines wrapping, plucked notes sounding one
 //      by one); then press-and-HOLD to kindle it until it glows through.
 //
-// There is no fail state — every gesture only ever moves the ritual forward (the
-// kindle hold decays gently when released, but never below zero, so it always
-// completes with patience). Kept dependency-free so the sequence unit-tests in
-// isolation and drives the canvas view reproducibly.
+// There is no fail state — every gesture only ever moves the ritual forward.
+// Kept dependency-free so the sequence unit-tests in isolation and drives the
+// canvas view reproducibly.
 
 export type ComponentId = 'hull' | 'sail' | 'lantern';
 export type Verb = 'fold' | 'hoist' | 'roll' | 'kindle';
 
 /**
- * The intermediate silhouettes of the traditional "paper hat → boat" fold, in
- * order. Each hull crease turns one shape into the next, so the player watches a
- * real paper boat take shape step by step:
+ * The intermediate silhouettes of the paper-boat fold, in order. Reduced to a
+ * three-fold sequence, each shape derived as the EXACT folded silhouette of the
+ * previous one (conservation of paper — half the height after the half-fold, the
+ * corners tucked into the peak, the peak pulled open into the boat):
  *
- *   sheet   — the flat letter, her handwriting face up
- *   book    — folded in half (top edge down to the bottom)
- *   peak    — the two top corners folded in to the centre (a little house)
- *   hat     — the brim folded up each side (the classic paper hat, a triangle)
- *   diamond — the hat's pocket opened and pressed square (a diamond on its point)
- *   kite    — the bottom corners folded up to the top point (a smaller triangle)
- *   boat    — opened out and pulled from the sides — the finished hull
+ *   sheet — the flat letter, her handwriting face up
+ *   book  — folded in half (top edge down to the bottom): same width, half height
+ *   peak  — both top corners folded in to the centre: the book minus two corners
+ *   boat  — the peak pulled open from the sides into the finished two-horned hull
  */
-export type HullShape = 'sheet' | 'book' | 'peak' | 'hat' | 'diamond' | 'kite' | 'boat';
+export type HullShape = 'sheet' | 'book' | 'peak' | 'boat';
 
-/** Which axis the finger travels along for a hull fold (perpendicular to the
- * crease line it must cross). Diagonal creases accept either dominant axis. */
+/** Which axis the finger travels along for a fold (drives the view's pointer
+ * math + the drag hint the player sees). Diagonal = a corner drag. */
 export type DragAxis = 'horizontal' | 'vertical' | 'diagonal';
 
-/** Which half of the paper folds over the crease (drives the view's flip). */
+/** Which way the moving flap folds (drives the view's hint arrow direction). */
 export type FoldToward = 'up' | 'down' | 'left' | 'right';
 
+/** How the view renders the fold: a single reflected flap, two symmetric corner
+ * flaps folded by one drag, or a continuous open-out morph between silhouettes. */
+export type FoldKind = 'reflect' | 'corners' | 'open';
+
 /** Orientation of the crease LINE the view draws (a fold is a reflection across
- * it); the required drag is perpendicular to this. */
+ * it); the required drag runs across it. */
 export type CreaseLine = 'horizontal' | 'vertical' | 'diagonal';
 
 export interface HullCrease {
   readonly id: string;
-  /** One-line diegetic hint shown while the crease is pending. */
+  /** One-line diegetic hint shown while the fold is pending. */
   readonly hint: string;
-  /** A few of ____'s words that compress into the hull as this crease takes. */
+  /** A few of ____'s words that compress into the hull as this fold takes. */
   readonly snippet: string;
   /** Orientation of the crease line (view). */
   readonly line: CreaseLine;
-  /** The finger-travel axis a valid fold drag must move along. */
+  /** The finger-travel axis a fold drag moves along (view hint + pointer math). */
   readonly dragAxis: DragAxis;
-  /** Which half flips over (view). */
+  /** Which way the flap folds (view hint arrow). */
   readonly toward: FoldToward;
-  /** Hull only: the silhouette resting on the table BEFORE this crease. */
+  /** How the view renders this fold. */
+  readonly kind: FoldKind;
+  /** Hull only: the silhouette resting on the table BEFORE this fold. */
   readonly fromShape?: HullShape;
-  /** Hull only: the silhouette this crease folds the paper INTO. */
+  /** Hull only: the silhouette this fold folds the paper INTO. */
   readonly toShape?: HullShape;
 }
 
@@ -78,79 +84,50 @@ export interface FoldComponent {
 // --- content ---------------------------------------------------------------
 
 /**
- * ____'s letter, folded into the hull crease by crease along the traditional
- * newspaper paper-boat sequence (the hat-to-boat method): fold in half, corners
- * to the centre, brim up into a hat, open the pocket square into a diamond,
- * bottom corners up, then open and pull the sides out into the boat. Each crease
- * carries the intermediate SHAPE it produces, so the view can render a real boat
- * taking form. Snippets are pulled from her kept letter, so you are folding the
- * words themselves.
+ * ____'s letter, folded into the hull in THREE continuous folds. Each fold's
+ * `fromShape` is exactly the previous fold's `toShape`, and each silhouette is
+ * the true folded outline of the one before it — so the paper never jumps in size
+ * or proportion, it only ever gets folded. Snippets are pulled from her kept
+ * letter, so you are folding the words themselves.
  */
 export const HULL_CREASES: readonly HullCrease[] = [
   {
     id: 'hull-1',
-    hint: 'fold it in half — bring the top edge down to meet the bottom',
-    snippet: 'I liked sitting',
+    hint: 'fold it in half — drag the top edge down onto the bottom',
+    snippet: '',
     line: 'horizontal',
     dragAxis: 'vertical',
     toward: 'down',
+    kind: 'reflect',
     fromShape: 'sheet',
     toShape: 'book',
   },
   {
     id: 'hull-2',
-    hint: 'fold both top corners in to the centre crease',
-    snippet: 'beside you there.',
+    hint: 'both top corners in to the centre — one drag folds them together',
+    snippet: '',
     line: 'diagonal',
-    dragAxis: 'diagonal',
+    dragAxis: 'horizontal',
     toward: 'down',
+    kind: 'corners',
     fromShape: 'book',
     toShape: 'peak',
   },
   {
     id: 'hull-3',
-    hint: 'fold the brim up along the base — the peak becomes a hat',
-    snippet: 'Even inside',
-    line: 'horizontal',
-    dragAxis: 'vertical',
-    toward: 'up',
-    fromShape: 'peak',
-    toShape: 'hat',
-  },
-  {
-    id: 'hull-4',
-    hint: 'open the pocket and press it square — pull the hat into a diamond',
-    snippet: 'a tiny game,',
-    line: 'vertical',
-    dragAxis: 'horizontal',
-    toward: 'left',
-    fromShape: 'hat',
-    toShape: 'diamond',
-  },
-  {
-    id: 'hull-5',
-    hint: 'fold the bottom corners up to the top point',
-    snippet: 'it felt like we had',
-    line: 'horizontal',
-    dragAxis: 'vertical',
-    toward: 'up',
-    fromShape: 'diamond',
-    toShape: 'kite',
-  },
-  {
-    id: 'hull-6',
-    hint: 'open it out and pull the sides — the boat takes shape',
-    snippet: 'all the time in the world.',
+    hint: 'pull it open from the sides — the boat takes shape',
+    snippet: '',
     line: 'vertical',
     dragAxis: 'horizontal',
     toward: 'right',
-    fromShape: 'kite',
+    kind: 'open',
+    fromShape: 'peak',
     toShape: 'boat',
   },
 ];
 
-/** ____'s letter — the single crease that makes the sail triangle, then the
- * lines that flutter on the sail face as it is hoisted. */
+/** ____'s letter — the single continuous fold that makes the sail triangle,
+ * then the lines that flutter on the sail face as it is hoisted. */
 export const SAIL_FOLD_CREASE: HullCrease = {
   id: 'sail-fold',
   hint: 'drag corner to corner — fold the triangle of the sail',
@@ -158,6 +135,7 @@ export const SAIL_FOLD_CREASE: HullCrease = {
   line: 'diagonal',
   dragAxis: 'diagonal',
   toward: 'up',
+  kind: 'reflect',
 };
 
 /** Lines of ____'s letter that flutter across the sail face while hoisting. */
@@ -201,18 +179,15 @@ export const FOLD_COMPONENTS: readonly FoldComponent[] = [
 
 // --- tunables (shared by model + view) -------------------------------------
 
-/** Minimum drag length (logical px) for a hull fold to register. */
-export const FOLD_DRAG_MIN = 22;
+/** A fold commits (settles home) when it is dragged at least this far. Release
+ * before it and the flap falls back open — no penalty, try again. */
+export const FOLD_COMMIT_THRESHOLD = 0.65;
 
-/** Progress gained per logical px of upward hoist drag (before resistance). */
-export const HOIST_GAIN = 0.0075;
-/** Progress windows where the sail catches wind and tugs (higher resistance). */
+/** Progress windows where the sail visibly catches wind and sways (view feel). */
 export const SAIL_WOBBLE_WINDOWS: readonly (readonly [number, number])[] = [
   [0.36, 0.5],
   [0.66, 0.82],
 ];
-/** Resistance multiplier applied to hoist gain inside a wobble window. */
-export const HOIST_CATCH_RESISTANCE = 0.4;
 
 /** Total swept angle (radians) that rolls the sheet fully into the lantern. */
 export const ROLL_TARGET = Math.PI * 3;
@@ -231,11 +206,14 @@ export interface RitualState {
   /** 0 = hull, 1 = sail, 2 = lantern. */
   readonly componentIndex: number;
   readonly phase: RitualPhase;
-  /** hull: how many creases have folded. */
+  /** hull: how many folds have settled. */
   readonly hullCreaseIndex: number;
-  /** sail: whether the single triangle crease has folded yet. */
+  /** The live 0..1 progress of the fold currently under the pointer (hull folds
+   * and the single sail fold). Reset to 0 whenever a fold settles or falls back. */
+  readonly foldProgress: number;
+  /** sail: whether the single triangle fold has settled yet. */
   readonly sailFolded: boolean;
-  /** sail: 0..1 hoist progress. */
+  /** sail: 0..1 hoist progress (pinned to the pointer's height). */
   readonly hoistProgress: number;
   /** lantern: accumulated swept angle (radians), clamped to ROLL_TARGET. */
   readonly rollAngle: number;
@@ -248,6 +226,7 @@ export function createRitualState(): RitualState {
     componentIndex: 0,
     phase: 'working',
     hullCreaseIndex: 0,
+    foldProgress: 0,
     sailFolded: false,
     hoistProgress: 0,
     rollAngle: 0,
@@ -276,7 +255,7 @@ export function currentVerb(state: RitualState): Verb | undefined {
   return 'fold';
 }
 
-/** The hull crease pending next (hull only), or undefined. */
+/** The hull fold pending next (hull only), or undefined. */
 export function currentHullCrease(state: RitualState): HullCrease | undefined {
   const component = currentComponent(state);
   if (state.phase !== 'working' || component?.id !== 'hull') {
@@ -285,10 +264,25 @@ export function currentHullCrease(state: RitualState): HullCrease | undefined {
   return HULL_CREASES[state.hullCreaseIndex];
 }
 
+/** The fold pending under the pointer right now (hull fold or the sail fold),
+ * or undefined when the current verb isn't a fold. */
+export function currentFoldCrease(state: RitualState): HullCrease | undefined {
+  if (currentVerb(state) !== 'fold') {
+    return undefined;
+  }
+  const component = currentComponent(state);
+  if (component?.id === 'hull') {
+    return HULL_CREASES[state.hullCreaseIndex];
+  }
+  if (component?.id === 'sail') {
+    return SAIL_FOLD_CREASE;
+  }
+  return undefined;
+}
+
 /**
  * The silhouette the hull is resting in RIGHT NOW — the shape before the pending
- * crease, or 'boat' once every crease is folded. Drives the authentic paper-boat
- * rendering in the view.
+ * fold, or 'boat' once every fold is settled. Drives the paper-boat rendering.
  */
 export function currentHullShape(state: RitualState): HullShape {
   const crease = HULL_CREASES[state.hullCreaseIndex];
@@ -303,86 +297,89 @@ export function isAssembled(state: RitualState): boolean {
   return state.phase === 'assembled';
 }
 
-// --- verb: FOLD (hull creases + the one sail crease) -----------------------
+// --- verb: FOLD — continuous direct manipulation ---------------------------
 
-/** True if a drag (dx, dy in logical px) is a valid fold for `crease`: long
- * enough and moving along the required perpendicular axis. */
-export function isValidFoldDrag(crease: HullCrease, dx: number, dy: number): boolean {
-  const length = Math.hypot(dx, dy);
-  if (length < FOLD_DRAG_MIN) {
-    return false;
+/**
+ * Sets the live 0..1 progress of the fold currently under the pointer. The view
+ * computes `t` from the pointer's position relative to the crease and calls this
+ * every move, so the flap tracks the finger. A no-op unless a fold is pending.
+ */
+export function setFoldProgress(state: RitualState, t: number): RitualState {
+  if (currentVerb(state) !== 'fold') {
+    return state;
   }
-  if (crease.dragAxis === 'diagonal') {
-    // A corner fold: accept a genuinely diagonal drag (both axes contribute).
-    return Math.abs(dx) > FOLD_DRAG_MIN * 0.4 && Math.abs(dy) > FOLD_DRAG_MIN * 0.4;
+  const clamped = clamp01(t);
+  if (clamped === state.foldProgress) {
+    return state;
   }
-  const horizontal = Math.abs(dx) > Math.abs(dy);
-  return crease.dragAxis === (horizontal ? 'horizontal' : 'vertical');
+  return { ...state, foldProgress: clamped };
+}
+
+/** True if the current fold has been dragged far enough to settle on release. */
+export function willCommitFold(state: RitualState): boolean {
+  return currentVerb(state) === 'fold' && state.foldProgress >= FOLD_COMMIT_THRESHOLD;
 }
 
 /**
- * Applies a fold drag to the current component. On the hull it advances one
- * crease if the drag direction matches; on the sail (pre-hoist) it makes the
- * triangle. Returns the same state (no-op) if the drag doesn't qualify or the
- * current verb isn't a fold. When the hull's last crease folds, the hull clicks
- * into place (phase → 'assembled').
+ * Settles the current fold home: advances the hull one shape (or clicks the hull
+ * together after the last fold), or makes the sail triangle. Resets the live fold
+ * progress. A no-op unless a fold is pending.
  */
-export function applyFoldDrag(state: RitualState, dx: number, dy: number): RitualState {
+export function commitFold(state: RitualState): RitualState {
   if (currentVerb(state) !== 'fold') {
     return state;
   }
   const component = currentComponent(state);
-  if (!component) {
-    return state;
-  }
-
-  if (component.id === 'hull') {
-    const crease = HULL_CREASES[state.hullCreaseIndex];
-    if (!crease || !isValidFoldDrag(crease, dx, dy)) {
-      return state;
-    }
+  if (component?.id === 'hull') {
     const nextIndex = state.hullCreaseIndex + 1;
     if (nextIndex >= HULL_CREASES.length) {
-      return { ...state, hullCreaseIndex: nextIndex, phase: 'assembled' };
+      return { ...state, hullCreaseIndex: nextIndex, foldProgress: 0, phase: 'assembled' };
     }
-    return { ...state, hullCreaseIndex: nextIndex };
+    return { ...state, hullCreaseIndex: nextIndex, foldProgress: 0 };
   }
-
-  if (component.id === 'sail') {
-    if (!isValidFoldDrag(SAIL_FOLD_CREASE, dx, dy)) {
-      return state;
-    }
-    return { ...state, sailFolded: true };
+  if (component?.id === 'sail') {
+    return { ...state, sailFolded: true, foldProgress: 0 };
   }
-
   return state;
+}
+
+/**
+ * Ends a fold gesture: commits if it was dragged past the threshold, otherwise
+ * falls the flap back open (progress → 0). Unfailable either way.
+ */
+export function releaseFold(state: RitualState): RitualState {
+  if (currentVerb(state) !== 'fold') {
+    return state;
+  }
+  if (state.foldProgress >= FOLD_COMMIT_THRESHOLD) {
+    return commitFold(state);
+  }
+  return { ...state, foldProgress: 0 };
 }
 
 // --- verb: HOIST (sail) ----------------------------------------------------
 
-/** True while the given hoist progress sits inside a wind-catch window. */
+/** True while the given hoist progress sits inside a wind-catch window (the
+ * sail sways and the rope catches — purely a view/feel cue now). */
 export function isCatchingWind(progress: number): boolean {
   return SAIL_WOBBLE_WINDOWS.some(([lo, hi]) => progress >= lo && progress < hi);
 }
 
-/** Resistance factor at the given progress (lower = tugs harder). */
-export function hoistResistance(progress: number): number {
-  return isCatchingWind(progress) ? HOIST_CATCH_RESISTANCE : 1;
-}
-
 /**
- * Applies an upward hoist drag (upwardPx > 0 means the finger moved up). Only
- * upward motion raises the sail; inside a catch window it gains less (the sail
- * tugs). When progress reaches 1 the sail clicks into place (assembled).
+ * Sets the sail's hoist to an absolute 0..1 — the view pins this to the pointer's
+ * height, so the sail itself tracks the finger up the mast. When it reaches the
+ * masthead the sail clicks into place (assembled).
  */
-export function applyHoist(state: RitualState, upwardPx: number): RitualState {
-  if (currentVerb(state) !== 'hoist' || upwardPx <= 0) {
+export function setHoistProgress(state: RitualState, progress: number): RitualState {
+  if (currentVerb(state) !== 'hoist') {
     return state;
   }
-  const gain = upwardPx * HOIST_GAIN * hoistResistance(state.hoistProgress);
-  const next = clamp01(state.hoistProgress + gain);
+  const next = clamp01(progress);
   if (next >= 1) {
     return { ...state, hoistProgress: 1, phase: 'assembled' };
+  }
+  if (next === state.hoistProgress) {
+    return state;
   }
   return { ...state, hoistProgress: next };
 }
@@ -448,7 +445,8 @@ export function advanceComponent(state: RitualState): RitualState {
   return { ...state, componentIndex: nextIndex, phase: 'working' };
 }
 
-/** 0..1 progress within the current component's verb. */
+/** 0..1 progress within the current component's verb (continuous — includes the
+ * live fold/hoist under the pointer). */
 export function componentProgress(state: RitualState): number {
   if (state.phase === 'assembled' || state.phase === 'complete') {
     return 1;
@@ -459,9 +457,11 @@ export function componentProgress(state: RitualState): number {
   }
   switch (component.id) {
     case 'hull':
-      return state.hullCreaseIndex / HULL_CREASES.length;
+      return clamp01((state.hullCreaseIndex + state.foldProgress) / HULL_CREASES.length);
     case 'sail':
-      return (state.sailFolded ? 0.25 : 0) + (state.sailFolded ? state.hoistProgress * 0.75 : 0);
+      return state.sailFolded
+        ? 0.25 + state.hoistProgress * 0.75
+        : state.foldProgress * 0.25;
     case 'lantern':
       return rollProgress(state) * 0.6 + kindleProgress(state) * 0.4;
     default:

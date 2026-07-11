@@ -80,7 +80,7 @@ import { createProjection, type Projection } from '../game/projection';
 import { playMusic, playSfx, type MusicKey } from '../game/audio';
 import { getPointObject, getRectObjects, type RectObject, type TiledMapJson } from '../game/mapHelpers';
 import { getPlayerFacingFromScreenMovement, PlayerController } from '../game/playerController';
-import { renderCollectionPanel } from '../ui/collectionPanel';
+import { createCollectionPanel, type CollectionPanelHandle } from '../ui/collectionPanel';
 import { showDialogue } from '../ui/dialogueBox';
 import { clearUiRoot, getUiRoot } from '../ui/domRoot';
 import { showLetterModal } from '../ui/letterModal';
@@ -309,7 +309,21 @@ export class LocationScene extends Phaser.Scene {
   private lastWalkDustAt = 0;
   private walkDustFootSide = -1;
   private controller!: PlayerController;
-  private canMove = true;
+  private _canMove = true;
+  private collectionPanel?: CollectionPanelHandle;
+  private get canMove(): boolean {
+    return this._canMove;
+  }
+  // Freezing control (dialogue, activities, reward + re-read letters) also makes
+  // the Letters HUD inert, so a stray hover/click can never fan or open a letter
+  // over another overlay.
+  private set canMove(value: boolean) {
+    this._canMove = value;
+    this.collectionPanel?.element.classList.toggle(
+      'collection-panel--inert',
+      !value,
+    );
+  }
   private exits: RectObject[] = [];
   private interactions: RectObject[] = [];
   private interactKey?: Phaser.Input.Keyboard.Key;
@@ -2041,7 +2055,19 @@ export class LocationScene extends Phaser.Scene {
   }
 
   private createHud(): void {
-    getUiRoot().insertAdjacentHTML('beforeend', renderCollectionPanel(this.state));
+    const panel = createCollectionPanel(this.state, {
+      canInteract: () => this._canMove,
+      // Re-reading freezes the player (mirrors pauseForDialogue) so held movement
+      // keys can't drive ____ behind the full-screen letter overlay.
+      onOpenLetter: async (lines) => {
+        this.canMove = false;
+        await showLetterModal(lines);
+        this.canMove = true;
+      },
+    });
+    panel.element.classList.toggle('collection-panel--inert', !this._canMove);
+    this.collectionPanel = panel;
+    getUiRoot().append(panel.element);
   }
 
   private createLocationLabel(): void {

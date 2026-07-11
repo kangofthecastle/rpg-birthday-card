@@ -63,6 +63,11 @@ const HOIST_SMOOTH_K = 0.35;
 // How far outside a wobble window the wind-catch factor ramps in/out (progress
 // units), so the sail's sway swells across the boundary instead of snapping.
 const WIND_RAMP = 0.07;
+// The sail intro's arrival cross-fade: over the LAST (1 − this) fraction of the
+// intro the flying flat triangle dissolves into the billowed sail on the mast, the
+// belly swelling from flat — so the fold "catches wind and billows" rather than the
+// sail popping in. A view-feel fraction; the DURATION is FoldTiming.sailIntroMs.
+const SAIL_ARRIVE_START = 0.55;
 // A plucked-note sparkle at the rolling tube lives this long (ms).
 const ROLL_SPARKLE_MS = 420;
 // Linear-roll feel: logical px of HORIZONTAL drag that completes the whole roll.
@@ -758,10 +763,28 @@ export class FoldStage {
     const dstCy = dst.y + dst.h / 2;
     const curCx = srcCx + (dstCx - srcCx) * ease;
     const curCy = srcCy + (dstCy - srcCy) * ease + bob;
-    const rot = (1 - ease) * 0.22; // gentle settle from the fold angle into upright
+    const rot = (1 - ease) * 0.06; // the folded triangle is already upright — only a
+    // whisper of settle, so it glides to the mast rather than rotating into place
+
+    // Arrival cross-fade: in the tail the flat flying triangle dissolves into the
+    // billowed sail on the mast, the belly swelling from flat — the fold catches
+    // wind and billows instead of the sail popping in at the handoff.
+    const arrive = clamp01((t - SAIL_ARRIVE_START) / (1 - SAIL_ARRIVE_START));
+    const billow = arrive * arrive * (3 - 2 * arrive); // smoothstep
 
     const ctx = this.ctx;
+    if (arrive > 0) {
+      const buf = this.renderHoistToBuffer(billow);
+      if (buf) {
+        ctx.save();
+        ctx.globalAlpha = billow;
+        ctx.drawImage(buf, 0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
+        ctx.restore();
+      }
+    }
+
     ctx.save();
+    ctx.globalAlpha = 1 - arrive; // the flat triangle fades as the sail fills in
     ctx.translate(curCx, curCy);
     ctx.rotate(rot);
     ctx.drawImage(intro.snapshot, -w / 2, -h / 2, w, h);
@@ -770,6 +793,30 @@ export class FoldStage {
     if (t >= 1) {
       this.finishSailIntro(intro);
     }
+  }
+
+  /** Renders the mast + hoisted sail (at the current hoist) onto a transparent
+   * full-canvas buffer, with `billowScale` swelling the sail's belly — so the sail
+   * intro can cross-fade the billowed sail in over the flying flat triangle without
+   * per-slice alpha seams. */
+  private renderHoistToBuffer(billowScale: number): HTMLCanvasElement | undefined {
+    const s = RENDER_SCALE;
+    const buf = document.createElement('canvas');
+    buf.width = LOGICAL_WIDTH * s;
+    buf.height = LOGICAL_HEIGHT * s;
+    const bctx = buf.getContext('2d');
+    if (!bctx) {
+      return undefined;
+    }
+    const prev = this.ctx;
+    this.ctx = bctx;
+    bctx.setTransform(s, 0, 0, s, 0, 0);
+    try {
+      this.drawHoistComposite(billowScale, false);
+    } finally {
+      this.ctx = prev;
+    }
+    return buf;
   }
 
   private finishSailIntro(intro: SailIntro): void {
@@ -1580,6 +1627,16 @@ export class FoldStage {
 
   // HOIST: a mast with the sail triangle pinned to the pointer height as it rides.
   private drawHoistStage(): void {
+    this.drawHoistComposite(1, true);
+  }
+
+  /**
+   * Draws the mast + hoisted sail at the current hoist. `billowScale` multiplies the
+   * sail's belly (1 = full billow; 0 = as flat as the cloth reads), used by the sail
+   * intro's arrival cross-fade to swell the sail from flat. `showHandle` draws the
+   * grab dot (skipped while the arrival is still dissolving in).
+   */
+  private drawHoistComposite(billowScale: number, showHandle: boolean): void {
     const ctx = this.ctx;
     const mastX = LOGICAL_WIDTH / 2;
     const { mastTop, mastBottom, headLow, travel } = this.hoistBounds();
@@ -1645,7 +1702,8 @@ export class FoldStage {
       for (let i = 0; i < rows; i += 1) {
         const v = i / (rows - 1); // 0 top → 1 bottom
         const belly = Math.sin(v * Math.PI); // 0 at ends, 1 mid — the sail's belly
-        const off = (Math.sin(this.wobblePhase + v * 2.2) * amp + wobble * 0.2) * belly;
+        const off =
+          (Math.sin(this.wobblePhase + v * 2.2) * amp + wobble * 0.2) * belly * billowScale;
         // +0.6 overlap hides seams between rows from sub-pixel rounding.
         ctx.drawImage(
           sailArt,
@@ -1704,7 +1762,7 @@ export class FoldStage {
 
     // A grab handle at the sail's head while it's below the top, so it reads as a
     // thing to pull up.
-    if (hoist < 0.985) {
+    if (showHandle && hoist < 0.985) {
       ctx.save();
       ctx.globalAlpha = this.hintPulse();
       ctx.beginPath();

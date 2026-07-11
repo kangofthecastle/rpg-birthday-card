@@ -22,8 +22,12 @@ export const FRIEND_TWO_SPRITE = {
   idleAnimationKey: 'friendtwo-idle-down',
 } as const;
 
-// The existing starlit water art, loaded as a Phaser texture so the galaxy ground
-// can be composed (tiled/scaled) from it and baked to a RenderTexture.
+// The existing galaxy-sky and starlit-water paintings, loaded as Phaser textures
+// so the galaxy ground can be composed from them exactly as the ending's terminal
+// CSS frame is (sky pinned to the top, water below with an alpha-gradient blend
+// band fading the water's top edge over the sky — no hard horizon seam).
+export const ENDING_SKY_KEY = 'ending-sky';
+export const ENDING_SKY_URL = '/assets/ending/ending-sky.png';
 export const ENDING_WATER_KEY = 'ending-water';
 export const ENDING_WATER_URL = '/assets/ending/ending-water.png';
 

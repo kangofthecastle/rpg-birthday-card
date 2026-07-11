@@ -22,6 +22,8 @@ import { DOORMAT_DROP_KEY } from '../game/roomRenderer';
 import { isImageUrl } from '../game/assetProbe';
 import {
   FRIEND_TWO_SPRITE,
+  ENDING_SKY_KEY,
+  ENDING_SKY_URL,
   ENDING_WATER_KEY,
   ENDING_WATER_URL,
   GALAXY_GROUND_KEY,
@@ -64,7 +66,10 @@ export class BootScene extends Phaser.Scene {
       frameHeight: FRIEND_TWO_SPRITE.frameHeight,
     });
 
-    // The galaxy water base, reused as the composed final-spot ground texture.
+    // The galaxy sky + starlit water paintings, reused to compose the final-spot
+    // ground (sky pinned to the top, water below with a blend band) exactly as the
+    // ending's terminal CSS frame composites them.
+    this.load.image(ENDING_SKY_KEY, ENDING_SKY_URL);
     this.load.image(ENDING_WATER_KEY, ENDING_WATER_URL);
   }
 

@@ -5,6 +5,7 @@ import {
   FINAL_ENDING_LETTERS,
 } from '../activities/finalKeepsake/endingModel';
 import {
+  ENDING_SKY_KEY,
   ENDING_WATER_KEY,
   GALAXY_GROUND_KEY,
   SHORE_WATER_KEY,
@@ -1141,11 +1142,14 @@ export class LocationScene extends Phaser.Scene {
     });
   }
 
-  // The galaxy place's ground: the ocean-galaxy reflection you stand ON. A
-  // file-first painted override (galaxy-ground.png) replaces it whole; otherwise
-  // it is COMPOSED from the existing ending-water art (tiled/scaled and baked to a
-  // RenderTexture like the outdoor ground) with drifting light-pools, a code-drawn
-  // star shimmer, and soft darkness closing every edge.
+  // The galaxy place's ground: the painted ocean-galaxy you stand ON. A file-first
+  // painted override (galaxy-ground.png) replaces it whole; otherwise it is
+  // COMPOSED from the SAME paintings as the ending's terminal CSS frame — the
+  // galaxy sky pinned across the top down to a horizon, the starlit water below,
+  // with an alpha-gradient blend band fading the water's top edge over the sky so
+  // there is no hard horizon seam. No vignette and no procedural stars/light-pools:
+  // the paintings already carry the stars, and the finale wants full even
+  // brightness (matching the ending frame it cross-fades from).
   private createGalaxyGround(tilemap: Phaser.Tilemaps.Tilemap): void {
     const width = tilemap.widthInPixels;
     const height = tilemap.heightInPixels;
@@ -1156,128 +1160,100 @@ export class LocationScene extends Phaser.Scene {
         .setOrigin(0, 0)
         .setDepth(-20)
         .setDisplaySize(width, height);
-    } else {
-      this.composeGalaxyGround(width, height);
-    }
-
-    this.addGalaxyShimmer(width, height);
-    this.addGalaxyEdgeVignette(width, height);
-  }
-
-  // Bakes the starlit-water art (1280×360) tiled to fill the map into a GPU
-  // RenderTexture, then floats a few slow galaxy-palette light-pools over it.
-  private composeGalaxyGround(width: number, height: number): void {
-    const rt = this.add.renderTexture(0, 0, width, height).setOrigin(0, 0).setDepth(-20);
-    const base = this.make.graphics({}, false);
-    base.fillStyle(0x0a1226, 1);
-    base.fillRect(0, 0, width, height);
-    rt.draw(base);
-    base.destroy();
-
-    if (this.textures.exists(ENDING_WATER_KEY)) {
-      const source = this.textures.get(ENDING_WATER_KEY).getSourceImage();
-      const drawH = (source.height / source.width) * width;
-      const temp = this.add.image(0, 0, ENDING_WATER_KEY).setOrigin(0, 0).setVisible(false);
-      temp.setDisplaySize(width, drawH);
-      for (let y = -drawH * 0.5; y < height; y += drawH) {
-        rt.draw(temp, 0, y);
-      }
-      temp.destroy();
-    }
-
-    this.createMoteTexture();
-    const pools: ReadonlyArray<{ x: number; y: number; tint: number; alpha: number; ms: number }> = [
-      { x: width * 0.32, y: height * 0.42, tint: 0x8b5cf6, alpha: 0.16, ms: 7200 },
-      { x: width * 0.66, y: height * 0.6, tint: 0x3b6fd4, alpha: 0.14, ms: 8600 },
-      { x: width * 0.5, y: height * 0.82, tint: 0xffcf7a, alpha: 0.1, ms: 6400 },
-    ];
-    for (const pool of pools) {
-      const img = this.add
-        .image(pool.x, pool.y, 'awaken-mote')
-        .setDepth(-19)
-        .setScale(26)
-        .setTint(pool.tint)
-        .setAlpha(pool.alpha)
-        .setBlendMode(Phaser.BlendModes.ADD);
-      this.tweens.add({
-        targets: img,
-        x: pool.x + width * 0.05,
-        alpha: { from: pool.alpha * 0.65, to: pool.alpha },
-        duration: pool.ms,
-        yoyo: true,
-        repeat: -1,
-        ease: 'Sine.easeInOut',
-      });
-    }
-  }
-
-  // A seeded field of twinkling stars across the water — the reflection shimmer.
-  private addGalaxyShimmer(width: number, height: number): void {
-    this.createStarTexture();
-    const rng = mulberry32(fnv1a('final-spot:stars'));
-    const tints = [0xffffff, 0xfff2c8, 0xbfa8ff, 0x8fd0ff];
-    for (let i = 0; i < 74; i += 1) {
-      const x = rng() * width;
-      const y = rng() * height;
-      const star = this.add
-        .image(x, y, 'galaxy-star')
-        .setDepth(-18)
-        .setScale(0.4 + rng() * 1)
-        .setTint(tints[Math.floor(rng() * tints.length)] ?? 0xffffff)
-        .setAlpha(0)
-        .setBlendMode(Phaser.BlendModes.ADD);
-      this.tweens.add({
-        targets: star,
-        alpha: { from: 0.15, to: 0.65 + rng() * 0.3 },
-        duration: 900 + rng() * 1600,
-        yoyo: true,
-        repeat: -1,
-        hold: rng() * 700,
-        repeatDelay: rng() * 1200,
-        delay: rng() * 1800,
-        ease: 'Sine.easeInOut',
-      });
-    }
-  }
-
-  private createStarTexture(): void {
-    if (this.textures.exists('galaxy-star')) {
       return;
     }
-    const graphics = this.add.graphics();
-    graphics.fillStyle(0xffffff, 1);
-    graphics.fillCircle(4, 4, 1.4);
-    graphics.fillStyle(0xffffff, 0.4);
-    graphics.fillCircle(4, 4, 3.4);
-    graphics.generateTexture('galaxy-star', 8, 8);
-    graphics.destroy();
+
+    this.composeGalaxyGround(width, height);
   }
 
-  // Soft darkness closing every edge of the galaxy water — a radial vignette so
-  // the play space fades into the dark rather than hitting a hard border.
-  private addGalaxyEdgeVignette(width: number, height: number): void {
-    const key = 'galaxy-vignette';
+  // Bakes the painted galaxy backdrop into a single canvas texture and lays it at
+  // depth -20. Mirrors `.ending-ocean__sky` / `.ending-ocean__water` from the CSS
+  // frame: the sky is cover-scaled across the top down to the horizon; the water is
+  // cover-scaled from the horizon to the bottom and masked with a linear alpha
+  // gradient so its top edge fades over the sky through the blend band. The horizon
+  // sits ABOVE the walkable area — ____ (feet y≈464) and both spawns (y=640, 768)
+  // land clearly on the water — so it is pushed up from the CSS frame's ~48–60%
+  // band to ~30–43% of the map height (see galaxy-restore note). Cover-scaling the
+  // water into the tall water box fills it edge-to-edge with no tiling seams even
+  // though the map is taller than the art's aspect.
+  private composeGalaxyGround(width: number, height: number): void {
+    const key = 'galaxy-backdrop';
     if (!this.textures.exists(key)) {
       const canvas = this.textures.createCanvas(key, width, height);
       const ctx = canvas?.getContext();
       if (canvas && ctx) {
-        const gradient = ctx.createRadialGradient(
-          width / 2,
-          height / 2,
-          Math.min(width, height) * 0.22,
-          width / 2,
-          height / 2,
-          Math.max(width, height) * 0.62,
-        );
-        gradient.addColorStop(0, 'rgba(6, 4, 16, 0)');
-        gradient.addColorStop(0.7, 'rgba(6, 4, 16, 0.35)');
-        gradient.addColorStop(1, 'rgba(3, 2, 10, 0.95)');
-        ctx.fillStyle = gradient;
+        // Deep base so any fully-transparent edge of the art never shows through.
+        ctx.fillStyle = '#0a1226';
         ctx.fillRect(0, 0, width, height);
+
+        // Blend band: sky fully visible above blendTop; water fully opaque below
+        // blendBottom; the water's top edge ramps 0→1 across the band, over the sky.
+        const blendTop = height * 0.3;
+        const blendBottom = height * 0.43;
+
+        if (this.textures.exists(ENDING_SKY_KEY)) {
+          const sky = this.textures.get(ENDING_SKY_KEY).getSourceImage() as CanvasImageSource & {
+            width: number;
+            height: number;
+          };
+          // Sky covers the top of the map down through the blend band so the water
+          // fades over painted sky (not the flat base) inside the band.
+          this.drawCover(ctx, sky, 0, 0, width, blendBottom);
+        }
+
+        if (this.textures.exists(ENDING_WATER_KEY)) {
+          const water = this.textures.get(ENDING_WATER_KEY).getSourceImage() as CanvasImageSource & {
+            width: number;
+            height: number;
+          };
+          // Paint the water onto its own layer so the vertical alpha gradient masks
+          // ONLY the water (leaving the sky above untouched), then composite it.
+          const layer = document.createElement('canvas');
+          layer.width = width;
+          layer.height = height;
+          const lctx = layer.getContext('2d');
+          if (lctx) {
+            this.drawCover(lctx, water, 0, blendTop, width, height - blendTop);
+            lctx.globalCompositeOperation = 'destination-in';
+            const mask = lctx.createLinearGradient(0, blendTop, 0, blendBottom);
+            mask.addColorStop(0, 'rgba(0,0,0,0)');
+            mask.addColorStop(1, 'rgba(0,0,0,1)');
+            lctx.fillStyle = mask;
+            lctx.fillRect(0, blendTop, width, height - blendTop);
+            ctx.drawImage(layer, 0, 0);
+          }
+        }
+
         canvas.refresh();
       }
     }
-    this.add.image(0, 0, key).setOrigin(0, 0).setDepth(-5);
+    this.add.image(0, 0, key).setOrigin(0, 0).setDepth(-20);
+  }
+
+  // Draws a source image into the target rect using CSS `background-size: cover`
+  // semantics: scale to fill the box (preserving aspect), centred, cropping the
+  // overflow. Clipped to the box so it never bleeds past its region.
+  private drawCover(
+    ctx: CanvasRenderingContext2D,
+    source: CanvasImageSource & { width: number; height: number },
+    dx: number,
+    dy: number,
+    dw: number,
+    dh: number,
+  ): void {
+    const sw = source.width;
+    const sh = source.height;
+    const scale = Math.max(dw / sw, dh / sh);
+    const drawW = sw * scale;
+    const drawH = sh * scale;
+    const offsetX = dx + (dw - drawW) / 2;
+    const offsetY = dy + (dh - drawH) / 2;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(dx, dy, dw, dh);
+    ctx.clip();
+    ctx.drawImage(source, offsetX, offsetY, drawW, drawH);
+    ctx.restore();
   }
 
   // ____, waiting at the warm glow in the centre of the galaxy water for the

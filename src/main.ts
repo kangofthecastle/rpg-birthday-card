@@ -3,6 +3,7 @@ import { initAudio } from './game/audio';
 import { createGameConfig } from './game/gameConfig';
 import { runBootScreen } from './ui/bootScreen';
 import { mountMuteButton } from './ui/muteButton';
+import { syncViewportFrame } from './ui/viewportFrame';
 import './styles.css';
 
 // Fallback for paths that skip the boot overlay (testMode): arm WebAudio on
@@ -10,10 +11,11 @@ import './styles.css';
 document.addEventListener('keydown', () => initAudio(), { once: true });
 document.addEventListener('pointerdown', () => initAudio(), { once: true });
 
-// A persistent top-right mute toggle, mounted on <body> so it survives the
-// scene changes that clear #ui-root. It sits under the z-1000 boot overlay, so
-// it reveals itself once the cold-open finishes.
-mountMuteButton();
+// A persistent top-right mute toggle, mounted inside the viewport frame (a
+// sibling of #ui-root, so the scene changes that clear #ui-root leave it be) so
+// it anchors to the game frame's corner rather than the window's. It sits under
+// the z-1000 boot overlay, so it reveals itself once the cold-open finishes.
+mountMuteButton(document.querySelector<HTMLElement>('#viewport-frame') ?? document.body);
 
 const root = document.querySelector<HTMLDivElement>('#game-root');
 
@@ -34,7 +36,8 @@ async function bootGame(): Promise<void> {
     await runBootScreen();
   }
 
-  new Phaser.Game(createGameConfig(gameRoot));
+  const game = new Phaser.Game(createGameConfig(gameRoot));
+  syncViewportFrame(game);
 }
 
 void bootGame();

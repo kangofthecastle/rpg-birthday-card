@@ -251,6 +251,10 @@ export class LocationScene extends Phaser.Scene {
   private zonesFile?: CollisionZonesFile;
   private showColliderDebug = false;
   private debugMarkers = false;
+  // Per-map static camera zoom picked in applyCameraBounds so every map covers
+  // the fixed 1280x720 logical frame (no dead-space corner pinning). 1 for maps
+  // already >= the frame in both axes.
+  private cameraZoom = 1;
   private mapDims: MapDims = { width: 0, height: 0, tileSize: 64 };
   private spawnOverride?: { x: number; y: number };
   private autoStartActivityId?: string;
@@ -319,13 +323,14 @@ export class LocationScene extends Phaser.Scene {
 
     this.interactKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.E);
     this.promptText = this.add
-      .text(24, this.scale.height - 64, '', {
+      .text(this.fixedScreenX(24), this.fixedScreenY(this.scale.height - 64), '', {
         color: '#fff7e8',
         backgroundColor: '#1b1f1f',
         padding: { x: 12, y: 8 },
         fontSize: '18px',
       })
       .setScrollFactor(0)
+      .setScale(1 / this.cameraZoom)
       .setDepth(1000);
 
     if (this.arrivedViaEdge) {
@@ -623,26 +628,79 @@ export class LocationScene extends Phaser.Scene {
     tilemap: Phaser.Tilemaps.Tilemap,
     contentBounds: ScreenBounds | undefined,
   ): void {
+    let x = 0;
+    let y = 0;
+    let width = tilemap.widthInPixels;
+    let height = tilemap.heightInPixels;
+
     if (contentBounds && Number.isFinite(contentBounds.minX)) {
       const margin = 32;
-      this.cameras.main.setBounds(
-        Math.floor(contentBounds.minX - margin),
-        Math.floor(contentBounds.minY - margin),
-        Math.ceil(contentBounds.maxX - contentBounds.minX + margin * 2),
-        Math.ceil(contentBounds.maxY - contentBounds.minY + margin * 2),
+      x = Math.floor(contentBounds.minX - margin);
+      y = Math.floor(contentBounds.minY - margin);
+      width = Math.ceil(contentBounds.maxX - contentBounds.minX + margin * 2);
+      height = Math.ceil(contentBounds.maxY - contentBounds.minY + margin * 2);
+    } else if (this.getProjection().mode === 'flat') {
+      // Flat top-down: bounds are EXACTLY the map rect, so the ground fills the
+      // view edge-to-edge with no iso padding void when the camera hits a side.
+      // x/y/width/height already default to the map rect.
+    } else {
+      const isoBounds = this.getProjection().bounds(
+        tilemap.widthInPixels,
+        tilemap.heightInPixels,
       );
-      return;
+      width = isoBounds.maxX + 192;
+      height = isoBounds.maxY + 224;
     }
 
-    // Flat top-down: camera bounds are EXACTLY the map rect, so the ground fills
-    // the view edge-to-edge with no iso padding void when the camera hits a side.
-    if (this.getProjection().mode === 'flat') {
-      this.cameras.main.setBounds(0, 0, tilemap.widthInPixels, tilemap.heightInPixels);
-      return;
+    this.applyCoverBounds(x, y, width, height);
+  }
+
+  // Chooses a static zoom so the bounds cover the fixed logical frame, then sets
+  // both. Zoom = max(1, frameW/boundsW, frameH/boundsH) snapped UP to the nearest
+  // 0.25 (clean pixel scaling). With zoom >= cover, the on-screen world size
+  // (frame / zoom) is <= the bounds in the constraining axis, so Phaser's clamp
+  // scrolls/centers instead of pinning a small map to the top-left corner. Maps
+  // already >= the frame in both axes stay at zoom 1 and just scroll.
+  private applyCoverBounds(x: number, y: number, width: number, height: number): void {
+    const camera = this.cameras.main;
+    const frameWidth = camera.width;
+    const frameHeight = camera.height;
+
+    const needed = Math.max(1, frameWidth / width, frameHeight / height);
+    const zoom = Math.ceil(needed * 4) / 4;
+
+    // Safety centering: if a bound is still smaller than the on-screen world in
+    // some axis (rounding), pad it symmetrically so it centers rather than pins.
+    const viewWidth = frameWidth / zoom;
+    const viewHeight = frameHeight / zoom;
+    if (width < viewWidth) {
+      x -= Math.ceil((viewWidth - width) / 2);
+      width = Math.ceil(viewWidth);
+    }
+    if (height < viewHeight) {
+      y -= Math.ceil((viewHeight - height) / 2);
+      height = Math.ceil(viewHeight);
     }
 
-    const isoBounds = this.getProjection().bounds(tilemap.widthInPixels, tilemap.heightInPixels);
-    this.cameras.main.setBounds(0, 0, isoBounds.maxX + 192, isoBounds.maxY + 224);
+    camera.setZoom(zoom);
+    camera.setBounds(x, y, width, height);
+    this.cameraZoom = zoom;
+  }
+
+  // Maps a desired on-screen (camera-fixed) coordinate to the world coordinate a
+  // scrollFactor(0) object must sit at so that, after the camera's zoom-about-
+  // origin transform, its origin lands exactly at that screen point. Pair with
+  // setScale(1 / cameraZoom) to keep the object at its native pixel size.
+  private fixedScreenX(screenX: number): number {
+    const camera = this.cameras.main;
+    const anchor = camera.width * camera.originX;
+    return anchor + (screenX - anchor) / this.cameraZoom;
+  }
+
+  private fixedScreenY(screenY: number): number {
+    const camera = this.cameras.main;
+    const anchor = camera.height * camera.originY;
+    return anchor + (screenY - anchor) / this.cameraZoom;
   }
 
   // Dressed rooms hide the debug rects, so render a diegetic doormat + glow at
@@ -1534,7 +1592,9 @@ export class LocationScene extends Phaser.Scene {
       movementProjection: this.getProjection().movementOrigin,
     });
     this.cameras.main.startFollow(this.playerVisual, true, 0.12, 0.12);
-    this.cameras.main.setDeadzone(240, 180);
+    // Deadzone is world px; divide by zoom so it keeps its designed ON-SCREEN
+    // size (240x180) on zoomed-in small maps instead of feeling oversized.
+    this.cameras.main.setDeadzone(240 / this.cameraZoom, 180 / this.cameraZoom);
   }
 
   private createHud(): void {
@@ -1543,7 +1603,7 @@ export class LocationScene extends Phaser.Scene {
 
   private createLocationLabel(): void {
     this.add
-      .text(24, 24, this.location.title, {
+      .text(this.fixedScreenX(24), this.fixedScreenY(24), this.location.title, {
         color: '#fff7e8',
         backgroundColor: '#1b1f1f',
         padding: { x: 14, y: 10 },
@@ -1551,6 +1611,7 @@ export class LocationScene extends Phaser.Scene {
         fontStyle: '700',
       })
       .setScrollFactor(0)
+      .setScale(1 / this.cameraZoom)
       .setDepth(1000);
   }
 

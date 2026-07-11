@@ -10,8 +10,8 @@
   flex-direction: column;
   /* Near-fullscreen, mirroring RETAKE.EXE's .activity-panel--valorant-split so
    * the piece plays large instead of inheriting the generic modal width. */
-  width: min(1680px, calc(100vw - 8px));
-  max-height: calc(100vh - 8px);
+  width: min(1680px, calc(100% - 8px));
+  max-height: calc(100% - 8px);
   padding: clamp(8px, 1.2vw, 18px);
   overflow: auto;
   /* A faintly warmer panel body than the shared dark, echoing the lamplight. */
@@ -63,7 +63,7 @@
   /* 16/9 host, capped so the panel's title + caption + actions always fit — the
    * width of the panel drives it on wide viewports (like the valorant-split host),
    * with a little extra vertical headroom for the caption line above the canvas. */
-  max-height: min(calc(100vh - 200px), calc((100vw - 16px) * 0.5625));
+  max-height: min(calc(100% - 200px), calc((100% - 16px) * 0.5625));
   aspect-ratio: 16 / 9;
   place-items: stretch;
   overflow: hidden;

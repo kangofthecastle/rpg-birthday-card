@@ -777,8 +777,8 @@
           "id": 5,
           "name": "near-friendtwo-pc",
           "type": "spawn",
-          "x": 704,
-          "y": 432,
+          "x": 640,
+          "y": 470,
           "point": true
         }
       ]
@@ -808,8 +808,8 @@
           "id": 3,
           "name": "friend-b-host",
           "type": "activity",
-          "x": 640,
-          "y": 384,
+          "x": 576,
+          "y": 422,
           "width": 128,
           "height": 96
         },
@@ -817,8 +817,8 @@
           "id": 4,
           "name": "friend-b-easter-egg",
           "type": "easterEgg",
-          "x": 960,
-          "y": 384,
+          "x": 1106,
+          "y": 380,
           "width": 128,
           "height": 96
         },

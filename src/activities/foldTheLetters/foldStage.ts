@@ -215,12 +215,11 @@ const BOAT_DROP_MS = 1000;
 export const TRAY_ANCHORS = {
   /** Hull sits on the waterline. */
   hull: { x: 0, y: -16, w: 132, h: 44 },
-  /** Sail mounts on the hull's mast point. Seated DEEP so the baked-in mast's foot
-   * plants down INSIDE the hull's deck well (its opaque foot lands at local y≈-6,
-   * well below the horn lip at y≈-24) — not perched at the deck's edge with a gap.
-   * (Nudged 3px lower here so the base clearly reads as planted in the hull, not
-   * balanced on its near rim.) */
-  sail: { x: 2, y: -40, w: 76, h: 78 },
+  /** Sail mounts on the hull's mast point: the baked-in mast's foot lands right
+   * AT the near rim's crest — the highest seat where the foot still touches the
+   * hull silhouette (one more px up opens a sliver of sky under the foot and the
+   * sail reads as floating). Picked from a rendered y -40..-46 sweep. */
+  sail: { x: 2, y: -44, w: 76, h: 78 },
   /** Lantern hangs OFF the bow tip (left horn): positioned so the loop at the top
    * of lantern.png rests ON the bow point — as if the horn threads through the
    * handle — with the body hanging just below/outboard. Seated on the horn's

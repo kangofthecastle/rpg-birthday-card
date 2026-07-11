@@ -29,9 +29,16 @@ const DEFAULT_CALLBACKS: ViolinSceneCallbacks = {
   onCancel: () => undefined,
 };
 
-// Canvas matches the other activities (640x360, 16:9).
+// The scene is authored in this 640x360 logical space (16:9); the whole world is
+// rendered into a RENDER_SCALE-times larger backing buffer for crisp upscaling
+// (see violinActivity's game config + the camera zoom in create()). Every layout
+// constant below stays in this logical space — only the render is scaled.
 const CANVAS_WIDTH = 640;
 const CANVAS_HEIGHT = 360;
+
+// Backing buffer is 2x the logical scene, so text is authored at RENDER_SCALE
+// resolution to stay sharp under the matching camera zoom.
+const RENDER_SCALE = 2;
 
 // Optional drop-in backdrop art (a warm room / music-stand view). File-first:
 // if present it is used, otherwise a rich procedural dusk room is drawn.
@@ -52,7 +59,7 @@ const SHEET_WIDTH = 448;
 const SHEET_HEIGHT = 176;
 const SHEET_CX = 320;
 const SHEET_CY = 150;
-const SHEET_TILT = -0.017; // ~1° — the read of paper resting on a stand.
+const SHEET_TILT = 0; // Upright — the sheet reads straight on the stand.
 
 const STAFF_GAP = 16;
 const STAFF_STEP_PX = STAFF_GAP / 2;
@@ -152,6 +159,12 @@ export class ViolinScene extends Phaser.Scene {
 
   create(): void {
     this.cameras.main.setBackgroundColor('#161019');
+
+    // The game buffer is RENDER_SCALE times the logical scene. Zoom the camera to
+    // match and re-centre on the logical world's centre so the full 640x360 scene
+    // fills the sharper buffer — every per-frame Graphics pass then redraws at 2x.
+    this.cameras.main.setZoom(RENDER_SCALE);
+    this.cameras.main.centerOn(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
 
     this.generatePaperTexture();
     this.generateMoteTexture();
@@ -518,11 +531,11 @@ export class ViolinScene extends Phaser.Scene {
   private drawWindow(g: Phaser.GameObjects.Graphics): void {
     const { x, y, w, h } = WINDOW;
 
-    // Sill glow bleeding onto the wall around the frame.
-    for (let i = 4; i >= 1; i -= 1) {
-      g.fillStyle(0xffc98a, 0.03 + (4 - i) * 0.015);
-      g.fillEllipse(x + w / 2, y + h * 0.6, w * (0.9 + i * 0.5), h * (0.7 + i * 0.28));
-    }
+    // (No painted sill-glow halo here: the drop-in backdrop renders at 0.6 alpha
+    // OVER this baked room, so any bright baked shape beneath it bleeds through as
+    // a flat translucent oval — a "white disc" washing over the window. The window
+    // reads as lit from its own sky gradient + gold horizon below, and from the
+    // backdrop art's own glow, with no stamped ellipse.)
 
     // Outer wooden frame.
     g.fillStyle(0x3a2718, 1);
@@ -825,6 +838,7 @@ export class ViolinScene extends Phaser.Scene {
         fontFamily: 'Georgia, "Times New Roman", serif',
         fontSize: '12px',
         fontStyle: 'italic',
+        resolution: RENDER_SCALE,
       })
       .setOrigin(0.5, 0.5)
       .setAlpha(0.7);
@@ -957,6 +971,7 @@ export class ViolinScene extends Phaser.Scene {
           fontFamily: 'Georgia, "Times New Roman", serif',
           fontStyle: '700',
           fontSize: '13px',
+          resolution: RENDER_SCALE,
         })
         .setOrigin(0.5)
         .setVisible(false);
@@ -999,6 +1014,7 @@ export class ViolinScene extends Phaser.Scene {
         fontFamily: 'Georgia, serif',
         fontSize: '21px',
         fontStyle: 'italic',
+        resolution: RENDER_SCALE,
         stroke: '#160f18',
         strokeThickness: 4,
       })
@@ -1011,6 +1027,7 @@ export class ViolinScene extends Phaser.Scene {
         color: '#f0e2cf',
         fontFamily: 'Arial, sans-serif',
         fontSize: '13px',
+        resolution: RENDER_SCALE,
         stroke: '#160f18',
         strokeThickness: 3,
       })
@@ -1024,6 +1041,7 @@ export class ViolinScene extends Phaser.Scene {
         fontFamily: 'Georgia, serif',
         fontSize: '26px',
         fontStyle: 'italic',
+        resolution: RENDER_SCALE,
         stroke: '#160f18',
         strokeThickness: 5,
       })
@@ -1056,6 +1074,7 @@ export class ViolinScene extends Phaser.Scene {
           fontFamily: 'Georgia, serif',
           fontStyle: '700',
           fontSize: '16px',
+          resolution: RENDER_SCALE,
         })
         .setOrigin(0.5)
         .setDepth(31);
@@ -1065,6 +1084,7 @@ export class ViolinScene extends Phaser.Scene {
           color: '#c9b28a',
           fontFamily: 'Georgia, serif',
           fontSize: '10px',
+          resolution: RENDER_SCALE,
         })
         .setOrigin(0.5)
         .setDepth(31);

@@ -23,7 +23,11 @@ async function createDefaultViolinGame(
 
   const game = new Phaser.Game({
     backgroundColor: '#1c1622',
-    height: 360,
+    // The scene is authored in a 640x360 logical space but rendered into a 2x
+    // backing buffer (1280x720): the near-fullscreen panel then upscales a sharp
+    // buffer instead of a chunky 640-wide one. ViolinScene applies the matching
+    // camera zoom + text resolution; Scale.FIT fits the crisp buffer to the panel.
+    height: 720,
     parent,
     scale: {
       autoCenter: Phaser.Scale.CENTER_BOTH,
@@ -31,7 +35,7 @@ async function createDefaultViolinGame(
     },
     scene: new ViolinScene(callbacks),
     type: Phaser.AUTO,
-    width: 640,
+    width: 1280,
   });
 
   return {

@@ -2,12 +2,17 @@
  * the develop/photo activities' proportions, but with its own warm framing so
  * the dusk-room canvas sits inside a lamplit mat rather than a bare border. */
 
-.activity-panel--violin {
+/* Doubled class raises specificity so this beats the generic `.activity-panel`
+ * width from styles.css (that shared 560px cap loads after this module CSS and
+ * was silently shrinking the panel — the "tiny space" the owner saw). */
+.activity-panel.activity-panel--violin {
   display: flex;
   flex-direction: column;
-  width: min(1120px, calc(100vw - 4px));
-  max-height: calc(100vh - 4px);
-  padding: clamp(10px, 1.5vw, 22px);
+  /* Near-fullscreen, mirroring RETAKE.EXE's .activity-panel--valorant-split so
+   * the piece plays large instead of inheriting the generic modal width. */
+  width: min(1680px, calc(100vw - 8px));
+  max-height: calc(100vh - 8px);
+  padding: clamp(8px, 1.2vw, 18px);
   overflow: auto;
   /* A faintly warmer panel body than the shared dark, echoing the lamplight. */
   background:
@@ -55,7 +60,10 @@
   flex: 1 1 auto;
   width: 100%;
   min-height: 180px;
-  max-height: min(640px, calc(100vh - 150px));
+  /* 16/9 host, capped so the panel's title + caption + actions always fit — the
+   * width of the panel drives it on wide viewports (like the valorant-split host),
+   * with a little extra vertical headroom for the caption line above the canvas. */
+  max-height: min(calc(100vh - 200px), calc((100vw - 16px) * 0.5625));
   aspect-ratio: 16 / 9;
   place-items: stretch;
   overflow: hidden;

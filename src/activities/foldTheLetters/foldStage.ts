@@ -204,10 +204,22 @@ const BOAT_DROP_MS = 1000;
 export const TRAY_ANCHORS = {
   /** Hull sits on the waterline. */
   hull: { x: 0, y: -16, w: 132, h: 44 },
-  /** Sail mounts on the hull's mast point. */
-  sail: { x: 2, y: -58, w: 76, h: 78 },
-  /** Lantern hangs at the bow. */
-  lantern: { x: -52, y: -26, w: 30, h: 40 },
+  /** Sail mounts on the hull's mast point. Seated so the baked-in mast's foot
+   * plants DOWN into the hull's deck (its opaque foot lands at local y≈-15, just
+   * into the hull well at y≈-17) — not perched at horn-tip height with a gap. */
+  sail: { x: 2, y: -49, w: 76, h: 78 },
+  /** Lantern hangs OFF the bow tip (left horn), suspended out over the water on a
+   * little hook arm (drawn in drawBoatTray) — as the composed boat carries it in
+   * recipient-boat.png — rather than floating beside the hull. */
+  lantern: { x: -64, y: -10, w: 30, h: 40 },
+} as const;
+
+/** Where the lantern's hook arm springs from the hull (the left bow tip) and the
+ * mid rise of the hook, in the boat-tray's local frame. The arm ends at the
+ * lantern's top edge (derived from TRAY_ANCHORS.lantern). */
+const LANTERN_HANGER = {
+  bow: { x: -46, y: -21 },
+  rise: { x: -58, y: -30 },
 } as const;
 
 interface Point {
@@ -1779,6 +1791,21 @@ export class FoldStage {
     }
 
     if (this.assembled >= 3) {
+      // The hook arm: a little bracket from the bow tip out to the lantern's top,
+      // so the lantern reads as SUSPENDED off the bow (see recipient-boat.png) rather
+      // than floating beside the hull.
+      const lant = TRAY_ANCHORS.lantern;
+      ctx.save();
+      ctx.strokeStyle = 'rgba(66, 46, 28, 0.95)';
+      ctx.lineWidth = 2.5;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      ctx.moveTo(LANTERN_HANGER.bow.x, LANTERN_HANGER.bow.y);
+      ctx.lineTo(LANTERN_HANGER.rise.x, LANTERN_HANGER.rise.y);
+      ctx.lineTo(lant.x, lant.y - lant.h / 2 + 2);
+      ctx.stroke();
+      ctx.restore();
       this.drawPiece('lantern', TRAY_ANCHORS.lantern, () => {
         const glow = ctx.createRadialGradient(0, 0, 1, 0, 0, 22);
         glow.addColorStop(0, 'rgba(255, 226, 150, 0.95)');

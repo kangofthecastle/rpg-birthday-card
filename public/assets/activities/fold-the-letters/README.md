@@ -11,8 +11,8 @@ composites with the others; there is no single monolithic boat sprite.
 | Filename | What it is | Recommended source size | Composited size (px) | Anchor point |
 | --- | --- | --- | --- | --- |
 | `hull.png` | The boat hull (____'s letter), folded flat. Sits on the waterline. | 264×88 (2×) | 132×44 | tray `(0, −16)`, centred |
-| `sail.png` | The sail (____'s letter) on its mast. Mounts on the hull's mast point. | 152×156 (2×) | 76×78 | tray `(2, −58)`, centred |
-| `lantern.png` | The paper lantern (____'s sheet music), glowing. Hangs at the bow. | 60×80 (2×) | 30×40 | tray `(−52, −26)`, centred |
+| `sail.png` | The sail (____'s letter) on its mast. Its baked-in mast foot seats DOWN into the hull deck. | 152×156 (2×) | 76×78 | tray `(2, −49)`, centred |
+| `lantern.png` | The paper lantern (____'s sheet music), glowing. Hangs off the bow tip on a drawn hook arm. | 60×80 (2×) | 30×40 | tray `(−64, −10)`, centred |
 | `recipient-boat.png` | OPTIONAL. ____ sitting in the finished boat, used only in the sail-away cinematic as an overlay rider. | 240×180 | fits `.fold-sail__boat` (120×90) | rider slot |
 | `backdrop.png` | OPTIONAL. Full-canvas painted stage backdrop (twilight table + water). Drawn under everything, replacing the flat gradient; opaque. Its **waterline must sit at pixel y=704** (= logical y=352 = the tray waterline) so the boat floats on the paint. When present the tray's translucent navy water band is skipped. | 1280×800 (2×) | fills the 640×400 canvas | full canvas, `(0,0)` |
 

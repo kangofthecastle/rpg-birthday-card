@@ -443,11 +443,13 @@ function addDoormatAwakening(
   });
 }
 
-// A whisper of warm outside light bleeding in over the room's OPEN front edge
-// (the wall-less south side the doormat sits on): a soft, low-alpha gold band
-// hugging that edge and fading a short way into the floor, plus a couple of slow
-// faint motes rising off the threshold. Deliberately much quieter than the
-// window beams — a spill, not a shaft.
+// Warm outside light pouring in over the room's OPEN front edge (the wall-less
+// south side the doormat sits on): a gold band hugging that edge and reaching
+// well into the floor, a row of low light shafts bouncing up off the threshold
+// (short, soft, angled slightly inward — like light kicking up from a bright
+// outside), and drifting motes. Reads clearly as light through the open doorway,
+// but still sits below the window beams in the hierarchy: it has no direct sun
+// source, so no bright landing pools, and its shafts stay low and diffuse.
 function addDoorwayEdgeSpill(
   scene: Phaser.Scene,
   dressing: RoomDressing,
@@ -455,7 +457,7 @@ function addDoorwayEdgeSpill(
   origin: IsoOrigin,
   container: Phaser.GameObjects.Container,
 ): void {
-  const depth = 150; // how far the glow reaches into the room from the edge (map px)
+  const depth = 250; // how far the glow reaches into the room from the edge (map px)
   const band: PropColliderRect = {
     x: floor.x0,
     y: floor.y1 - depth,
@@ -463,13 +465,15 @@ function addDoorwayEdgeSpill(
     height: depth,
   };
 
+  const rng = mulberry32(fnv1a(`${dressing.tilesTextureKey}:doorway-spill`));
+
   const spillSrc = buildDoorwaySpillTexture(scene, dressing);
   const spill = warpTextureToFloorQuad(scene, spillSrc, `${spillSrc}-band`, band, origin, 0);
   if (spill) {
-    spill.setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.16);
+    spill.setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.46);
     scene.tweens.add({
       targets: spill,
-      alpha: { from: 0.1, to: 0.22 },
+      alpha: { from: 0.34, to: 0.56 },
       duration: 4200,
       yoyo: true,
       repeat: -1,
@@ -478,22 +482,56 @@ function addDoorwayEdgeSpill(
     container.add(spill);
   }
 
-  // A couple of faint, slow motes drifting up off the threshold.
+  // Low upward light shafts rising off the threshold, angled slightly toward the
+  // room center — the read of light bouncing up over the open sill. Short and
+  // soft (no bright core pool) so they stay under the window beams.
+  const midX = (floor.x0 + floor.x1) / 2;
+  const shaftCount = 5;
+  for (let i = 0; i < shaftCount; i += 1) {
+    const t = (i + 0.5) / shaftCount;
+    const fx = floor.x0 + (floor.x1 - floor.x0) * t + (rng() - 0.5) * 40;
+    const base = projectToIso(fx, floor.y1 - 6, origin);
+    const inward = fx < midX ? 1 : -1;
+    const height = 74 + rng() * 58;
+    const lean = (12 + rng() * 20) * inward; // horizontal drift toward center at the top
+    const wideHW = 30 + rng() * 16; // wide at the threshold base
+    const narrowHW = 8 + rng() * 8; // narrowing as it rises
+    const top: IsoPoint = { x: base.x + lean, y: base.y - height };
+
+    const shaft = scene.add.graphics().setBlendMode(Phaser.BlendModes.ADD);
+    shaft.fillStyle(0xffdf9c, 0.05);
+    shaft.fillPoints(toPhaserPoints(beamTrapezoid(top, base, narrowHW * 1.5, wideHW * 1.4)), true);
+    shaft.fillStyle(0xffe7b0, 0.08);
+    shaft.fillPoints(toPhaserPoints(beamTrapezoid(top, base, narrowHW, wideHW)), true);
+    shaft.fillStyle(0xfff1cf, 0.07);
+    shaft.fillPoints(toPhaserPoints(beamTrapezoid(top, base, narrowHW * 0.5, wideHW * 0.55)), true);
+    container.add(shaft);
+    scene.tweens.add({
+      targets: shaft,
+      alpha: { from: 0.68, to: 1 },
+      duration: 3400 + rng() * 1400,
+      delay: rng() * 1600,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+  }
+
+  // Motes drifting up off the threshold, brighter and more numerous than before.
   const moteKey = buildInteriorMoteTexture(scene, dressing);
-  const rng = mulberry32(fnv1a(`${dressing.tilesTextureKey}:doorway-spill`));
-  for (let i = 0; i < 3; i += 1) {
-    const fx = floor.x0 + (floor.x1 - floor.x0) * (0.3 + rng() * 0.4);
-    const fy = floor.y1 - 12 - rng() * 32;
+  for (let i = 0; i < 7; i += 1) {
+    const fx = floor.x0 + (floor.x1 - floor.x0) * (0.18 + rng() * 0.64);
+    const fy = floor.y1 - 12 - rng() * 44;
     const point = projectToIso(fx, fy, origin);
     const mote = scene.add
       .image(point.x, point.y, moteKey)
       .setBlendMode(Phaser.BlendModes.ADD)
-      .setScale(0.32 + rng() * 0.4)
+      .setScale(0.34 + rng() * 0.45)
       .setAlpha(0);
     container.add(mote);
     scene.tweens.add({
       targets: mote,
-      y: point.y - (22 + rng() * 30),
+      y: point.y - (26 + rng() * 34),
       duration: 7000 + rng() * 3000,
       yoyo: true,
       repeat: -1,
@@ -501,7 +539,7 @@ function addDoorwayEdgeSpill(
     });
     scene.tweens.add({
       targets: mote,
-      alpha: { from: 0.05, to: 0.2 + rng() * 0.12 },
+      alpha: { from: 0.08, to: 0.3 + rng() * 0.16 },
       duration: 2200 + rng() * 1500,
       hold: 400 + rng() * 600,
       delay: rng() * 2500,
@@ -534,8 +572,8 @@ function buildDoorwaySpillTexture(scene: Phaser.Scene, dressing: RoomDressing): 
   // open front edge — so brighten toward the bottom.
   const vertical = ctx.createLinearGradient(0, 0, 0, h);
   vertical.addColorStop(0, 'rgba(255,221,154,0)');
-  vertical.addColorStop(0.6, 'rgba(255,224,164,0.35)');
-  vertical.addColorStop(1, 'rgba(255,236,190,0.9)');
+  vertical.addColorStop(0.45, 'rgba(255,224,164,0.42)');
+  vertical.addColorStop(1, 'rgba(255,238,196,1)');
   ctx.fillStyle = vertical;
   ctx.fillRect(0, 0, w, h);
 

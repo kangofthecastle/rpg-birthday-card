@@ -83,23 +83,20 @@ describe('getRoomDressing', () => {
     }
   });
 
-  it('hangs multiple windows across both back walls, sheared to each wall', () => {
+  it('hangs both windows on the back-left wall, sheared to that wall', () => {
     const dressing = getRoomDressing('recipient-house')!;
     const windows = dressing.props.filter((p) => p.frame === 'window');
 
-    // More than one window (the owner asked for more light sources).
-    expect(windows.length).toBeGreaterThanOrEqual(3);
+    // Two windows, both light sources (the owner asked for more light).
+    expect(windows.length).toBe(2);
 
-    // Back-left (west) wall windows shear -0.5 like the original; back-right
-    // (north) wall windows shear +0.5 like the photo wall. At least one of each.
+    // Both hang on the back-left (west) wall and share its shear -0.5. The
+    // back-right/north wall window (shear +0.5) was removed — it never read
+    // right on that wall — so no window carries a positive shear.
     const leftWall = windows.filter((w) => w.wallShear === -0.5);
-    const rightWall = windows.filter((w) => w.wallShear === 0.5);
-    expect(leftWall.length).toBeGreaterThanOrEqual(1);
-    expect(rightWall.length).toBeGreaterThanOrEqual(1);
-
-    // A right-wall window shares the photo wall's shear (same wall band slope).
-    const photoWall = dressing.props.find((p) => p.frame === 'photoWall')!;
-    expect(rightWall[0]!.wallShear).toBe(photoWall.wallShear);
+    const rightWall = windows.filter((w) => (w.wallShear ?? 0) > 0);
+    expect(leftWall.length).toBe(2);
+    expect(rightWall.length).toBe(0);
 
     // Every window is wall decor: no footprint/collider, fixed depth behind the
     // billboards, matching the original window's non-awakened treatment.

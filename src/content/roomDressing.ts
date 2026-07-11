@@ -157,11 +157,12 @@ const RECIPIENT_HOUSE_DRESSING: RoomDressing = {
       fixedDepth: -30,
       note: 'round rug, room center',
     },
-    // Windows hung on the back walls. Each is a light source: the awakening
-    // renders a beam set streaming into the room from every 'window' placement.
-    // Wall decor only — no footprint/collider, fixedDepth behind the billboards.
-    // Left (west) wall uses shear -0.5; right (north) wall uses shear +0.5 to
-    // follow that wall's opposite slope (mirroring how photoWall hangs).
+    // Windows hung on the back-left (west) wall. Each is a light source: the
+    // awakening renders a beam set streaming into the room from every 'window'
+    // placement. Wall decor only — no footprint/collider, fixedDepth behind the
+    // billboards. Both use the west wall's shear -0.5. (A back-right/north wall
+    // window was tried at mapX 620 / shear +0.5 but never read right on that
+    // wall despite correct shear math, so it was removed.)
     {
       frame: 'window',
       mapX: 64,
@@ -185,18 +186,6 @@ const RECIPIENT_HOUSE_DRESSING: RoomDressing = {
       wallShear: -0.5,
       fixedDepth: -22,
       note: 'window on the back-left wall, high (between the corner plant and bed)',
-    },
-    {
-      frame: 'window',
-      mapX: 620,
-      mapY: 64,
-      scale: 0.52,
-      originX: 0.5,
-      originY: 1,
-      screenYRaise: 14,
-      wallShear: 0.5,
-      fixedDepth: -22,
-      note: 'window on the back-right wall, mid-wall (clear of the corner seam and the kitchen/photo wall)',
     },
     // Potted plants tucked in the corners.
     {

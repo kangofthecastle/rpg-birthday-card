@@ -13,6 +13,13 @@
 //   drag a prop       move it (screen->map via the inverse iso projection)
 //   arrow keys        nudge selected prop 1 map-px (Shift = 8)
 //   wheel / + / -     resize selected prop (heightRatio, or scale for flat props)
+//   wheel (no prop)   pan the camera (two-axis) — the room art (1408×1024) is
+//                     larger than the 1280×720 frame, so pan to reach every corner
+//   Space + drag      pan the camera (grab cursor); gated so it can't also start
+//                     a prop drag
+//   Delete/Backspace  remove the selected prop from the working layout (hidden +
+//                     excluded from the E export)
+//   Cmd/Ctrl + Z      undo the most recent removal
 //   E                 export props[] to console + clipboard (toolbar has a button)
 //   Esc               deselect
 
@@ -83,8 +90,19 @@ class DressEditor {
   private grabDX = 0;
   private grabDY = 0;
 
+  // Camera panning (Space+drag / wheel-when-nothing-selected). Space gates the
+  // drag so a pan can never simultaneously start a prop drag.
+  private spaceDown = false;
+  private panning = false;
+
+  // Removed props, newest last, each with the entries[] index it was pulled
+  // from so Cmd/Ctrl+Z can splice it back into place. Removed props are hidden
+  // and excluded from the E export.
+  private readonly removed: { index: number; entry: PropEntry }[] = [];
+
   private panel!: HTMLElement;
   private readoutEl!: HTMLElement;
+  private removedCountEl!: HTMLElement;
   private toastEl!: HTMLElement;
 
   constructor(scene: Phaser.Scene, options: DressEditorOptions) {
@@ -105,11 +123,16 @@ class DressEditor {
 
     this.graphics = scene.add.graphics().setDepth(OVERLAY_DEPTH);
 
+    // Detach camera follow so our panning isn't yanked back to the frozen
+    // player each frame. Phaser still clamps scroll to the camera's setBounds().
+    scene.cameras.main.stopFollow();
+
     options.setPlayerFrozen(true);
 
     this.buildPanel();
     this.registerInput();
     this.updateReadout();
+    this.updateRemovedCount();
 
     scene.events.on(Phaser.Scenes.Events.UPDATE, this.redraw, this);
     scene.events.once(Phaser.Scenes.Events.SHUTDOWN, this.destroy, this);
@@ -127,10 +150,18 @@ class DressEditor {
     const kb = this.scene.input.keyboard;
     if (kb) {
       kb.on('keydown', this.onKeyDown, this);
+      kb.on('keyup', this.onKeyUp, this);
     }
   }
 
   private onPointerDown(pointer: Phaser.Input.Pointer): void {
+    // Space-drag pans instead of touching props (gate: no prop drag can start).
+    if (this.spaceDown) {
+      this.panning = true;
+      this.updateCursor();
+      return;
+    }
+
     const hit = this.hitProp(pointer.worldX, pointer.worldY);
     if (hit < 0) {
       this.selected = -1;
@@ -149,6 +180,12 @@ class DressEditor {
   }
 
   private onPointerMove(pointer: Phaser.Input.Pointer): void {
+    if (this.panning && pointer.isDown) {
+      const cam = this.scene.cameras.main;
+      cam.scrollX -= (pointer.x - pointer.prevPosition.x) / cam.zoom;
+      cam.scrollY -= (pointer.y - pointer.prevPosition.y) / cam.zoom;
+      return;
+    }
     if (!this.dragging || !pointer.isDown || this.selected < 0) {
       return;
     }
@@ -162,16 +199,35 @@ class DressEditor {
 
   private onPointerUp(): void {
     this.dragging = false;
+    this.panning = false;
+    this.updateCursor();
   }
 
-  private onWheel(_pointer: Phaser.Input.Pointer, _over: unknown, _dx: number, dy: number): void {
+  private onWheel(_pointer: Phaser.Input.Pointer, _over: unknown, dx: number, dy: number): void {
+    // With a prop selected, the wheel resizes it (unchanged). With nothing
+    // selected, it pans the camera on both axes; Phaser clamps to setBounds().
     if (this.selected < 0) {
+      const cam = this.scene.cameras.main;
+      cam.scrollX += dx / cam.zoom;
+      cam.scrollY += dy / cam.zoom;
       return;
     }
     this.resizeSelected(dy < 0 ? 1 : -1);
   }
 
   private onKeyDown(event: KeyboardEvent): void {
+    if (event.code === 'Space') {
+      // Prevent the page from scrolling while Space is the pan modifier.
+      event.preventDefault();
+      this.spaceDown = true;
+      this.updateCursor();
+      return;
+    }
+    if ((event.metaKey || event.ctrlKey) && event.code === 'KeyZ') {
+      event.preventDefault();
+      this.undoRemove();
+      return;
+    }
     if (event.code === 'KeyE') {
       void this.exportProps();
       return;
@@ -179,6 +235,11 @@ class DressEditor {
     if (event.code === 'Escape') {
       this.selected = -1;
       this.updateReadout();
+      return;
+    }
+    if (event.code === 'Delete' || event.code === 'Backspace') {
+      event.preventDefault();
+      this.removeSelected();
       return;
     }
     if (this.selected < 0) {
@@ -221,7 +282,54 @@ class DressEditor {
     this.updateReadout();
   }
 
+  private onKeyUp(event: KeyboardEvent): void {
+    if (event.code === 'Space') {
+      this.spaceDown = false;
+      this.panning = false;
+      this.updateCursor();
+    }
+  }
+
   // --- editing helpers -----------------------------------------------------
+
+  // Remove the selected prop: hide its sprite and pull it from entries[] so the
+  // E export omits it. Pushed onto the undo stack with its index for Cmd/Ctrl+Z.
+  private removeSelected(): void {
+    if (this.selected < 0) {
+      return;
+    }
+    const index = this.selected;
+    const [entry] = this.entries.splice(index, 1);
+    entry.image.setVisible(false);
+    this.removed.push({ index, entry });
+    this.selected = -1;
+    this.updateRemovedCount();
+    this.updateReadout();
+    this.toast(`Removed ${entry.placement.frame} — Cmd/Ctrl+Z to undo`);
+  }
+
+  private undoRemove(): void {
+    const last = this.removed.pop();
+    if (!last) {
+      this.toast('Nothing to undo');
+      return;
+    }
+    const index = Math.min(last.index, this.entries.length);
+    this.entries.splice(index, 0, last.entry);
+    last.entry.image.setVisible(true);
+    this.selected = index;
+    this.updateRemovedCount();
+    this.updateReadout();
+    this.toast(`Restored ${last.entry.placement.frame}`);
+  }
+
+  private updateCursor(): void {
+    const canvas = this.scene.game.canvas;
+    if (!canvas) {
+      return;
+    }
+    canvas.style.cursor = this.panning ? 'grabbing' : this.spaceDown ? 'grab' : '';
+  }
 
   private resizeSelected(dir: number): void {
     const placement = this.entries[this.selected].placement;
@@ -299,6 +407,9 @@ class DressEditor {
       .dress-editor-panel h4{margin:0 0 6px;font-size:12px;letter-spacing:.03em}
       .dress-editor-panel .dress-editor-readout{font:500 12px/1.5 ui-monospace,
         Menlo,monospace;white-space:pre;color:#c7f9e5;margin:4px 0 8px}
+      .dress-editor-panel .dress-editor-removed{color:#fca5a5;font-weight:600;
+        font-size:11px;margin:0 0 6px;min-height:0}
+      .dress-editor-panel .dress-editor-removed:empty{display:none}
       .dress-editor-panel .dress-editor-hint{opacity:.7;font-weight:500;
         font-size:11px;max-width:240px}
       .dress-editor-panel button{font:inherit;cursor:pointer;color:#f5f3ff;
@@ -322,17 +433,22 @@ class DressEditor {
     this.readoutEl = document.createElement('div');
     this.readoutEl.className = 'dress-editor-readout';
 
+    this.removedCountEl = document.createElement('div');
+    this.removedCountEl.className = 'dress-editor-removed';
+
     const hint = document.createElement('div');
     hint.className = 'dress-editor-hint';
     hint.textContent =
-      'Drag a prop to move · arrows nudge 1px (Shift 8) · wheel or +/- resize · E exports · Esc deselects';
+      'Drag a prop to move · arrows nudge 1px (Shift 8) · wheel or +/- resize a selected prop · ' +
+      'pan: Space-drag or wheel with nothing selected · Del/Backspace removes · Cmd/Ctrl+Z undo · ' +
+      'E exports · Esc deselects';
 
     const exportBtn = document.createElement('button');
     exportBtn.type = 'button';
     exportBtn.textContent = 'Export props[] (E)';
     exportBtn.addEventListener('click', () => void this.exportProps());
 
-    panel.append(title, this.readoutEl, hint, exportBtn);
+    panel.append(title, this.readoutEl, this.removedCountEl, hint, exportBtn);
     document.body.appendChild(panel);
     this.panel = panel;
 
@@ -352,6 +468,14 @@ class DressEditor {
         ? `heightRatio ${p.heightRatio}`
         : `scale ${p.scale ?? 1}`;
     this.readoutEl.textContent = `${p.frame}\nmapX ${p.mapX}  mapY ${p.mapY}\n${size}`;
+  }
+
+  private updateRemovedCount(): void {
+    if (!this.removedCountEl) {
+      return;
+    }
+    const n = this.removed.length;
+    this.removedCountEl.textContent = n > 0 ? `⚠ ${n} prop${n === 1 ? '' : 's'} removed (excluded from export)` : '';
   }
 
   private toast(text: string): void {
@@ -391,6 +515,10 @@ class DressEditor {
     input.off('pointerup', this.onPointerUp, this);
     input.off('wheel', this.onWheel, this);
     this.scene.input.keyboard?.off('keydown', this.onKeyDown, this);
+    this.scene.input.keyboard?.off('keyup', this.onKeyUp, this);
+    if (this.scene.game.canvas) {
+      this.scene.game.canvas.style.cursor = '';
+    }
     this.graphics.destroy();
     this.panel?.remove();
     this.toastEl?.remove();

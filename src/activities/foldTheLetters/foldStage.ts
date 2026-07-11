@@ -216,15 +216,18 @@ export const TRAY_ANCHORS = {
   /** Hull sits on the waterline. */
   hull: { x: 0, y: -16, w: 132, h: 44 },
   /** Sail mounts on the hull's mast point. Seated DEEP so the baked-in mast's foot
-   * plants down INSIDE the hull's deck well (its opaque foot lands at local y≈-9,
-   * well below the horn lip at y≈-24) — not perched at the deck's edge with a gap. */
-  sail: { x: 2, y: -43, w: 76, h: 78 },
+   * plants down INSIDE the hull's deck well (its opaque foot lands at local y≈-6,
+   * well below the horn lip at y≈-24) — not perched at the deck's edge with a gap.
+   * (Nudged 3px lower here so the base clearly reads as planted in the hull, not
+   * balanced on its near rim.) */
+  sail: { x: 2, y: -40, w: 76, h: 78 },
   /** Lantern hangs OFF the bow tip (left horn): positioned so the loop at the top
    * of lantern.png rests ON the bow point — as if the horn threads through the
    * handle — with the body hanging just below/outboard. Seated on the horn's
    * VISIBLE point (the tip tapers to a faint pixel, so the loop sits a touch inboard
-   * of the geometric apex to read as threaded); no drawn hook arm. */
-  lantern: { x: -43, y: -15, w: 30, h: 40 },
+   * of the geometric apex to read as threaded); no drawn hook arm. Nudged 4px
+   * outboard (left) so the lantern hangs clear off the bow instead of crowding it. */
+  lantern: { x: -47, y: -15, w: 30, h: 40 },
 } as const;
 
 interface Point {

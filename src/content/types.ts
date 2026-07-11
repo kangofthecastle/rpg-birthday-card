@@ -84,6 +84,14 @@ interface BaseLocationInteraction {
    * ordinary dialogue behaviour. Used by ____'s room photo wall.
    */
   readonly photoWallAfterEnding?: boolean;
+  /**
+   * The terminal ending beat: this interaction's dialogue IS the final
+   * conversation on the galaxy water (____ ↔ ____). When it closes, the scene
+   * runs the ending's tail — the two short final letters, then the persistent
+   * letters screen — and marks the ending complete. Used by the ____ NPC at
+   * final-spot.
+   */
+  readonly endingConversation?: boolean;
 }
 
 export interface ActivityLocationInteraction extends BaseLocationInteraction {

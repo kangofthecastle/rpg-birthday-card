@@ -20,6 +20,15 @@ import {
 } from '../content/outdoorScenery';
 import { DOORMAT_DROP_KEY } from '../game/roomRenderer';
 import { isImageUrl } from '../game/assetProbe';
+import {
+  FRIEND_TWO_SPRITE,
+  ENDING_WATER_KEY,
+  ENDING_WATER_URL,
+  GALAXY_GROUND_KEY,
+  GALAXY_GROUND_URL,
+  SHORE_WATER_KEY,
+  SHORE_WATER_URL,
+} from '../content/galaxyScene';
 
 const DOORMAT_DROP_URL = '/assets/doormat.png';
 
@@ -48,6 +57,15 @@ export class BootScene extends Phaser.Scene {
       frameHeight: 64,
     });
     this.load.image('recipient-room-props', '/assets/props/recipient-room-props.png');
+
+    // ____, the NPC who waits at the galaxy water for the final conversation.
+    this.load.spritesheet(FRIEND_TWO_SPRITE.key, FRIEND_TWO_SPRITE.url, {
+      frameWidth: FRIEND_TWO_SPRITE.frameWidth,
+      frameHeight: FRIEND_TWO_SPRITE.frameHeight,
+    });
+
+    // The galaxy water base, reused as the composed final-spot ground texture.
+    this.load.image(ENDING_WATER_KEY, ENDING_WATER_URL);
   }
 
   create(): void {
@@ -64,11 +82,13 @@ export class BootScene extends Phaser.Scene {
   // keys. Absent files are silently skipped; downstream renderers fall back to
   // their procedural textures when a key is missing.
   private async loadOptionalDropIns(): Promise<void> {
-    const [hasTileset, hasDoormat] = await Promise.all([
+    const [hasTileset, hasDoormat, hasGalaxyGround, hasShoreWater] = await Promise.all([
       isImageUrl(GROUND_TILESET_URL),
       isImageUrl(DOORMAT_DROP_URL),
+      isImageUrl(GALAXY_GROUND_URL),
+      isImageUrl(SHORE_WATER_URL),
     ]);
-    if (!hasTileset && !hasDoormat) {
+    if (!hasTileset && !hasDoormat && !hasGalaxyGround && !hasShoreWater) {
       return;
     }
     await new Promise<void>((resolve) => {
@@ -80,6 +100,14 @@ export class BootScene extends Phaser.Scene {
       }
       if (hasDoormat) {
         this.load.image(DOORMAT_DROP_KEY, DOORMAT_DROP_URL);
+      }
+      // Optional full-bleed galaxy ground override (replaces the composed water).
+      if (hasGalaxyGround) {
+        this.load.image(GALAXY_GROUND_KEY, GALAXY_GROUND_URL);
+      }
+      // Optional tileable shore-water band texture for the clearing's shore.
+      if (hasShoreWater) {
+        this.load.image(SHORE_WATER_KEY, SHORE_WATER_URL);
       }
       this.load.once(Phaser.Loader.Events.COMPLETE, () => resolve());
       this.load.start();

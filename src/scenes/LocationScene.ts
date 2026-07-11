@@ -1,6 +1,15 @@
 import Phaser from 'phaser';
 import { getActivity } from '../activities/activityRegistry';
-import { ENDING_KEEPSAKE_ID } from '../activities/finalKeepsake/endingModel';
+import {
+  ENDING_KEEPSAKE_ID,
+  FINAL_ENDING_LETTERS,
+} from '../activities/finalKeepsake/endingModel';
+import {
+  ENDING_WATER_KEY,
+  GALAXY_GROUND_KEY,
+  SHORE_WATER_KEY,
+  FRIEND_TWO_SPRITE,
+} from '../content/galaxyScene';
 import {
   RECIPIENT_ANIMATION_SOURCE_FACING,
   RECIPIENT_FLIP_X_BY_FACING,
@@ -73,6 +82,7 @@ import { renderCollectionPanel } from '../ui/collectionPanel';
 import { showDialogue } from '../ui/dialogueBox';
 import { clearUiRoot, getUiRoot } from '../ui/domRoot';
 import { showLetterModal } from '../ui/letterModal';
+import { showLettersScreen } from '../ui/lettersScreen';
 import { showPhotoWall } from '../ui/photoWall';
 import { fnv1a, mulberry32 } from '../game/rng';
 import { SceneKeys } from './sceneKeys';
@@ -200,7 +210,7 @@ const MUSIC_BY_LOCATION_ID: Readonly<Record<string, MusicKey>> = {
   clearing: 'music-home',
   'friend-a': 'music-home',
   'friend-b': 'music-home',
-  'final-spot': 'music-path',
+  'final-spot': 'music-ending',
 };
 
 const ACTIVITY_MUSIC_BY_ID: Readonly<Record<string, MusicKey | undefined>> = {
@@ -300,6 +310,7 @@ export class LocationScene extends Phaser.Scene {
     this.createLocationLabel();
     this.applyWarmLightingTint();
     this.applyOutdoorAwakening();
+    this.createGalaxyScenery();
     // Statically awaken a dressed interior already entered post-violin (later
     // room entries); the completion seam applies it dynamically the first time.
     this.applyInteriorAwakening({ animate: false });
@@ -561,6 +572,11 @@ export class LocationScene extends Phaser.Scene {
       this.propColliders = this.zonesFile
         ? this.rasterizeZones(this.zonesFile)
         : [...rendered.colliders];
+    } else if (this.location.id === 'final-spot') {
+      // The galaxy place: no grass, no hedges — the ground IS the ocean-galaxy
+      // reflection, with soft darkness closing every edge.
+      this.cameras.main.setBackgroundColor('#070512');
+      this.createGalaxyGround(tilemap);
     } else if (this.getProjection().mode === 'flat') {
       const palette = getOutdoorPalette(this.location.id);
       // Full-bleed grass: let any overscan blend with the ground rather than a
@@ -1072,27 +1088,37 @@ export class LocationScene extends Phaser.Scene {
     const bandHeight = tile * 2;
     const top = height - bandHeight;
 
-    const water = this.add.graphics().setDepth(-17);
-    // Wet sand / shoreline seam.
-    water.fillStyle(0x2e2f3a, 1);
-    water.fillRect(0, top - tile * 0.35, width, tile * 0.4);
-    // Deep water, darkening toward the edge.
-    water.fillStyle(0x12233a, 1);
-    water.fillRect(0, top, width, bandHeight);
-    water.fillStyle(0x0b1626, 1);
-    water.fillRect(0, top + bandHeight * 0.55, width, bandHeight * 0.45);
+    // File-first: when the tileable shore-water band art (512×128) dropped in,
+    // tile it across the band (its 128px height matches the 2-tile band exactly),
+    // with the awakened-glow effects layered on top. Procedural water otherwise.
+    if (this.textures.exists(SHORE_WATER_KEY)) {
+      this.add
+        .tileSprite(0, top, width, bandHeight, SHORE_WATER_KEY)
+        .setOrigin(0, 0)
+        .setDepth(-17);
+    } else {
+      const water = this.add.graphics().setDepth(-17);
+      // Wet sand / shoreline seam.
+      water.fillStyle(0x2e2f3a, 1);
+      water.fillRect(0, top - tile * 0.35, width, tile * 0.4);
+      // Deep water, darkening toward the edge.
+      water.fillStyle(0x12233a, 1);
+      water.fillRect(0, top, width, bandHeight);
+      water.fillStyle(0x0b1626, 1);
+      water.fillRect(0, top + bandHeight * 0.55, width, bandHeight * 0.45);
 
-    // Gentle ripple striations.
-    const rippleColor = awakened ? 0x8fd0e6 : 0x35506a;
-    water.lineStyle(2, rippleColor, awakened ? 0.5 : 0.32);
-    for (let i = 0; i < 5; i += 1) {
-      const y = top + (bandHeight * (i + 0.5)) / 5;
-      water.beginPath();
-      water.moveTo(0, y);
-      for (let x = 0; x <= width; x += tile) {
-        water.lineTo(x, y + Math.sin((x / width) * Math.PI * 6 + i) * 3);
+      // Gentle ripple striations.
+      const rippleColor = awakened ? 0x8fd0e6 : 0x35506a;
+      water.lineStyle(2, rippleColor, awakened ? 0.5 : 0.32);
+      for (let i = 0; i < 5; i += 1) {
+        const y = top + (bandHeight * (i + 0.5)) / 5;
+        water.beginPath();
+        water.moveTo(0, y);
+        for (let x = 0; x <= width; x += tile) {
+          water.lineTo(x, y + Math.sin((x / width) * Math.PI * 6 + i) * 3);
+        }
+        water.strokePath();
       }
-      water.strokePath();
     }
 
     if (!awakened) {
@@ -1112,6 +1138,201 @@ export class LocationScene extends Phaser.Scene {
       yoyo: true,
       repeat: -1,
       ease: 'Sine.easeInOut',
+    });
+  }
+
+  // The galaxy place's ground: the ocean-galaxy reflection you stand ON. A
+  // file-first painted override (galaxy-ground.png) replaces it whole; otherwise
+  // it is COMPOSED from the existing ending-water art (tiled/scaled and baked to a
+  // RenderTexture like the outdoor ground) with drifting light-pools, a code-drawn
+  // star shimmer, and soft darkness closing every edge.
+  private createGalaxyGround(tilemap: Phaser.Tilemaps.Tilemap): void {
+    const width = tilemap.widthInPixels;
+    const height = tilemap.heightInPixels;
+
+    if (this.textures.exists(GALAXY_GROUND_KEY)) {
+      this.add
+        .image(0, 0, GALAXY_GROUND_KEY)
+        .setOrigin(0, 0)
+        .setDepth(-20)
+        .setDisplaySize(width, height);
+    } else {
+      this.composeGalaxyGround(width, height);
+    }
+
+    this.addGalaxyShimmer(width, height);
+    this.addGalaxyEdgeVignette(width, height);
+  }
+
+  // Bakes the starlit-water art (1280×360) tiled to fill the map into a GPU
+  // RenderTexture, then floats a few slow galaxy-palette light-pools over it.
+  private composeGalaxyGround(width: number, height: number): void {
+    const rt = this.add.renderTexture(0, 0, width, height).setOrigin(0, 0).setDepth(-20);
+    const base = this.make.graphics({}, false);
+    base.fillStyle(0x0a1226, 1);
+    base.fillRect(0, 0, width, height);
+    rt.draw(base);
+    base.destroy();
+
+    if (this.textures.exists(ENDING_WATER_KEY)) {
+      const source = this.textures.get(ENDING_WATER_KEY).getSourceImage();
+      const drawH = (source.height / source.width) * width;
+      const temp = this.add.image(0, 0, ENDING_WATER_KEY).setOrigin(0, 0).setVisible(false);
+      temp.setDisplaySize(width, drawH);
+      for (let y = -drawH * 0.5; y < height; y += drawH) {
+        rt.draw(temp, 0, y);
+      }
+      temp.destroy();
+    }
+
+    this.createMoteTexture();
+    const pools: ReadonlyArray<{ x: number; y: number; tint: number; alpha: number; ms: number }> = [
+      { x: width * 0.32, y: height * 0.42, tint: 0x8b5cf6, alpha: 0.16, ms: 7200 },
+      { x: width * 0.66, y: height * 0.6, tint: 0x3b6fd4, alpha: 0.14, ms: 8600 },
+      { x: width * 0.5, y: height * 0.82, tint: 0xffcf7a, alpha: 0.1, ms: 6400 },
+    ];
+    for (const pool of pools) {
+      const img = this.add
+        .image(pool.x, pool.y, 'awaken-mote')
+        .setDepth(-19)
+        .setScale(26)
+        .setTint(pool.tint)
+        .setAlpha(pool.alpha)
+        .setBlendMode(Phaser.BlendModes.ADD);
+      this.tweens.add({
+        targets: img,
+        x: pool.x + width * 0.05,
+        alpha: { from: pool.alpha * 0.65, to: pool.alpha },
+        duration: pool.ms,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+      });
+    }
+  }
+
+  // A seeded field of twinkling stars across the water — the reflection shimmer.
+  private addGalaxyShimmer(width: number, height: number): void {
+    this.createStarTexture();
+    const rng = mulberry32(fnv1a('final-spot:stars'));
+    const tints = [0xffffff, 0xfff2c8, 0xbfa8ff, 0x8fd0ff];
+    for (let i = 0; i < 74; i += 1) {
+      const x = rng() * width;
+      const y = rng() * height;
+      const star = this.add
+        .image(x, y, 'galaxy-star')
+        .setDepth(-18)
+        .setScale(0.4 + rng() * 1)
+        .setTint(tints[Math.floor(rng() * tints.length)] ?? 0xffffff)
+        .setAlpha(0)
+        .setBlendMode(Phaser.BlendModes.ADD);
+      this.tweens.add({
+        targets: star,
+        alpha: { from: 0.15, to: 0.65 + rng() * 0.3 },
+        duration: 900 + rng() * 1600,
+        yoyo: true,
+        repeat: -1,
+        hold: rng() * 700,
+        repeatDelay: rng() * 1200,
+        delay: rng() * 1800,
+        ease: 'Sine.easeInOut',
+      });
+    }
+  }
+
+  private createStarTexture(): void {
+    if (this.textures.exists('galaxy-star')) {
+      return;
+    }
+    const graphics = this.add.graphics();
+    graphics.fillStyle(0xffffff, 1);
+    graphics.fillCircle(4, 4, 1.4);
+    graphics.fillStyle(0xffffff, 0.4);
+    graphics.fillCircle(4, 4, 3.4);
+    graphics.generateTexture('galaxy-star', 8, 8);
+    graphics.destroy();
+  }
+
+  // Soft darkness closing every edge of the galaxy water — a radial vignette so
+  // the play space fades into the dark rather than hitting a hard border.
+  private addGalaxyEdgeVignette(width: number, height: number): void {
+    const key = 'galaxy-vignette';
+    if (!this.textures.exists(key)) {
+      const canvas = this.textures.createCanvas(key, width, height);
+      const ctx = canvas?.getContext();
+      if (canvas && ctx) {
+        const gradient = ctx.createRadialGradient(
+          width / 2,
+          height / 2,
+          Math.min(width, height) * 0.22,
+          width / 2,
+          height / 2,
+          Math.max(width, height) * 0.62,
+        );
+        gradient.addColorStop(0, 'rgba(6, 4, 16, 0)');
+        gradient.addColorStop(0.7, 'rgba(6, 4, 16, 0.35)');
+        gradient.addColorStop(1, 'rgba(3, 2, 10, 0.95)');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, width, height);
+        canvas.refresh();
+      }
+    }
+    this.add.image(0, 0, key).setOrigin(0, 0).setDepth(-5);
+  }
+
+  // ____, waiting at the warm glow in the centre of the galaxy water for the
+  // final conversation. He idles in place (facing down, toward the path ____
+  // climbs). A soft warm pool marks him — the one warm point in the dark.
+  private createGalaxyScenery(): void {
+    if (this.location.id !== 'final-spot') {
+      return;
+    }
+    this.createMoteTexture();
+    const pos = { x: 704, y: 464 };
+
+    const glow = this.add
+      .image(pos.x, pos.y + 6, 'awaken-mote')
+      .setDepth(pos.y - 2)
+      .setScale(11)
+      .setTint(0xffcf8a)
+      .setAlpha(0.5)
+      .setBlendMode(Phaser.BlendModes.ADD);
+    this.tweens.add({
+      targets: glow,
+      alpha: { from: 0.38, to: 0.6 },
+      scale: { from: 10.4, to: 11.6 },
+      duration: 2600,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+
+    this.createFriendTwoAnimation();
+    const friendtwo = this.add
+      .sprite(pos.x, pos.y, FRIEND_TWO_SPRITE.key, FRIEND_TWO_SPRITE.idleDownStartFrame)
+      .setOrigin(FRIEND_TWO_SPRITE.origin.x, FRIEND_TWO_SPRITE.origin.y)
+      .setScale(FRIEND_TWO_SPRITE.scale)
+      .setDepth(pos.y + 4);
+    if (this.anims.exists(FRIEND_TWO_SPRITE.idleAnimationKey)) {
+      friendtwo.play(FRIEND_TWO_SPRITE.idleAnimationKey);
+    }
+  }
+
+  private createFriendTwoAnimation(): void {
+    if (
+      this.anims.exists(FRIEND_TWO_SPRITE.idleAnimationKey) ||
+      !this.textures.exists(FRIEND_TWO_SPRITE.key)
+    ) {
+      return;
+    }
+    this.anims.create({
+      key: FRIEND_TWO_SPRITE.idleAnimationKey,
+      frames: this.anims.generateFrameNumbers(FRIEND_TWO_SPRITE.key, {
+        start: FRIEND_TWO_SPRITE.idleDownStartFrame,
+        end: FRIEND_TWO_SPRITE.idleDownStartFrame + FRIEND_TWO_SPRITE.idleDownFrameCount - 1,
+      }),
+      frameRate: FRIEND_TWO_SPRITE.idleFrameRate,
+      repeat: -1,
     });
   }
 
@@ -1360,7 +1581,8 @@ export class LocationScene extends Phaser.Scene {
   private createWorldMarkers(): void {
     // Dressed rooms show art props instead of the debug interact rects. Pass
     // ?dressDebug=1 (or ?editZones=1) to overlay the rects again for alignment.
-    if (this.dressing && !this.showColliderDebug) {
+    // The galaxy final-spot is likewise "dressed": ____'s sprite IS the marker.
+    if ((this.dressing || this.location.id === 'final-spot') && !this.showColliderDebug) {
       return;
     }
 
@@ -1794,9 +2016,51 @@ export class LocationScene extends Phaser.Scene {
       await this.pauseForDialogue(interaction.dialogue);
     }
 
+    // The terminal ending beat: the conversation just closed → the two short
+    // final letters, then the persistent letters screen. The ending completes here.
+    if (interaction.endingConversation) {
+      await this.runTerminalEnding();
+      return;
+    }
+
     if (interaction.kind === 'activity') {
       await this.startActivity(interaction.activityId);
     }
+  }
+
+  // The ending's tail, once the galaxy conversation with ____ closes. Freezes
+  // the live scene and releases key capture so keys held under the (non-capturing)
+  // overlays can't drive the player, shows the two short final letters over the
+  // galaxy, marks the ending complete, then sleeps the scene beneath the
+  // persistent letters screen (whose "go home" restarts the world).
+  private async runTerminalEnding(): Promise<void> {
+    this.canMove = false;
+    this.input.keyboard?.disableGlobalCapture();
+
+    for (const letter of FINAL_ENDING_LETTERS) {
+      await showLetterModal(letter as readonly DialogueLine[]);
+    }
+
+    this.state = markEndingCompleted(this.state);
+    this.registry.set('runState', this.state);
+
+    this.scene.sleep();
+    showLettersScreen({ host: getUiRoot(), fadeIn: true, onGoHome: () => this.goHome() });
+  }
+
+  // Cross-fades the ending transition's held galaxy frame out to reveal the live,
+  // playable galaxy scene beneath, then hands ____ control. Movement is frozen
+  // until the frame is fully gone, so no input reaches the scene mid-reveal.
+  private async revealGalaxyArrival(overlayMount: HTMLElement): Promise<void> {
+    const testMode = new URLSearchParams(window.location.search).get('testMode') === '1';
+    const fadeMs = testMode ? 40 : 1500;
+    overlayMount.style.pointerEvents = 'none';
+    overlayMount.style.transition = `opacity ${fadeMs}ms ease`;
+    void overlayMount.offsetWidth;
+    overlayMount.style.opacity = '0';
+    await new Promise<void>((resolve) => window.setTimeout(resolve, fadeMs));
+    overlayMount.remove();
+    this.canMove = true;
   }
 
   private async pauseForDialogue(lines: readonly DialogueLine[]): Promise<void> {
@@ -1852,6 +2116,19 @@ export class LocationScene extends Phaser.Scene {
         this.canMove = true;
       },
       onComplete: async (completion) => {
+        // The ending's frame-sequence transition hands off to the live, playable
+        // galaxy scene. Wake this scene so it renders beneath the held galaxy
+        // frame (still up in the activity mount), record the activity, then
+        // cross-fade that frame out and hand ____ control on the galaxy water.
+        // Movement stays frozen through the fade so no input leaks to the scene.
+        if (completion.endingArrival) {
+          wakeScene();
+          this.state = completeLocation(this.state, completion);
+          this.registry.set('runState', this.state);
+          await this.revealGalaxyArrival(activityMount);
+          return;
+        }
+
         activityMount.remove();
 
         // The terminal ending is the ONLY completion that mounts the persistent

@@ -160,10 +160,21 @@ test('makes the boat with real gestures and arrives at the lantern clearing WITH
     timeout: 15000,
   });
 
-  // The boat lands IN the ending: after a brief settle on the arrival shot the
-  // final-keepsake reveal AUTO-starts — no interim walk or E-press.
-  const endingStage = page.locator('[data-ending-stage]');
-  await expect(endingStage).toBeVisible({ timeout: 15000 });
+  // The boat lands IN the ending: the arrival frame-sequence transition AUTO-plays
+  // (no interim walk or E-press) …
+  await expect(page.locator('[data-ending-frames]')).toBeVisible({ timeout: 15000 });
+
+  // … then it hands off to the live, playable galaxy scene. Walk up to ____ at
+  // the warm glow and open the final conversation — proving control is restored.
+  const conversationLine = page.getByText('make it out this far');
+  for (let step = 0; step < 80 && !(await conversationLine.isVisible().catch(() => false)); step += 1) {
+    await page.keyboard.down('ArrowUp');
+    await page.waitForTimeout(90);
+    await page.keyboard.up('ArrowUp');
+    await page.keyboard.press('E', { delay: 20 });
+    await page.waitForTimeout(40);
+  }
+  await expect(conversationLine).toBeVisible();
 });
 
 test('folds the boat via the test-mode skip and arrives at the lantern clearing', async ({
@@ -183,4 +194,6 @@ test('folds the boat via the test-mode skip and arrives at the lantern clearing'
   await expect(page.locator('body')).toHaveAttribute('data-location-id', 'final-spot', {
     timeout: 15000,
   });
+  // The arrival frame-sequence transition auto-plays on landing.
+  await expect(page.locator('[data-ending-frames]')).toBeVisible({ timeout: 15000 });
 });

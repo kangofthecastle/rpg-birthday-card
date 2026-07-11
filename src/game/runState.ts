@@ -53,6 +53,7 @@ export interface LocationKeepsakeCompletionInput {
   readonly keepsakeId: string;
   readonly won?: boolean;
   readonly travelTo?: ActivityTravelTo;
+  readonly endingArrival?: boolean;
 }
 
 export interface OptionalActivityCompletionInput {
@@ -61,6 +62,14 @@ export interface OptionalActivityCompletionInput {
   readonly keepsakeId?: never;
   readonly won?: boolean;
   readonly travelTo?: ActivityTravelTo;
+  /**
+   * Transient scene signal (never persisted): the ending's frame-sequence
+   * transition finished and is handing off to the live, playable galaxy scene.
+   * The scene wakes, cross-fades the held galaxy frame out to reveal the redressed
+   * final-spot, and hands ____ control. Consumed by the scene, ignored by the
+   * reducer — like `travelTo`.
+   */
+  readonly endingArrival?: boolean;
 }
 
 export type CompletionInput = LocationKeepsakeCompletionInput;

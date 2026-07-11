@@ -778,7 +778,7 @@
           "name": "near-lantern",
           "type": "spawn",
           "x": 704,
-          "y": 432,
+          "y": 640,
           "point": true
         }
       ]
@@ -796,12 +796,12 @@
       "objects": [
         {
           "id": 3,
-          "name": "final-table",
-          "type": "activity",
-          "x": 640,
-          "y": 384,
-          "width": 128,
-          "height": 96
+          "name": "friendtwo-finale",
+          "type": "dialogue",
+          "x": 624,
+          "y": 400,
+          "width": 160,
+          "height": 128
         }
       ]
     }

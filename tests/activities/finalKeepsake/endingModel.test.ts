@@ -2,29 +2,17 @@ import { describe, expect, it } from 'vitest';
 import {
   allLettersRead,
   createLettersRead,
-  createPlacement,
+  ENDING_KEEPSAKE_ID,
   FINAL_ENDING_LETTERS,
-  FINAL_KEEPSAKES,
   HAPPY_BIRTHDAY_LINE,
-  isFullyPlaced,
   isLetterRead,
-  lightLantern,
   markLetterRead,
-  placeNextKeepsake,
   unreadCount,
 } from '../../../src/activities/finalKeepsake/endingModel';
 
-describe('ending keepsakes and copy', () => {
-  it('places the three keepsakes with the self-photo landing last', () => {
-    expect(FINAL_KEEPSAKES.map((k) => k.id)).toEqual([
-      'glowing-koi-scale',
-      'defused-spike-charm',
-      'golden-hour-photo',
-    ]);
-    for (const keepsake of FINAL_KEEPSAKES) {
-      expect(keepsake.iconUrl).toContain('/assets/keepsakes/');
-      expect(keepsake.label.length).toBeGreaterThan(0);
-    }
+describe('ending copy', () => {
+  it('keeps the ending identity token stable', () => {
+    expect(ENDING_KEEPSAKE_ID).toBe('ending-light');
   });
 
   it('keeps the two final letters short and in ____-then-____ order', () => {
@@ -48,37 +36,6 @@ describe('ending keepsakes and copy', () => {
 
   it('keeps the happy-birthday line lowercase and quiet', () => {
     expect(HAPPY_BIRTHDAY_LINE).toBe('happy birthday, recipient.');
-  });
-});
-
-describe('placement progression', () => {
-  it('settles one keepsake at a time up to the total', () => {
-    let model = createPlacement(3);
-    expect(model.placed).toBe(0);
-    expect(isFullyPlaced(model)).toBe(false);
-
-    model = placeNextKeepsake(model);
-    model = placeNextKeepsake(model);
-    expect(model.placed).toBe(2);
-    expect(isFullyPlaced(model)).toBe(false);
-
-    model = placeNextKeepsake(model);
-    expect(model.placed).toBe(3);
-    expect(isFullyPlaced(model)).toBe(true);
-
-    // Placing past the total is a no-op.
-    model = placeNextKeepsake(model);
-    expect(model.placed).toBe(3);
-  });
-
-  it('only lights the lantern once every keepsake is placed', () => {
-    let model = createPlacement(3);
-    model = lightLantern(model);
-    expect(model.lit).toBe(false);
-
-    model = placeNextKeepsake(placeNextKeepsake(placeNextKeepsake(model)));
-    model = lightLantern(model);
-    expect(model.lit).toBe(true);
   });
 });
 

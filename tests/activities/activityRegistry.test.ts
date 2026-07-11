@@ -336,10 +336,11 @@ describe('activityRegistry', () => {
     expect(() => getActivity('missing')).toThrow('Unknown activity: missing');
   });
 
-  it('mounts the ending stage with the three keepsakes in order', () => {
-    // The ending is a timed, interactive sequence; assert the stage the
-    // activity builds synchronously, and keep fake timers from advancing it.
-    vi.useFakeTimers();
+  it('mounts the ending transition frames (not the old keepsake stage)', async () => {
+    // The ending transition builds its frame overlay once the (file-first) asset
+    // probes settle. In jsdom every probe fails, so this exercises the
+    // graceful-degradation build: the composed galaxy is the only frame, no
+    // painted frames, no boat — and crucially none of the dead keepsake stage.
     const activity = getActivity('final-keepsake-reveal');
     const fixture = document.createElement('div');
     const mount = document.createElement('div');
@@ -355,22 +356,16 @@ describe('activityRegistry', () => {
         onCancel: vi.fn(),
       });
 
-      expect(mount.querySelector('[data-ending-stage]')).not.toBeNull();
-      expect(mount.querySelector('[data-ending-ocean]')).not.toBeNull();
-
-      const keepsakes = [...mount.querySelectorAll('.ending-keepsake')].map(
-        (img) => img.getAttribute('alt'),
-      );
-      expect(keepsakes).toEqual([
-        '____’s Letter, unfolding',
-        '____’s Letter, unfolding',
-        'Your Sheet Music, unfolding',
-      ]);
-      expect(mount.textContent).not.toContain('flower');
-      expect(mount.textContent).not.toContain('paper star');
+      await vi.waitFor(() => {
+        expect(mount.querySelector('[data-ending-frames]')).not.toBeNull();
+      });
+      // The composed galaxy is the guaranteed terminal frame.
+      expect(mount.querySelector('[data-ending-galaxy]')).not.toBeNull();
+      // The gutted keepsake-placement stage is gone entirely.
+      expect(mount.querySelector('.ending-keepsake')).toBeNull();
+      expect(mount.querySelector('.ending-lantern')).toBeNull();
+      expect(mount.textContent).not.toContain('unfolding');
     } finally {
-      vi.clearAllTimers();
-      vi.useRealTimers();
       fixture.remove();
     }
   });
@@ -382,11 +377,13 @@ describe('activityRegistry', () => {
       ),
     );
 
+    // final-keepsake-reveal is still registered, but it is auto-started as the
+    // arrival transition — no longer referenced by a location interaction (the
+    // final-spot interaction is now the ____ conversation dialogue).
     expect(activityIds).toEqual([
       'fold-the-letters',
       'friendone-pc-fishing',
       'valorant-split',
-      'final-keepsake-reveal',
       'recipient-violin-piece',
     ]);
     expect(() => {

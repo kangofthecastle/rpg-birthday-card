@@ -172,153 +172,135 @@ body {
 /*  Ending — the lantern clearing washing into the ocean-galaxy          */
 /* ===================================================================== */
 
-.ending-stage {
+/* The ending transition: a breathing cross-fade of full-scene frames — the boat
+ * drifting out to sea and the water turning to galaxy — with the composited paper
+ * boat riding on top. Each layer stacks above the previous; fading it in reveals
+ * it over the one before. The scene fades the final held galaxy out to hand off
+ * into the live, playable galaxy place. */
+.ending-frames {
   position: absolute;
   inset: 0;
   overflow: hidden;
   pointer-events: auto;
-  background: radial-gradient(circle at 50% 42%, #1d2c2a, #0b1211 72%);
+  background: #06040f;
 }
 
-.ending-clearing {
+.ending-frames__layer {
   position: absolute;
   inset: 0;
-  transition: opacity 2400ms ease;
-}
-
-.ending-stage--wash .ending-clearing {
   opacity: 0;
+  transition: opacity 3200ms ease;
+  will-change: opacity, transform;
 }
 
-.ending-lantern {
+.ending-frames__layer--photo {
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  /* A gentle Ken-Burns drift baked in per-frame; runs whenever a frame is up. */
+  animation: ending-frame-drift 26s ease-in-out infinite alternate;
+}
+
+/* The composed ocean-galaxy — the guaranteed terminal frame (pure CSS over the
+ * existing sky/water art). */
+.ending-frames__layer--galaxy {
+  background: radial-gradient(circle at 50% 34%, #17123a, #06040f 78%);
+}
+
+@keyframes ending-frame-drift {
+  from {
+    transform: scale(1.015);
+  }
+  to {
+    transform: scale(1.06);
+  }
+}
+
+/* The paper boat, composited from the SAME pieces as the sail-away cinematic so
+ * it never changes identity. It rides on top of every frame and drifts slowly
+ * smaller as it heads out, then fades away for the handoff. */
+.ending-frames__boat {
   position: absolute;
-  top: 44%;
-  left: 50%;
-  width: 90px;
-  height: 120px;
-  transform: translate(-50%, -50%);
-}
-
-.ending-lantern__glow {
-  position: absolute;
-  inset: -64px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(255, 200, 120, 0.4), transparent 66%);
-  opacity: 0.32;
-  transition: opacity 1200ms ease, transform 1200ms ease;
-}
-
-.ending-lantern__body {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 46px;
-  height: 76px;
-  transform: translate(-50%, -50%);
-  border-radius: 10px 10px 8px 8px;
-  background: linear-gradient(#3a2a1c, #241a12);
-  box-shadow: inset 0 0 0 2px rgba(255, 220, 150, 0.25);
-}
-
-.ending-lantern__body::after {
-  position: absolute;
-  inset: 10px 8px;
-  content: '';
-  border-radius: 6px;
-  background: radial-gradient(circle at 50% 45%, rgba(255, 150, 60, 0.45), rgba(120, 50, 20, 0.2));
-  transition: background 1200ms ease, box-shadow 1200ms ease;
-}
-
-.ending-lantern--lit .ending-lantern__glow {
-  opacity: 1;
-  transform: scale(1.28);
-}
-
-.ending-lantern--lit .ending-lantern__body::after {
-  background: radial-gradient(circle at 50% 42%, #fff2c8, #ffb24d 55%, #ff7a2a);
-  box-shadow: 0 0 26px 8px rgba(255, 180, 90, 0.7);
-}
-
-.ending-keepsake {
-  position: absolute;
-  width: 56px;
-  height: 56px;
-  opacity: 0;
-  transform: translate(-50%, -50%) translateY(-16px) scale(0.6);
-  image-rendering: pixelated;
-  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.5));
-  transition: opacity 620ms ease, transform 620ms cubic-bezier(0.2, 0.7, 0.3, 1);
-}
-
-.ending-keepsake--placed {
-  opacity: 1;
-  transform: translate(-50%, -50%) translateY(0) scale(1);
-}
-
-/* Restaged arrival: the letters unfold (creased from the folds) rather than
- * being placed. They start folded-small and rotated, and open flat. */
-.ending-keepsake--letter {
-  transform: translate(-50%, -50%) translateY(-10px) rotate(-8deg) scale(0.42);
-}
-
-.ending-keepsake--letter.ending-keepsake--placed {
-  transform: translate(-50%, -50%) rotate(0deg) scale(1);
-}
-
-.ending-caption {
-  position: absolute;
-  top: 12%;
-  left: 50%;
-  width: min(80%, 520px);
-  margin: 0;
-  transform: translateX(-50%);
-  color: rgba(255, 247, 232, 0.86);
-  text-align: center;
-  font-size: clamp(14px, 2vw, 18px);
-  letter-spacing: 0.02em;
-  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.6);
-}
-
-.ending-boat {
-  position: absolute;
-  top: 58%;
+  bottom: 34%;
   left: 50%;
   width: 128px;
-  height: 60px;
-  transform: translate(-50%, -50%);
-  filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.5));
+  height: 96px;
+  transform: translate(-50%, 6px) scale(1);
+  opacity: 1;
+  transition: opacity 2200ms ease;
+  filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.55));
 }
 
-.ending-boat__hull {
+.ending-frames__boat--drift {
+  transition: transform 12000ms cubic-bezier(0.3, 0, 0.4, 1), opacity 2200ms ease;
+  transform: translate(-50%, -40px) scale(0.62);
+}
+
+.ending-frames__hull {
   position: absolute;
   bottom: 0;
   left: 50%;
-  width: 120px;
-  height: 34px;
+  width: 116px;
+  height: 36px;
   transform: translateX(-50%);
   background: #f2e8cf;
   clip-path: polygon(0 0, 100% 0, 82% 100%, 18% 100%);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
 }
 
-.ending-boat__sail {
+.ending-frames__sail {
   position: absolute;
-  bottom: 28px;
-  left: 44%;
-  width: 34px;
-  height: 40px;
+  bottom: 30px;
+  left: 46%;
+  width: 42px;
+  height: 56px;
   background: #f6ecd2;
   clip-path: polygon(0 0, 0 100%, 100% 100%);
 }
 
-.ending-ocean {
+.ending-frames__lantern {
   position: absolute;
-  inset: 0;
-  opacity: 0;
-  transition: opacity 2600ms ease;
+  bottom: 24px;
+  left: 10px;
+  width: 13px;
+  height: 17px;
+  border-radius: 3px;
+  background: #ffcf7a;
+  box-shadow: 0 0 18px 6px rgba(255, 190, 100, 0.8), 0 0 40px 14px rgba(255, 170, 80, 0.4);
 }
 
-.ending-stage--wash .ending-ocean {
-  opacity: 1;
+.ending-frames__rider {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  width: 13px;
+  height: 27px;
+  transform: translateX(-30%);
+  border-radius: 6px 6px 3px 3px;
+  background: linear-gradient(#3a2130, #241522);
+}
+
+/* File-first art variants: a real PNG shows as-is at its slot (no procedural
+ * fill/clip), scaled into the piece box. */
+.ending-frames__hull--art,
+.ending-frames__sail--art,
+.ending-frames__lantern--art,
+.ending-frames__rider--art {
+  background: none;
+  clip-path: none;
+  box-shadow: none;
+  object-fit: contain;
+}
+
+/* The rider (recipient-boat.png) is a taller composite; give it room over the hull. */
+.ending-frames__rider--art {
+  bottom: 4px;
+  left: 50%;
+  width: 118px;
+  height: 92px;
+  transform: translateX(-50%);
+  border-radius: 0;
+  background: none;
 }
 
 .ending-ocean__sky {
@@ -385,44 +367,6 @@ body {
   transform: rotate(21deg);
   animation-duration: 15s;
   animation-delay: -6s;
-}
-
-.ending-ocean__recipient {
-  position: absolute;
-  top: 55.5%;
-  left: 50%;
-  width: 10px;
-  height: 26px;
-  transform: translate(-50%, -100%);
-  border-radius: 6px 6px 3px 3px;
-  background: linear-gradient(#20161f, #0c0a12);
-  box-shadow: 0 0 12px 2px rgba(255, 190, 120, 0.35), 0 1px 0 rgba(255, 210, 150, 0.55);
-}
-
-.ending-ocean__recipient::before {
-  position: absolute;
-  top: -7px;
-  left: 50%;
-  width: 7px;
-  height: 7px;
-  content: '';
-  transform: translateX(-50%);
-  border-radius: 50%;
-  background: #1a1420;
-  box-shadow: 0 0 6px rgba(255, 190, 120, 0.4);
-}
-
-.ending-ocean__recipient::after {
-  position: absolute;
-  top: 100%;
-  left: 50%;
-  width: 8px;
-  height: 20px;
-  content: '';
-  transform: translateX(-50%) scaleY(-1);
-  opacity: 0.26;
-  background: linear-gradient(#20161f, transparent);
-  filter: blur(1px);
 }
 
 @keyframes ending-sky-drift {
@@ -648,11 +592,10 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ending-clearing,
-  .ending-ocean,
-  .ending-lantern__glow,
-  .ending-lantern__body::after,
-  .ending-keepsake,
+  .ending-frames__layer,
+  .ending-frames__layer--photo,
+  .ending-frames__boat,
+  .ending-frames__boat--drift,
   .ending-ocean__sky,
   .ending-ocean__water,
   .ending-ocean__beams,

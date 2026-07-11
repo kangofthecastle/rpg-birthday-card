@@ -457,9 +457,12 @@ body {
   opacity: 0;
 }
 
-/* The game is over on this screen — hide the in-world keepsake HUD, which the
- * scene re-appends as a later sibling after the ending completes. */
-.letters-screen ~ .collection-panel {
+/* The game is over on this screen — hide the in-world keepsake HUD entirely.
+ * Order-independent (`:has`): the scene may leave the panel as an EARLIER or a
+ * later sibling of the letters screen, so the old `.letters-screen ~
+ * .collection-panel` combinator missed it when the panel came first, leaving it
+ * to bleed through the letters screen (visible top-right during its fade-in). */
+:root:has(.letters-screen) .collection-panel {
   display: none;
 }
 

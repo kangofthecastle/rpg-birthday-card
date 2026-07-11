@@ -1,7 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { getPropColliders, getRoomDressing } from '../../src/content/roomDressing';
+import {
+  getPropColliders,
+  getRoomDressing,
+  isValidRoomLayoutFile,
+} from '../../src/content/roomDressing';
 
 const SHEET_SIZE = 1024;
 
@@ -142,6 +146,47 @@ describe('getRoomDressing', () => {
     // The flat rug is not height-sized; it keeps an explicit scale.
     expect(byFrame('rug').scale).toBeGreaterThan(0);
     expect(byFrame('rug').heightRatio).toBeUndefined();
+  });
+});
+
+describe('room layout overrides', () => {
+  // The three dressed rooms ship an authored layout at
+  // src/content/roomLayouts/<id>.json which REPLACES the in-code fallback props
+  // at load time (the dressEdit Save button writes these). Verify the loaded
+  // dressing reflects the JSON file so normal play renders the persisted layout.
+  const roomsWithLayouts = ['recipient-house', 'friend-a', 'friend-b'] as const;
+
+  function loadLayout(locationId: string): { locationId: string; props: unknown[] } {
+    const raw = readFileSync(
+      resolve(__dirname, `../../src/content/roomLayouts/${locationId}.json`),
+      'utf8',
+    );
+    return JSON.parse(raw) as { locationId: string; props: unknown[] };
+  }
+
+  it('loads each room’s props from its authored layout JSON', () => {
+    for (const locationId of roomsWithLayouts) {
+      const layout = loadLayout(locationId);
+      expect(layout.locationId, locationId).toBe(locationId);
+      const dressing = getRoomDressing(locationId);
+      expect(dressing, locationId).toBeDefined();
+      // The loaded props must be exactly the JSON's props (deep equality proves
+      // the override path is what normal play renders).
+      expect(dressing!.props, locationId).toEqual(layout.props);
+    }
+  });
+
+  it('validates room-layout payloads for the dev save endpoint', () => {
+    expect(isValidRoomLayoutFile(loadLayout('recipient-house'))).toBe(true);
+    expect(
+      isValidRoomLayoutFile({ locationId: 'x', props: [{ frame: 'a', mapX: 1, mapY: 2 }] }),
+    ).toBe(true);
+    expect(isValidRoomLayoutFile(null)).toBe(false);
+    expect(isValidRoomLayoutFile({ locationId: 'x' })).toBe(false);
+    expect(isValidRoomLayoutFile({ locationId: 'x', props: [{ mapX: 1, mapY: 2 }] })).toBe(false);
+    expect(
+      isValidRoomLayoutFile({ locationId: 'x', props: [{ frame: 'a', mapX: 'no', mapY: 2 }] }),
+    ).toBe(false);
   });
 });
 

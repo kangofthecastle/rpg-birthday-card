@@ -1,0 +1,175 @@
+{
+  "locationId": "friend-b",
+  "props": [
+    {
+      "frame": "rug",
+      "mapX": 704,
+      "mapY": 580,
+      "scale": 0.55,
+      "originX": 0.5,
+      "originY": 0.5,
+      "fixedDepth": -30,
+      "note": "navy diamond rug, room center"
+    },
+    {
+      "frame": "window",
+      "mapX": 64,
+      "mapY": 420,
+      "scale": 0.85,
+      "originX": 0.5,
+      "originY": 1,
+      "screenYRaise": 14,
+      "wallShear": -0.5,
+      "fixedDepth": -22,
+      "note": "blinds window, west wall high"
+    },
+    {
+      "frame": "window",
+      "mapX": 64,
+      "mapY": 660,
+      "scale": 0.85,
+      "originX": 0.5,
+      "originY": 1,
+      "screenYRaise": 14,
+      "wallShear": -0.5,
+      "fixedDepth": -22,
+      "note": "blinds window, west wall low (above the bed)"
+    },
+    {
+      "frame": "gameShelf",
+      "mapX": 360,
+      "mapY": 64,
+      "scale": 0.6,
+      "originX": 0.5,
+      "originY": 1,
+      "screenYRaise": 12,
+      "wallShear": 0.5,
+      "fixedDepth": -21,
+      "note": "floating shelf of game boxes + figurines, north wall west"
+    },
+    {
+      "frame": "posterCluster",
+      "mapX": 780,
+      "mapY": 64,
+      "scale": 0.62,
+      "originX": 0.5,
+      "originY": 1,
+      "screenYRaise": 12,
+      "wallShear": 0.5,
+      "fixedDepth": -21,
+      "note": "esports poster cluster (4 posters), north wall east"
+    },
+    {
+      "frame": "bed",
+      "mapX": 250,
+      "mapY": 700,
+      "heightRatio": 2,
+      "footprint": {
+        "w": 158,
+        "d": 110
+      },
+      "note": "plaid bed, west-south corner"
+    },
+    {
+      "frame": "beanbag",
+      "mapX": 430,
+      "mapY": 560,
+      "heightRatio": 0.75,
+      "footprint": {
+        "w": 110,
+        "d": 70
+      },
+      "note": "navy beanbag, west-center chill spot"
+    },
+    {
+      "frame": "miniFridge",
+      "mapX": 1245,
+      "mapY": 560,
+      "heightRatio": 1.05,
+      "footprint": {
+        "w": 96,
+        "d": 60
+      },
+      "note": "mini fridge stocked with cans, east side"
+    },
+    {
+      "frame": "snackTable",
+      "mapX": 1150,
+      "mapY": 660,
+      "heightRatio": 0.72,
+      "footprint": {
+        "w": 84,
+        "d": 52
+      },
+      "note": "snack side-table (cup noodle + chips), south-east (clear of the easter-egg approach)"
+    },
+    {
+      "frame": "cactus",
+      "mapX": 150,
+      "mapY": 500,
+      "heightRatio": 0.6,
+      "footprint": {
+        "w": 44,
+        "d": 36
+      },
+      "note": "potted cactus by the west windows"
+    },
+    {
+      "frame": "battlestation",
+      "mapX": 704,
+      "mapY": 448,
+      "heightRatio": 1.55,
+      "footprint": {
+        "w": 200,
+        "d": 70
+      },
+      "colliderOffsetY": -8,
+      "note": "dual-monitor battlestation + headset -> friend-b-host (RETAKE.EXE)"
+    },
+    {
+      "frame": "gamingChair",
+      "mapX": 704,
+      "mapY": 512,
+      "heightRatio": 0.95,
+      "footprint": {
+        "w": 70,
+        "d": 44
+      },
+      "note": "gaming chair in front of the battlestation (player's seat)"
+    },
+    {
+      "frame": "secondDesk",
+      "mapX": 1024,
+      "mapY": 400,
+      "heightRatio": 1.05,
+      "footprint": {
+        "w": 120,
+        "d": 52
+      },
+      "note": "second desk w/ waiting headset -> friend-b-easter-egg (north of the zone)"
+    },
+    {
+      "frame": "gamingChair2",
+      "mapX": 1000,
+      "mapY": 448,
+      "heightRatio": 0.95,
+      "footprint": {
+        "w": 60,
+        "d": 40
+      },
+      "note": "second gaming chair, pulled close (easter egg)"
+    },
+    {
+      "frame": "gamingChair",
+      "mapX": 1050,
+      "mapY": 450,
+      "heightRatio": 0.95,
+      "flipX": true,
+      "footprint": {
+        "w": 60,
+        "d": 40
+      },
+      "note": "third gaming chair, pulled close facing the second (easter egg)"
+    }
+  ]
+}

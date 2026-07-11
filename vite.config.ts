@@ -3,6 +3,7 @@ import { dirname, resolve } from 'node:path';
 import { defineConfig, type Plugin, type ViteDevServer } from 'vite';
 
 const SAVE_ROUTE = '/__dev/save-collision-zones';
+const SAVE_LAYOUT_ROUTE = '/__dev/save-room-layout';
 const LOCATION_ID = /^[a-z0-9-]+$/;
 
 interface ZonePayload {
@@ -82,8 +83,76 @@ function collisionZoneSaverPlugin(): Plugin {
   };
 }
 
+interface RoomLayoutPayload {
+  locationId: string;
+  props: Array<Record<string, unknown>>;
+}
+
+function isValidLayoutPayload(value: unknown): value is RoomLayoutPayload {
+  if (typeof value !== 'object' || value === null) return false;
+  const file = value as Record<string, unknown>;
+  if (typeof file.locationId !== 'string' || !LOCATION_ID.test(file.locationId)) return false;
+  if (!Array.isArray(file.props)) return false;
+  for (const prop of file.props) {
+    if (typeof prop !== 'object' || prop === null) return false;
+    const p = prop as Record<string, unknown>;
+    if (typeof p.frame !== 'string' || typeof p.mapX !== 'number' || typeof p.mapY !== 'number') {
+      return false;
+    }
+  }
+  return true;
+}
+
+// Dev-only endpoint used by the in-game dress editor (?dressEdit=1) to persist
+// the authored prop layout to src/content/roomLayouts/<locationId>.json. Same
+// security posture as the zones saver: serve-only, path-restricted writes.
+function roomLayoutSaverPlugin(): Plugin {
+  return {
+    name: 'room-layout-saver',
+    apply: 'serve',
+    configureServer(server: ViteDevServer) {
+      server.middlewares.use(SAVE_LAYOUT_ROUTE, (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405;
+          res.end('Method Not Allowed');
+          return;
+        }
+
+        const chunks: Buffer[] = [];
+        req.on('data', (chunk: Buffer) => chunks.push(chunk));
+        req.on('end', () => {
+          try {
+            const parsed = JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
+            if (!isValidLayoutPayload(parsed)) {
+              res.statusCode = 400;
+              res.end('Invalid payload');
+              return;
+            }
+            // Sanitize the id defensively (already regex-validated) to block any
+            // path traversal before it becomes a file path.
+            const safeId = parsed.locationId.replace(/[^a-z0-9-]/g, '');
+            const outPath = resolve(
+              server.config.root,
+              'src/content/roomLayouts',
+              `${safeId}.json`,
+            );
+            mkdirSync(dirname(outPath), { recursive: true });
+            writeFileSync(outPath, `${JSON.stringify(parsed, null, 2)}\n`, 'utf8');
+            res.statusCode = 200;
+            res.setHeader('content-type', 'application/json');
+            res.end(JSON.stringify({ ok: true, path: `${safeId}.json` }));
+          } catch (error) {
+            res.statusCode = 500;
+            res.end(`Error: ${String(error)}`);
+          }
+        });
+      });
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [collisionZoneSaverPlugin()],
+  plugins: [collisionZoneSaverPlugin(), roomLayoutSaverPlugin()],
   server: {
     host: '127.0.0.1',
     port: 5173,

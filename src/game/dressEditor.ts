@@ -2,8 +2,10 @@
 // by import.meta.env.DEV + ?dressEdit=1 in LocationScene) so it never ships in a
 // production bundle. Lets the author arrange a dressed room's furniture by hand:
 // drag a prop to move it, arrow-nudge for pixel precision, scroll/±to resize,
-// then export the COMPLETE updated `props` array as paste-ready TypeScript for
-// src/content/roomDressing.ts.
+// then Save the layout straight to disk (src/content/roomLayouts/<id>.json via
+// the Vite dev endpoint; the HMR reload that follows shows the saved state).
+// The E export (paste-ready TypeScript for the props[] array) is kept as a
+// fallback for when the dev endpoint isn't available.
 //
 // The player is frozen for the editor's lifetime (LocationScene gates its whole
 // update on the freeze flag) so movement, interactions and edge transitions stay
@@ -20,14 +22,20 @@
 //   Delete/Backspace  remove the selected prop from the working layout (hidden +
 //                     excluded from the E export)
 //   Cmd/Ctrl + Z      undo the most recent removal
-//   E                 export props[] to console + clipboard (toolbar has a button)
+//   Save button       write the layout to roomLayouts/<id>.json (dev endpoint)
+//   E                 export props[] to console + clipboard (fallback button too)
 //   Esc               deselect
 
 import Phaser from 'phaser';
 import type { Projection } from './projection';
 import type { IsoOrigin } from './isometricProjection';
 import { positionPropImage, type PropHandle } from './roomRenderer';
-import type { PropPlacement, RoomDressing } from '../content/roomDressing';
+import type { PropPlacement, RoomDressing, RoomLayoutFile } from '../content/roomDressing';
+
+// Dev middleware (vite.config.ts) that writes the posted layout to
+// src/content/roomLayouts/<locationId>.json. The glob in roomDressing.ts picks
+// the file up, so the HMR reload that follows the write shows the saved state.
+const SAVE_LAYOUT_ROUTE = '/__dev/save-room-layout';
 
 interface DressEditorOptions {
   readonly locationId: string;
@@ -416,6 +424,10 @@ class DressEditor {
         background:#3730a3;border:1px solid #4f46e5;border-radius:6px;
         padding:5px 9px;margin-top:6px}
       .dress-editor-panel button:hover{background:#4f46e5}
+      .dress-editor-panel button:disabled{opacity:.5;cursor:not-allowed}
+      .dress-editor-panel button.dress-editor-save{background:#047857;
+        border-color:#059669;margin-right:6px}
+      .dress-editor-panel button.dress-editor-save:hover{background:#059669}
       .dress-editor-toast{position:fixed;bottom:24px;left:50%;
         transform:translateX(-50%);z-index:99999;padding:9px 16px;
         background:#065f46;color:#ecfdf5;border-radius:8px;
@@ -441,14 +453,27 @@ class DressEditor {
     hint.textContent =
       'Drag a prop to move · arrows nudge 1px (Shift 8) · wheel or +/- resize a selected prop · ' +
       'pan: Space-drag or wheel with nothing selected · Del/Backspace removes · Cmd/Ctrl+Z undo · ' +
-      'E exports · Esc deselects';
+      'Save writes the layout to disk · E exports as a fallback · Esc deselects';
+
+    const saveBtn = document.createElement('button');
+    saveBtn.type = 'button';
+    saveBtn.className = 'dress-editor-save';
+    saveBtn.textContent = 'Save layout';
+    if (import.meta.env.DEV) {
+      saveBtn.title = 'Write this room’s layout to src/content/roomLayouts/<id>.json (dev server)';
+      saveBtn.addEventListener('click', () => void this.saveLayout());
+    } else {
+      saveBtn.disabled = true;
+      saveBtn.title = 'Save is only available on the Vite dev server';
+    }
 
     const exportBtn = document.createElement('button');
     exportBtn.type = 'button';
     exportBtn.textContent = 'Export props[] (E)';
+    exportBtn.title = 'Copy the props[] as paste-ready TypeScript (fallback)';
     exportBtn.addEventListener('click', () => void this.exportProps());
 
-    panel.append(title, this.readoutEl, this.removedCountEl, hint, exportBtn);
+    panel.append(title, this.readoutEl, this.removedCountEl, hint, saveBtn, exportBtn);
     document.body.appendChild(panel);
     this.panel = panel;
 
@@ -484,6 +509,38 @@ class DressEditor {
     window.setTimeout(() => {
       this.toastEl.style.opacity = '0';
     }, 1600);
+  }
+
+  // --- persistence ---------------------------------------------------------
+
+  // The working layout as a RoomLayoutFile. Removed props are already spliced
+  // out of entries[], so they are naturally excluded from the saved file.
+  private buildLayoutFile(): RoomLayoutFile {
+    return {
+      locationId: this.options.locationId,
+      props: this.entries.map((entry) => entry.placement),
+    };
+  }
+
+  // Persist the working layout to disk via the dev endpoint. On success Vite
+  // sees the new roomLayouts/<id>.json and full-reloads, showing the saved
+  // state; no hand-paste needed. Falls back to a toast on any failure.
+  private async saveLayout(): Promise<void> {
+    const payload = this.buildLayoutFile();
+    try {
+      const res = await fetch(SAVE_LAYOUT_ROUTE, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        this.toast('Layout saved ✓ reloading to apply');
+      } else {
+        this.toast(`Save failed (${res.status}) — use Export as fallback`);
+      }
+    } catch (error) {
+      this.toast(`Save error: ${String(error)} — use Export as fallback`);
+    }
   }
 
   // --- export --------------------------------------------------------------

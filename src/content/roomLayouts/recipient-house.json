@@ -1,0 +1,127 @@
+{
+  "locationId": "recipient-house",
+  "props": [
+    {
+      "frame": "rug",
+      "mapX": 704,
+      "mapY": 512,
+      "scale": 0.82,
+      "originX": 0.5,
+      "originY": 0.5,
+      "fixedDepth": -30,
+      "note": "round rug, room center"
+    },
+    {
+      "frame": "window",
+      "mapX": 64,
+      "mapY": 640,
+      "scale": 0.52,
+      "originX": 0.5,
+      "originY": 1,
+      "screenYRaise": 14,
+      "wallShear": -0.5,
+      "fixedDepth": -22,
+      "note": "window on the back-left wall, low (above the bed corner)"
+    },
+    {
+      "frame": "window",
+      "mapX": 64,
+      "mapY": 360,
+      "scale": 0.52,
+      "originX": 0.5,
+      "originY": 1,
+      "screenYRaise": 14,
+      "wallShear": -0.5,
+      "fixedDepth": -22,
+      "note": "window on the back-left wall, high (between the corner plant and bed)"
+    },
+    {
+      "frame": "monstera",
+      "mapX": 170,
+      "mapY": 170,
+      "heightRatio": 1.2,
+      "footprint": {
+        "w": 64,
+        "d": 48
+      },
+      "note": "monstera, top corner where the walls meet"
+    },
+    {
+      "frame": "pothos",
+      "mapX": 200,
+      "mapY": 860,
+      "heightRatio": 0.95,
+      "footprint": {
+        "w": 64,
+        "d": 48
+      },
+      "note": "pothos in urn, left corner"
+    },
+    {
+      "frame": "bed",
+      "mapX": 372,
+      "mapY": 688,
+      "heightRatio": 2,
+      "footprint": {
+        "w": 168,
+        "d": 108
+      },
+      "note": "bed -> recipient-bed"
+    },
+    {
+      "frame": "violin",
+      "mapX": 296,
+      "mapY": 392,
+      "heightRatio": 1.169,
+      "note": "violin on stand -> recipient-violin (thin; no collider; bow removed)"
+    },
+    {
+      "frame": "musicStand",
+      "mapX": 392,
+      "mapY": 388,
+      "heightRatio": 1,
+      "note": "sheet-music stand (dressing beside violin; no collider)"
+    },
+    {
+      "frame": "kitchen",
+      "mapX": 1040,
+      "mapY": 392,
+      "heightRatio": 1.092,
+      "footprint": {
+        "w": 120,
+        "d": 64
+      },
+      "note": "kitchenette table w/ mango sticky rice -> recipient-mango-rice"
+    },
+    {
+      "frame": "photoWall",
+      "mapX": 1140,
+      "mapY": 64,
+      "scale": 0.55,
+      "screenYRaise": 12,
+      "wallShear": 0.5,
+      "fixedDepth": -21,
+      "note": "photo-wall cluster + empty frame -> recipient-photo-wall"
+    },
+    {
+      "frame": "camera",
+      "mapX": 1240,
+      "mapY": 250,
+      "heightRatio": 1.3,
+      "note": "camera on tripod (dressing under the photo wall; thin, no collider)"
+    },
+    {
+      "frame": "desk",
+      "mapX": 704,
+      "mapY": 812,
+      "heightRatio": 1.55,
+      "footprint": {
+        "w": 54,
+        "d": 30
+      },
+      "colliderOffsetY": 46,
+      "colliderOffsetX": -34,
+      "note": "desk + PC + chair -> recipient-pc"
+    }
+  ]
+}

@@ -652,14 +652,72 @@ const FRIEND_TWO_HOUSE_DRESSING: RoomDressing = {
   ],
 };
 
+// --- Authored layout overrides ---------------------------------------------
+// Each dressing's `props` array above is the initial/fallback layout, kept in
+// TS so its placement rationale (the inline comments) lives with the data. When
+// an authored layout file exists at src/content/roomLayouts/<locationId>.json —
+// written in-game by the ?dressEdit=1 editor's Save button — it REPLACES that
+// room's props at module load. Frames, palette and collider logic always stay
+// in TS. Mirrors the collisionZones glob so lookups stay synchronous and the set
+// is known at build time; Vite inlines the JSON and an HMR reload after a Save
+// naturally re-picks the new file.
+
+/** Persisted per-room prop layout (props only; frames/palette stay in TS). */
+export interface RoomLayoutFile {
+  readonly locationId: string;
+  readonly props: readonly PropPlacement[];
+}
+
+const LAYOUT_MODULES = import.meta.glob<RoomLayoutFile>('./roomLayouts/*.json', {
+  eager: true,
+  import: 'default',
+});
+
+const LAYOUTS_BY_LOCATION: Readonly<Record<string, RoomLayoutFile>> = Object.fromEntries(
+  Object.values(LAYOUT_MODULES)
+    .filter((file): file is RoomLayoutFile => Boolean(file && file.locationId))
+    .map((file) => [file.locationId, file]),
+);
+
+/** Apply an authored layout override for a room, if one exists on disk. */
+function withLayoutOverride(locationId: string, dressing: RoomDressing): RoomDressing {
+  const layout = LAYOUTS_BY_LOCATION[locationId];
+  return layout ? { ...dressing, props: layout.props } : dressing;
+}
+
 const ROOM_DRESSINGS: Readonly<Record<string, RoomDressing>> = {
-  'recipient-house': RECIPIENT_HOUSE_DRESSING,
-  'friend-a': FRIEND_ONE_HOUSE_DRESSING,
-  'friend-b': FRIEND_TWO_HOUSE_DRESSING,
+  'recipient-house': withLayoutOverride('recipient-house', RECIPIENT_HOUSE_DRESSING),
+  'friend-a': withLayoutOverride('friend-a', FRIEND_ONE_HOUSE_DRESSING),
+  'friend-b': withLayoutOverride('friend-b', FRIEND_TWO_HOUSE_DRESSING),
 };
 
 export function getRoomDressing(locationId: string): RoomDressing | undefined {
   return ROOM_DRESSINGS[locationId];
+}
+
+/**
+ * Validates a room-layout payload shape (used by the dev save endpoint and its
+ * callers). Checks the locationId and that every prop carries at least a string
+ * `frame` and numeric `mapX`/`mapY`; optional fields are left to the type.
+ */
+export function isValidRoomLayoutFile(value: unknown): value is RoomLayoutFile {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const file = value as Record<string, unknown>;
+  if (typeof file.locationId !== 'string' || !Array.isArray(file.props)) {
+    return false;
+  }
+  for (const prop of file.props) {
+    if (typeof prop !== 'object' || prop === null) {
+      return false;
+    }
+    const p = prop as Record<string, unknown>;
+    if (typeof p.frame !== 'string' || typeof p.mapX !== 'number' || typeof p.mapY !== 'number') {
+      return false;
+    }
+  }
+  return true;
 }
 
 /** Axis-aligned collider footprint in *map* pixels (top-left origin). */

@@ -1,0 +1,154 @@
+{
+  "locationId": "friend-a",
+  "props": [
+    {
+      "frame": "rug",
+      "mapX": 704,
+      "mapY": 560,
+      "scale": 0.78,
+      "originX": 0.5,
+      "originY": 0.5,
+      "fixedDepth": -30,
+      "note": "braided seafoam rug, room center"
+    },
+    {
+      "frame": "window",
+      "mapX": 64,
+      "mapY": 380,
+      "scale": 0.58,
+      "originX": 0.5,
+      "originY": 1,
+      "screenYRaise": 14,
+      "wallShear": -0.5,
+      "fixedDepth": -22,
+      "note": "curtained window, west wall high"
+    },
+    {
+      "frame": "window",
+      "mapX": 64,
+      "mapY": 640,
+      "scale": 0.58,
+      "originX": 0.5,
+      "originY": 1,
+      "screenYRaise": 14,
+      "wallShear": -0.5,
+      "fixedDepth": -22,
+      "note": "curtained window, west wall low (above the bed)"
+    },
+    {
+      "frame": "jersey",
+      "mapX": 360,
+      "mapY": 64,
+      "scale": 0.62,
+      "originX": 0.5,
+      "originY": 1,
+      "screenYRaise": 12,
+      "wallShear": 0.5,
+      "fixedDepth": -21,
+      "note": "hockey jersey on a hook, north wall west"
+    },
+    {
+      "frame": "posterCluster",
+      "mapX": 660,
+      "mapY": 64,
+      "scale": 0.6,
+      "originX": 0.5,
+      "originY": 1,
+      "screenYRaise": 12,
+      "wallShear": 0.5,
+      "fixedDepth": -21,
+      "note": "taped poster cluster (sky/ocean prints), north wall center"
+    },
+    {
+      "frame": "hangingPlant",
+      "mapX": 1240,
+      "mapY": 150,
+      "scale": 0.6,
+      "originX": 0.5,
+      "originY": 1,
+      "screenYRaise": 96,
+      "fixedDepth": -19,
+      "note": "hanging plant, north-east corner (ceiling-hung)"
+    },
+    {
+      "frame": "bed",
+      "mapX": 270,
+      "mapY": 700,
+      "heightRatio": 2,
+      "footprint": {
+        "w": 168,
+        "d": 112
+      },
+      "note": "bed with seal + penguin plushies, west-south corner"
+    },
+    {
+      "frame": "gachaShelf",
+      "mapX": 1150,
+      "mapY": 220,
+      "heightRatio": 1.25,
+      "footprint": {
+        "w": 150,
+        "d": 56
+      },
+      "note": "gacha figurine + capsule shelf, north-east against the wall"
+    },
+    {
+      "frame": "lightstick",
+      "mapX": 1240,
+      "mapY": 360,
+      "heightRatio": 0.8,
+      "note": "idol lightstick on its stand (thin; no collider)"
+    },
+    {
+      "frame": "hockeyStick",
+      "mapX": 120,
+      "mapY": 600,
+      "heightRatio": 1.4,
+      "note": "hockey stick + puck leaning on the west wall (thin; no collider)"
+    },
+    {
+      "frame": "fishbowl",
+      "mapX": 1120,
+      "mapY": 470,
+      "heightRatio": 0.62,
+      "footprint": {
+        "w": 60,
+        "d": 44
+      },
+      "note": "koi fishbowl on the floor, east side"
+    },
+    {
+      "frame": "cushion",
+      "mapX": 512,
+      "mapY": 520,
+      "scale": 0.62,
+      "originX": 0.5,
+      "originY": 0.6,
+      "fixedDepth": -12,
+      "note": "floor cushion (flat; walk-over), south of the tea table"
+    },
+    {
+      "frame": "teaTable",
+      "mapX": 576,
+      "mapY": 448,
+      "heightRatio": 0.9,
+      "footprint": {
+        "w": 96,
+        "d": 56
+      },
+      "note": "low tea table w/ teapot -> friendone-host dialogue zone"
+    },
+    {
+      "frame": "desk",
+      "mapX": 832,
+      "mapY": 452,
+      "heightRatio": 1.55,
+      "footprint": {
+        "w": 150,
+        "d": 68
+      },
+      "colliderOffsetY": -8,
+      "note": "desk + PC + chair -> friendone-pc (fishing game)"
+    }
+  ]
+}

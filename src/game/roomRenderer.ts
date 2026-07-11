@@ -58,12 +58,21 @@ export interface FloorMapRect {
   readonly y1: number;
 }
 
+/** A placed prop paired with its billboard Image, so a dev tool (the dressEdit
+ * editor) can re-position/re-scale the exact image the renderer created. */
+export interface PropHandle {
+  readonly placement: PropPlacement;
+  readonly image: Phaser.GameObjects.Image;
+}
+
 export interface RoomRenderResult {
   readonly objects: readonly Phaser.GameObjects.GameObject[];
   /** Floor colliders for solid props, in map coordinates. */
   readonly colliders: readonly PropColliderRect[];
   /** Screen-space bounding box of everything rendered (may be negative). */
   readonly contentBounds: ScreenBounds;
+  /** One handle per dressed prop, in `dressing.props` order. */
+  readonly propHandles: readonly PropHandle[];
 }
 
 function emptyBounds(): ScreenBounds {
@@ -122,7 +131,8 @@ export function renderRoomDressing(
   objects.push(...renderWalls(scene, dressing, top, right, left));
   objects.push(...renderFloorSkirt(scene, left, bottom, right));
   objects.push(renderFloor(scene, dressing, [top, right, bottom, left]));
-  const propImages = renderProps(scene, dressing, origin, propDepthOverrides);
+  const propHandles = renderProps(scene, dressing, origin, propDepthOverrides);
+  const propImages = propHandles.map((handle) => handle.image);
   objects.push(...propImages);
 
   // Content bounds: floor diamond + wall tops (negative Y) + skirt bottom, then
@@ -138,7 +148,7 @@ export function renderRoomDressing(
     growBoundsFromObject(bounds, image);
   }
 
-  return { objects, colliders: getPropColliders(dressing), contentBounds: bounds };
+  return { objects, colliders: getPropColliders(dressing), contentBounds: bounds, propHandles };
 }
 
 /**
@@ -185,7 +195,7 @@ export function renderExitDoormat(
     growBoundsFromObject(bounds, mat);
   }
 
-  return { objects, colliders: [], contentBounds: bounds };
+  return { objects, colliders: [], contentBounds: bounds, propHandles: [] };
 }
 
 /**
@@ -231,7 +241,7 @@ export function renderInteriorAwakening(
   }
 
   const bounds = emptyBounds();
-  return { objects: [container], colliders: [], contentBounds: bounds };
+  return { objects: [container], colliders: [], contentBounds: bounds, propHandles: [] };
 }
 
 // Golden shafts falling into the room from EVERY window (each a back-wall prop).
@@ -949,10 +959,11 @@ function renderProps(
   dressing: RoomDressing,
   origin: IsoOrigin,
   propDepthOverrides: Readonly<Record<string, number>>,
-): Phaser.GameObjects.Image[] {
-  return dressing.props.map((placement) =>
-    renderProp(scene, dressing, placement, origin, propDepthOverrides[placement.frame]),
-  );
+): PropHandle[] {
+  return dressing.props.map((placement) => ({
+    placement,
+    image: renderProp(scene, dressing, placement, origin, propDepthOverrides[placement.frame]),
+  }));
 }
 
 function renderProp(
@@ -962,6 +973,34 @@ function renderProp(
   origin: IsoOrigin,
   depthOverride?: number,
 ): Phaser.GameObjects.Image {
+  // Origin/flip are placement-fixed; position, scale, texture and depth are
+  // applied by positionPropImage so the dressEdit editor can re-run the exact
+  // same transform when a prop is dragged or resized.
+  const image = scene.add
+    .image(0, 0, dressing.propsTextureKey, placement.frame)
+    .setOrigin(placement.originX ?? 0.5, placement.originY ?? 1)
+    .setFlipX(placement.flipX ?? false);
+
+  positionPropImage(scene, dressing, placement, image, origin, depthOverride);
+
+  return image;
+}
+
+/**
+ * Applies a placement's position, scale, (sheared) texture and depth to an
+ * already-created prop billboard. The single source of truth for where a
+ * dressed prop lands, shared by the renderer and the dev dressEdit editor (which
+ * calls it every frame while dragging/resizing so the live image tracks the
+ * edited mapX/mapY/heightRatio).
+ */
+export function positionPropImage(
+  scene: Phaser.Scene,
+  dressing: RoomDressing,
+  placement: PropPlacement,
+  image: Phaser.GameObjects.Image,
+  origin: IsoOrigin,
+  depthOverride?: number,
+): void {
   const point = projectToIso(placement.mapX, placement.mapY, origin);
   const scale = resolvePropScale(dressing, placement);
   let textureKey = dressing.propsTextureKey;
@@ -981,11 +1020,9 @@ function renderProp(
     }
   }
 
-  const image = scene.add
-    .image(point.x, screenY, textureKey, frameName)
-    .setOrigin(placement.originX ?? 0.5, placement.originY ?? 1)
-    .setScale(scale)
-    .setFlipX(placement.flipX ?? false);
+  image.setTexture(textureKey, frameName);
+  image.setPosition(point.x, screenY);
+  image.setScale(scale);
 
   // Depth-sort by the prop's floor-contact line. A depthMapY override (from the
   // zones JSON or the placement) moves that line off the anchor so the player
@@ -993,8 +1030,6 @@ function renderProp(
   const depthMapY = depthOverride ?? placement.depthMapY ?? placement.mapY;
   const depthY = projectToIso(placement.mapX, depthMapY, origin).y;
   image.setDepth(placement.fixedDepth ?? depthY);
-
-  return image;
 }
 
 /**

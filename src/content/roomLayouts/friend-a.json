@@ -72,8 +72,8 @@
     },
     {
       "frame": "bed",
-      "mapX": 360,
-      "mapY": 740,
+      "mapX": 352,
+      "mapY": 751,
       "heightRatio": 1.64,
       "footprint": {
         "w": 168,
@@ -98,17 +98,6 @@
       "mapY": 559,
       "heightRatio": 0.8,
       "note": "idol lightstick on its stand (thin; no collider)"
-    },
-    {
-      "frame": "fishbowl",
-      "mapX": 952,
-      "mapY": 173,
-      "heightRatio": 0.48,
-      "footprint": {
-        "w": 60,
-        "d": 44
-      },
-      "note": "koi fishbowl on the floor, east side"
     },
     {
       "frame": "cushion",
@@ -159,10 +148,13 @@
     },
     {
       "frame": "fishbowl-table",
-      "mapX": 1040,
-      "mapY": 262,
-      "heightRatio": 0.69,
+      "mapX": 1058,
+      "mapY": 214,
+      "heightRatio": 0.75,
       "note": "small side table under the koi fishbowl (singles-only; bowl sits on it after rearrange)"
     }
+  ],
+  "removed": [
+    "fishbowl"
   ]
 }

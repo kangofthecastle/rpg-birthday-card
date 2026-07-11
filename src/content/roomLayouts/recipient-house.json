@@ -112,8 +112,8 @@
     },
     {
       "frame": "desk",
-      "mapX": 765,
-      "mapY": 581,
+      "mapX": 776,
+      "mapY": 557,
       "heightRatio": 1.49,
       "footprint": {
         "w": 54,
@@ -130,5 +130,8 @@
       "heightRatio": 0.92,
       "note": "bedside table (singles-only; beside the bed)"
     }
+  ],
+  "removed": [
+    "armchair"
   ]
 }

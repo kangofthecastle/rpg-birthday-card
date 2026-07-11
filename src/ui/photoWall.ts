@@ -16,6 +16,9 @@ import { getUiRoot } from './domRoot';
 const MANIFEST_URL = '/assets/photos/manifest.json';
 const PHOTO_BASE = '/assets/photos/';
 const PLACEHOLDER_COUNT = 8;
+// The one frame left empty on the wall, "labelled in careful handwriting" — kept
+// waiting for the next good day. Once ____ is home it glows, drawing the eye.
+const EMPTY_FRAME_CAPTION = 'for the next good day';
 const PLACEHOLDER_CAPTIONS = [
   'a photo goes here',
   'a good day',
@@ -195,8 +198,12 @@ export function showPhotoWall(options: PhotoWallOptions = {}): Promise<void> {
         const frame = document.createElement('button');
         frame.type = 'button';
         frame.className = 'photo-wall__frame';
+        const isEmptyFrame = !item.src && item.caption === EMPTY_FRAME_CAPTION;
         if (!item.src) {
           frame.classList.add('photo-wall__frame--placeholder');
+        }
+        if (isEmptyFrame) {
+          frame.classList.add('photo-wall__frame--empty');
         }
         frame.style.setProperty('--rot', `${rotationFor(index)}deg`);
         frame.style.setProperty('--tone', String(item.tone));
@@ -208,6 +215,15 @@ export function showPhotoWall(options: PhotoWallOptions = {}): Promise<void> {
         const tape = document.createElement('span');
         tape.className = 'photo-wall__tape';
         tape.setAttribute('aria-hidden', 'true');
+
+        // A soft radiant halo emanating from the empty frame — pulsing warm light
+        // that spills beyond the frame's edges (CSS animation; behind the media).
+        if (isEmptyFrame) {
+          const glow = document.createElement('span');
+          glow.className = 'photo-wall__glow';
+          glow.setAttribute('aria-hidden', 'true');
+          frame.append(glow);
+        }
 
         frame.append(tape, buildMedia(item, false));
         if (item.caption) {

@@ -30,6 +30,7 @@ import {
   type ArtFrame,
 } from './splitArt';
 import { playSfx as playAudioSfx, type SfxKey } from '../../game/audio';
+import { isImageUrl } from '../../game/assetProbe';
 
 type SfxEvent = 'shot' | 'heart' | 'beep' | 'tick' | 'checkpoint' | 'complete' | 'detonate' | 'clutch';
 
@@ -61,13 +62,22 @@ const HIT_FLASH_MS = 90;
 const DEATH_FADE_MS = 260;
 const COVER_OVERHANG = 1.08;
 
-// Every combatant carries a little low-bit pixel gun that rotates toward its
-// aim/target. Muzzle flashes pop at the barrel tip on each shot.
+// Every combatant carries a Vandal-silhouette rifle that rotates toward its
+// aim/target. It's anchored in the character's hands (see gunHandY) and muzzle
+// flashes pop at the barrel tip on each shot.
 const GUN_TEX = 'split-gun';
-const GUN_SCALE = 0.92;
-const GUN_HAND_OFFSET = 4;
-const GUN_HAND_RISE = 3;
-const MUZZLE_DIST = 17;
+// The generated rifle texture is ~34x14; scaled down it reads as a long gun
+// held out toward the aim without dwarfing the ~27px-wide characters.
+const GUN_SCALE = 0.74;
+// A dropped-in gun.png (see ART_KEYS.gun) is displayed at this scale/pivot.
+const GUN_ART_SCALE = 0.55;
+const GUN_ART_ORIGIN_X = 0.34;
+// Grip pivot along the generated texture: the hand sits ~a third from the rear
+// so the barrel swings forward from the fist.
+const GUN_GRIP_ORIGIN_X = 0.34;
+// How far forward (along the aim) the grip is held from the body center.
+const GUN_HAND_OFFSET = 5;
+const MUZZLE_DIST = 24;
 const MUZZLE_MS = 80;
 const GUN_TINT = {
   player: 0xdff7ea,
@@ -107,6 +117,9 @@ interface CharacterView {
   readonly art: boolean;
   readonly offsetY: number;
   readonly originY: number;
+  // Vertical hand/chest band as a fraction down from the top of the rendered
+  // sprite; the gun and muzzle flash anchor here (see gunHandY).
+  readonly handFraction: number;
 }
 
 interface MuzzleFlash {
@@ -125,6 +138,9 @@ export class SplitScene extends Phaser.Scene {
   private state: SplitState = createSplitState(Date.now() % 1_000_000);
   private finalizing = false;
   private callbackDelivered = false;
+  // The scene builds asynchronously (art is probed before loading so an absent
+  // optional file never errors the loader); update() no-ops until it's ready.
+  private ready = false;
 
   private keys?: {
     escape: Phaser.Input.Keyboard.Key;
@@ -184,14 +200,47 @@ export class SplitScene extends Phaser.Scene {
     this.callbacks = callbacks;
   }
 
-  preload(): void {
-    for (const { key, file } of ART_FILES) {
-      this.load.image(key, `${SPLIT_ART_BASE}/${file}`);
-    }
-  }
-
   create(): void {
     this.cameras.main.setBackgroundColor('#14171d');
+    void this.boot();
+  }
+
+  // Probe each art file before loading it (isImageUrl rejects a 404 and the dev
+  // SPA fallback that serves index.html for a missing path), so an absent
+  // optional drop-in — notably gun.png by default — never errors the loader or
+  // logs to the console. Missing keys cleanly fall back to generated textures.
+  private async loadArt(): Promise<void> {
+    const probed = await Promise.all(
+      ART_FILES.map(async ({ key, file }) => {
+        const url = `${SPLIT_ART_BASE}/${file}`;
+        return { key, url, ok: await isImageUrl(url) };
+      }),
+    );
+
+    const present = probed.filter((entry) => entry.ok);
+
+    if (present.length === 0) {
+      return;
+    }
+
+    await new Promise<void>((resolve) => {
+      for (const { key, url } of present) {
+        this.load.image(key, url);
+      }
+      this.load.once(Phaser.Loader.Events.COMPLETE, () => resolve());
+      this.load.start();
+    });
+  }
+
+  private async boot(): Promise<void> {
+    await this.loadArt();
+
+    // The scene may already be shutting down (activity closed) by the time the
+    // async probe resolves; bail rather than build into a dead scene.
+    if (!this.scene.isActive()) {
+      return;
+    }
+
     this.generateTextures();
     this.registerArtFrames();
     this.drawStaticArena();
@@ -291,9 +340,14 @@ export class SplitScene extends Phaser.Scene {
 
     this.createInput();
     this.showBark(BARKS.roundStart);
+    this.ready = true;
   }
 
   update(_time: number, _delta: number): void {
+    if (!this.ready) {
+      return;
+    }
+
     if (this.keys && Phaser.Input.Keyboard.JustDown(this.keys.escape) && !this.finalizing) {
       this.cancel();
       return;
@@ -383,7 +437,7 @@ export class SplitScene extends Phaser.Scene {
         case 'player-shot':
           this.tracers.push({ from: event.from, to: event.to, color: 0x8affc1, bornAt: now });
           this.muzzleUntil = now + 70;
-          this.addMuzzle(event.from, event.to, MUZZLE_COLOR.player, now);
+          this.addMuzzle(this.playerView, event.from, event.to, MUZZLE_COLOR.player, now);
           this.playSfx('shot');
           if (event.hitEnemyId !== null) {
             this.enemyFlashUntil.set(event.hitEnemyId, now + HIT_FLASH_MS);
@@ -395,14 +449,14 @@ export class SplitScene extends Phaser.Scene {
           break;
         case 'teammate-shot':
           this.tracers.push({ from: event.from, to: event.to, color: 0x9a7bff, bornAt: now });
-          this.addMuzzle(event.from, event.to, MUZZLE_COLOR.teammate, now);
+          this.addMuzzle(this.teammateView, event.from, event.to, MUZZLE_COLOR.teammate, now);
           if (event.hitEnemyId !== null) {
             this.enemyFlashUntil.set(event.hitEnemyId, now + HIT_FLASH_MS);
           }
           break;
         case 'enemy-shot':
           this.tracers.push({ from: event.from, to: event.to, color: 0xff6b6b, bornAt: now });
-          this.addMuzzle(event.from, event.to, MUZZLE_COLOR.enemy, now);
+          this.addMuzzle(this.enemyViews.get(event.enemyId), event.from, event.to, MUZZLE_COLOR.enemy, now);
           break;
         case 'heart-lost':
           this.playSfx('heart');
@@ -571,12 +625,24 @@ export class SplitScene extends Phaser.Scene {
     view.img.setDepth(footY);
   }
 
+  // World-space Y of a character's hand/chest band, derived from the sprite's
+  // live rendered geometry (position, display height, and per-role anchor) so
+  // the gun sits in the hands for both the bottom-anchored agents and the
+  // top-anchored bots, at any character scale. positionCharacter() runs before
+  // this each frame, so view.img is already placed for the current frame.
+  private gunHandY(view: CharacterView): number {
+    const dispH = view.img.displayHeight;
+    // originY 1 → img.y is the sprite's bottom edge; originY 0 → its top edge.
+    const spriteTop = view.originY === 1 ? view.img.y - dispH : view.img.y;
+    return spriteTop + view.handFraction * dispH;
+  }
+
   // Point a character's gun toward `angle`, holding it at hand height and
   // flipping it upright when it swings to the left half so it never appears
   // upside-down. Renders just above the body.
   private aimGun(view: CharacterView, pos: { x: number; y: number }, angle: number): void {
     const gun = view.gun;
-    const handY = pos.y - GUN_HAND_RISE;
+    const handY = this.gunHandY(view);
     gun.setPosition(
       pos.x + Math.cos(angle) * GUN_HAND_OFFSET,
       handY + Math.sin(angle) * GUN_HAND_OFFSET,
@@ -588,8 +654,11 @@ export class SplitScene extends Phaser.Scene {
   }
 
   // Queue a muzzle flash at the barrel tip, derived from a shot's from→to
-  // direction so it lines up with whichever combatant fired.
+  // direction so it lines up with whichever combatant fired. Anchored to the
+  // firer's hand band (via its view) so the flash pops from the gun's muzzle,
+  // not the hitbox center.
   private addMuzzle(
+    view: CharacterView | undefined,
     from: { x: number; y: number },
     to: { x: number; y: number },
     color: number,
@@ -598,9 +667,10 @@ export class SplitScene extends Phaser.Scene {
     const dx = to.x - from.x;
     const dy = to.y - from.y;
     const dist = Math.hypot(dx, dy) || 1;
+    const handY = view ? this.gunHandY(view) : from.y;
     this.muzzles.push({
       x: from.x + (dx / dist) * MUZZLE_DIST,
-      y: from.y - GUN_HAND_RISE + (dy / dist) * MUZZLE_DIST,
+      y: handY + (dy / dist) * MUZZLE_DIST,
       color,
       bornAt: now,
     });
@@ -1072,15 +1142,25 @@ export class SplitScene extends Phaser.Scene {
     }
 
     // The held weapon: origin at the grip so it pivots around the hand and the
-    // barrel swings out toward the aim direction.
+    // barrel swings out toward the aim direction. A dropped-in gun.png wins;
+    // otherwise the generated Vandal-silhouette rifle is used. Either is team-
+    // tinted via GUN_TINT.
+    const gunArt = this.hasArt(ART_KEYS.gun);
     const gun = this.add
-      .image(0, 0, GUN_TEX)
-      .setOrigin(0.24, 0.5)
-      .setScale(GUN_SCALE)
+      .image(0, 0, gunArt ? ART_KEYS.gun : GUN_TEX)
+      .setOrigin(gunArt ? GUN_ART_ORIGIN_X : GUN_GRIP_ORIGIN_X, 0.5)
+      .setScale(gunArt ? GUN_ART_SCALE : GUN_SCALE)
       .setTint(GUN_TINT[role])
       .setVisible(false);
 
-    return { img, gun, art, offsetY: art ? spec.offsetY : 0, originY: spec.originY };
+    return {
+      img,
+      gun,
+      art,
+      offsetY: art ? spec.offsetY : 0,
+      originY: spec.originY,
+      handFraction: spec.handFraction,
+    };
   }
 
   private createSpike(): void {
@@ -1147,22 +1227,55 @@ export class SplitScene extends Phaser.Scene {
     });
   }
 
-  // A tiny low-bit sidearm: dark slide + grip with a bright muzzle tip, sized
-  // to the character proportions. Tinted per team by the character view.
+  // A Vandal-silhouette rifle drawn barrel-right: rear stock, boxy receiver, an
+  // angled trigger grip (the pivot/hand), a box magazine below mid-body, a
+  // slim foregrip, a long barrel, front sight, and a bright muzzle tip. Sized
+  // ~34x14 so it reads as a long gun at gameplay scale; tinted per team by the
+  // character view. GUN_GRIP_ORIGIN_X pins the pivot on the grip.
   private makeGun(): void {
-    this.makeTexture(GUN_TEX, 22, 12, (g) => {
-      // Slide / barrel.
-      g.fillStyle(0x3c424e, 1);
-      g.fillRect(3, 3, 16, 4);
-      // Grip.
-      g.fillStyle(0x2b3038, 1);
-      g.fillRect(4, 6, 5, 5);
-      // Bright muzzle tip so the barrel end reads.
-      g.fillStyle(0xc8d0da, 1);
-      g.fillRect(18, 3, 3, 4);
+    const body = 0x3c424e;
+    const metal = 0x2b3038;
+    const dark = 0x24282f;
+    const tip = 0xc8d0da;
+
+    this.makeTexture(GUN_TEX, 34, 14, (g) => {
+      // Rear stock.
+      g.fillStyle(metal, 1);
+      g.fillRect(0, 5, 8, 6);
+      g.fillRect(1, 4, 6, 1);
+
+      // Receiver / body.
+      g.fillStyle(body, 1);
+      g.fillRect(6, 4, 15, 5);
+
+      // Trigger grip (angled down) — the hand / pivot.
+      g.fillStyle(metal, 1);
+      g.fillRect(9, 8, 4, 5);
+
+      // Box magazine, leaning slightly forward.
+      g.fillStyle(dark, 1);
+      g.fillRect(13, 8, 5, 6);
+      g.fillRect(15, 12, 4, 2);
+
+      // Long barrel.
+      g.fillStyle(body, 1);
+      g.fillRect(20, 5, 11, 3);
+
+      // Slim foregrip nub.
+      g.fillStyle(metal, 1);
+      g.fillRect(22, 8, 2, 3);
+
+      // Front sight post.
+      g.fillRect(27, 3, 2, 2);
+
+      // Bright muzzle / flash hider so the barrel end reads.
+      g.fillStyle(tip, 1);
+      g.fillRect(31, 4, 3, 4);
+
       // Dark outline for the low-bit pop.
       g.lineStyle(1, 0x11151b, 0.9);
-      g.strokeRect(3, 3, 16, 4);
+      g.strokeRect(6, 4, 15, 5);
+      g.strokeRect(20, 5, 11, 3);
     });
   }
 

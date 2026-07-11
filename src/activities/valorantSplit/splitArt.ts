@@ -28,6 +28,7 @@ export const ART_KEYS = {
   viper: 'split-art-viper',
   omen: 'split-art-omen',
   bot: 'split-art-bot',
+  gun: 'split-art-gun',
   spike: 'split-art-spike',
   ui: 'split-art-ui',
 } as const;
@@ -38,6 +39,11 @@ export const ART_FILES: ReadonlyArray<{ readonly key: string; readonly file: str
   { key: ART_KEYS.viper, file: 'viper.png' },
   { key: ART_KEYS.omen, file: 'omen.png' },
   { key: ART_KEYS.bot, file: 'bot.png' },
+  // Optional drop-in for the held weapon. Absent by default: the scene falls
+  // back to its generated Vandal-silhouette rifle (makeGun) until a painted
+  // gun.png is dropped in here. Sprite should face barrel-right, grip roughly a
+  // third from the rear (see GUN_ART_ORIGIN_X / GUN_ART_SCALE in SplitScene).
+  { key: ART_KEYS.gun, file: 'gun.png' },
   { key: ART_KEYS.spike, file: 'spike.png' },
   { key: ART_KEYS.ui, file: 'ui.png' },
 ];
@@ -81,10 +87,17 @@ export const UI_FRAMES: Readonly<Record<string, ArtFrame>> = {
 // (26x34): Viper/Omen plant their feet on the hitbox bottom and rise a little
 // above it; the bot is TOP-aligned and scaled so its sphere head (rows 4-24 of
 // 67 content rows) stays centered on the top-22% headshot band of the rect.
+//
+// handFraction is the vertical position of the character's hand/chest band as a
+// fraction measured DOWN from the top of the rendered sprite (0 = head crown,
+// 1 = feet). The scene anchors the held gun and muzzle flash there so the
+// weapon sits in the hands rather than off the hitbox center — see
+// SplitScene.gunHandY(). These are front-facing standing figures, so the hands
+// read at roughly mid-torso.
 export const CHARACTER_ART = {
-  player: { key: ART_KEYS.viper, scale: 0.58, originY: 1, offsetY: 1 },
-  teammate: { key: ART_KEYS.omen, scale: 0.58, originY: 1, offsetY: 1 },
-  enemy: { key: ART_KEYS.bot, scale: 0.567, originY: 0, offsetY: -2.3 },
+  player: { key: ART_KEYS.viper, scale: 0.67, originY: 1, offsetY: 1, handFraction: 0.46 },
+  teammate: { key: ART_KEYS.omen, scale: 0.67, originY: 1, offsetY: 1, handFraction: 0.46 },
+  enemy: { key: ART_KEYS.bot, scale: 0.66, originY: 0, offsetY: -2.3, handFraction: 0.5 },
 } as const;
 
 export const SPIKE_BASE_SCALE = 0.72;

@@ -30,7 +30,12 @@ import Phaser from 'phaser';
 import type { Projection } from './projection';
 import type { IsoOrigin } from './isometricProjection';
 import { positionPropImage, type PropHandle } from './roomRenderer';
-import type { PropPlacement, RoomDressing, RoomLayoutFile } from '../content/roomDressing';
+import {
+  computeRemovedTombstones,
+  type PropPlacement,
+  type RoomDressing,
+  type RoomLayoutFile,
+} from '../content/roomDressing';
 
 // Dev middleware (vite.config.ts) that writes the posted layout to
 // src/content/roomLayouts/<locationId>.json. The glob in roomDressing.ts picks
@@ -44,6 +49,12 @@ interface DressEditorOptions {
   readonly dressing: RoomDressing;
   readonly propHandles: readonly PropHandle[];
   readonly propDepthOverrides: Readonly<Record<string, number>>;
+  /**
+   * Frame ids already tombstoned in the persisted layout (deliberately removed
+   * in a prior session). Kept absent unless undone here, and re-persisted on
+   * Save so singles-only deletions stay gone across reloads.
+   */
+  readonly removed?: readonly string[];
   /** Freeze/unfreeze the player+interactions so editing stays inert. */
   readonly setPlayerFrozen: (frozen: boolean) => void;
 }
@@ -83,7 +94,12 @@ const FIELD_ORDER: readonly (keyof PropPlacement)[] = [
 ];
 
 export function startDressEditor(scene: Phaser.Scene, options: DressEditorOptions): void {
-  new DressEditor(scene, options);
+  const editor = new DressEditor(scene, options);
+  // Dev-only handle for tooling/tests driving the editor (e.g. locating a prop's
+  // on-screen bounds to click it). Stripped from production builds.
+  if (import.meta.env.DEV) {
+    (window as unknown as { __dressEditor?: DressEditor }).__dressEditor = editor;
+  }
 }
 
 class DressEditor {
@@ -108,6 +124,11 @@ class DressEditor {
   // and excluded from the E export.
   private readonly removed: { index: number; entry: PropEntry }[] = [];
 
+  // Frame ids tombstoned in the persisted layout before this session opened.
+  // Folded into the Save payload (still-absent ones) and the removed-count
+  // indicator so opening a room shows what's already deliberately absent.
+  private readonly initialRemoved: readonly string[];
+
   private panel!: HTMLElement;
   private readoutEl!: HTMLElement;
   private removedCountEl!: HTMLElement;
@@ -117,6 +138,7 @@ class DressEditor {
     this.scene = scene;
     this.options = options;
     this.projection = options.projection;
+    this.initialRemoved = options.removed ?? [];
 
     // Deep-enough clone: top-level fields are edited; footprint is copied so an
     // export round-trips even for props we never touch. The original dressing
@@ -499,8 +521,9 @@ class DressEditor {
     if (!this.removedCountEl) {
       return;
     }
-    const n = this.removed.length;
-    this.removedCountEl.textContent = n > 0 ? `⚠ ${n} prop${n === 1 ? '' : 's'} removed (excluded from export)` : '';
+    const n = this.tombstonedFrames().length;
+    this.removedCountEl.textContent =
+      n > 0 ? `⚠ ${n} prop${n === 1 ? '' : 's'} removed (tombstoned on Save)` : '';
   }
 
   private toast(text: string): void {
@@ -513,12 +536,26 @@ class DressEditor {
 
   // --- persistence ---------------------------------------------------------
 
+  // Frame ids to persist as tombstones: previously-tombstoned ids still absent
+  // plus this session's removals, minus anything currently present (an undo puts
+  // a prop back in entries[], clearing its tombstone).
+  private tombstonedFrames(): string[] {
+    return computeRemovedTombstones(
+      this.entries.map((entry) => entry.placement.frame),
+      this.initialRemoved,
+      this.removed.map((r) => r.entry.placement.frame),
+    );
+  }
+
   // The working layout as a RoomLayoutFile. Removed props are already spliced
-  // out of entries[], so they are naturally excluded from the saved file.
+  // out of entries[], so they are naturally excluded from the saved file; the
+  // `removed` tombstones stop singles-only props re-merging on the next reload.
   private buildLayoutFile(): RoomLayoutFile {
+    const removed = this.tombstonedFrames();
     return {
       locationId: this.options.locationId,
       props: this.entries.map((entry) => entry.placement),
+      ...(removed.length > 0 ? { removed } : {}),
     };
   }
 

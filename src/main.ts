@@ -38,6 +38,12 @@ async function bootGame(): Promise<void> {
 
   const game = new Phaser.Game(createGameConfig(gameRoot));
   syncViewportFrame(game);
+  // Dev-only handle so tooling (and the dressEdit drive) can introspect the
+  // running game — e.g. locate a prop's on-screen bounds to click it. Stripped
+  // from production builds.
+  if (import.meta.env.DEV) {
+    (window as unknown as { __game?: Phaser.Game }).__game = game;
+  }
 }
 
 void bootGame();

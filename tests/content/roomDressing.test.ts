@@ -2,6 +2,8 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  applyRoomLayout,
+  computeRemovedTombstones,
   getPropColliders,
   getRoomDressing,
   isSinglesOnlyProp,
@@ -225,6 +227,66 @@ describe('room layout overrides', () => {
     expect(
       isValidRoomLayoutFile({ locationId: 'x', props: [{ frame: 'a', mapX: 'no', mapY: 2 }] }),
     ).toBe(false);
+  });
+
+  it('accepts an optional string[] `removed` tombstone list, rejecting bad shapes', () => {
+    // A save carrying tombstones round-trips through the validator...
+    const payload = {
+      locationId: 'recipient-house',
+      props: [{ frame: 'bed', mapX: 1, mapY: 2 }],
+      removed: ['armchair'],
+    };
+    expect(isValidRoomLayoutFile(payload)).toBe(true);
+    // ...and survives a JSON round-trip (what the dev endpoint persists/reloads).
+    expect(isValidRoomLayoutFile(JSON.parse(JSON.stringify(payload)))).toBe(true);
+    expect(isValidRoomLayoutFile({ locationId: 'x', props: [], removed: [] })).toBe(true);
+    expect(isValidRoomLayoutFile({ locationId: 'x', props: [], removed: 'armchair' })).toBe(false);
+    expect(isValidRoomLayoutFile({ locationId: 'x', props: [], removed: [1] })).toBe(false);
+  });
+});
+
+describe('singles-only tombstones', () => {
+  // The recipient dressing carries two singles-only props (armchair, bedside-table)
+  // that the merge appends unless the saved layout deletes them.
+  const dressing = getRoomDressing('recipient-house')!;
+
+  it('re-merges singles-only props absent from the layout, but NOT tombstoned ones', () => {
+    // With an empty saved layout and no tombstones, every singles-only prop is
+    // re-appended (the auto-merge that makes newly-registered art appear).
+    const merged = applyRoomLayout(dressing, { props: [], removed: [] });
+    const frames = merged.props.map((p) => p.frame);
+    expect(frames).toContain('armchair');
+    expect(frames).toContain('bedside-table');
+
+    // Tombstoning `armchair` keeps it gone across the reload (the bug fix): it is
+    // not re-merged, while the untombstoned bedside-table still is.
+    const withTombstone = applyRoomLayout(dressing, { props: [], removed: ['armchair'] });
+    const tombstonedFrames = withTombstone.props.map((p) => p.frame);
+    expect(tombstonedFrames).not.toContain('armchair');
+    expect(tombstonedFrames).toContain('bedside-table');
+  });
+
+  it('computes the tombstone set from previous + session removals, minus present', () => {
+    // Previously-tombstoned ids still absent, plus this session's removals.
+    expect(computeRemovedTombstones(['bed', 'desk'], ['armchair'], ['pothos']).sort()).toEqual([
+      'armchair',
+      'pothos',
+    ]);
+    // A previously-tombstoned id with no props still present stays tombstoned.
+    expect(computeRemovedTombstones(['bed'], ['armchair'], [])).toEqual(['armchair']);
+    // De-duplicated across the two sources.
+    expect(computeRemovedTombstones([], ['armchair'], ['armchair'])).toEqual(['armchair']);
+    // A present frame is never tombstoned (a sheet prop with another placement,
+    // or a kept prop), even if it appears in the previous set.
+    expect(computeRemovedTombstones(['bed'], ['bed'], [])).toEqual([]);
+  });
+
+  it('clears a tombstone when the removal is undone (frame back among present)', () => {
+    // Undo re-adds the prop to entries[], so its frame is "present" and drops out
+    // of the tombstone set — Cmd/Z of a delete un-tombstones it.
+    expect(computeRemovedTombstones(['armchair'], [], ['armchair'])).toEqual([]);
+    // And an initially-tombstoned prop that gets restored is likewise cleared.
+    expect(computeRemovedTombstones(['armchair'], ['armchair'], [])).toEqual([]);
   });
 });
 

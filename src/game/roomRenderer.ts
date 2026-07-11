@@ -49,6 +49,15 @@ export interface ScreenBounds {
   maxY: number;
 }
 
+/** The dressed room's floor rectangle in *map* pixels (inset from the map
+ * edges), used to locate the open front edge for the doorway light spill. */
+export interface FloorMapRect {
+  readonly x0: number;
+  readonly y0: number;
+  readonly x1: number;
+  readonly y1: number;
+}
+
 export interface RoomRenderResult {
   readonly objects: readonly Phaser.GameObjects.GameObject[];
   /** Floor colliders for solid props, in map coordinates. */
@@ -196,13 +205,18 @@ export function renderInteriorAwakening(
   dressing: RoomDressing,
   exits: readonly PropColliderRect[],
   origin: IsoOrigin,
-  options: { readonly fadeInMs?: number } = {},
+  options: { readonly fadeInMs?: number; readonly floorMapRect?: FloorMapRect } = {},
 ): RoomRenderResult {
   const container = scene.add.container(0, 0).setDepth(AWAKENING_DEPTH);
 
   addWindowShafts(scene, dressing, origin, container);
   for (const exit of exits) {
     addDoormatAwakening(scene, dressing, exit, origin, container);
+  }
+  // Whisper of outside light spilling in over the open (wall-less) front edge
+  // where the doormat sits — much quieter than the window beams.
+  if (options.floorMapRect) {
+    addDoorwayEdgeSpill(scene, dressing, options.floorMapRect, origin, container);
   }
 
   const fadeInMs = options.fadeInMs ?? 0;
@@ -220,29 +234,58 @@ export function renderInteriorAwakening(
   return { objects: [container], colliders: [], contentBounds: bounds };
 }
 
-// Golden shafts from the window (a back-wall prop) falling into the room. Each
-// beam is a screen-space trapezoid (narrow at the window, splaying onto the
-// floor) built from layered additive fills for soft edges, capped by a bright
-// landing pool, with a few seeded dust motes drifting slowly along its length.
+// Golden shafts falling into the room from EVERY window (each a back-wall prop).
+// Generalized over all 'window' placements so extra windows each throw their own
+// beam set, cast along their wall's inward axis (see addWindowShaftSet).
 function addWindowShafts(
   scene: Phaser.Scene,
   dressing: RoomDressing,
   origin: IsoOrigin,
   container: Phaser.GameObjects.Container,
 ): void {
-  const windowProp = dressing.props.find((placement) => placement.frame === 'window');
-  if (!windowProp) {
+  const windows = dressing.props.filter((placement) => placement.frame === 'window');
+  if (windows.length === 0) {
     return;
   }
 
+  const moteKey = buildInteriorMoteTexture(scene, dressing);
+  windows.forEach((windowProp, index) => {
+    addWindowShaftSet(scene, dressing, windowProp, index, origin, container, moteKey);
+  });
+}
+
+// One window's beams: screen-space trapezoids (narrow at the window opening,
+// splaying onto the floor) of layered additive fills for soft edges, each capped
+// by a bright landing pool, with a few seeded dust motes drifting along its
+// length. Beams cast along the wall's inward axis — a west/left window (negative
+// shear) throws them east (+map-x) into the room; a north/right window (positive
+// shear) throws them south (+map-y) — with a little spread ALONG the wall.
+function addWindowShaftSet(
+  scene: Phaser.Scene,
+  dressing: RoomDressing,
+  windowProp: PropPlacement,
+  index: number,
+  origin: IsoOrigin,
+  container: Phaser.GameObjects.Container,
+  moteKey: string,
+): void {
   const wallBase = projectToIso(windowProp.mapX, windowProp.mapY, origin);
   // Light enters up on the wall (the window opening), not at the baseboard.
   const source: IsoPoint = { x: wallBase.x, y: wallBase.y - dressing.wallHeight * 0.62 };
-  const rng = mulberry32(fnv1a(`${dressing.tilesTextureKey}:window-shafts`));
-  const moteKey = buildInteriorMoteTexture(scene, dressing);
+  const rng = mulberry32(
+    fnv1a(`${dressing.tilesTextureKey}:window-shafts:${index}:${windowProp.mapX},${windowProp.mapY}`),
+  );
 
-  // Beams reach progressively deeper into the room (increasing map-x from the
-  // window), with a little cross-room spread (map-y offset) for variety.
+  // Positive shear ⇒ north/right wall: beams reach deeper south (map-y), spread
+  // along map-x. Otherwise west/left wall: deeper east (map-x), spread map-y.
+  const northWall = (windowProp.wallShear ?? 0) > 0;
+  const landMap = (dist: number, off: number): { x: number; y: number } =>
+    northWall
+      ? { x: windowProp.mapX + off, y: windowProp.mapY + dist }
+      : { x: windowProp.mapX + dist, y: windowProp.mapY + off };
+
+  // Beams reach progressively deeper into the room, with a little cross-spread
+  // along the wall for variety.
   const beams = [
     { dist: 210, off: 24, topHW: 26, botHW: 66 },
     { dist: 360, off: -14, topHW: 30, botHW: 82 },
@@ -250,7 +293,8 @@ function addWindowShafts(
   ];
 
   for (const beam of beams) {
-    const land = projectToIso(windowProp.mapX + beam.dist, windowProp.mapY + beam.off, origin);
+    const landPoint = landMap(beam.dist, beam.off);
+    const land = projectToIso(landPoint.x, landPoint.y, origin);
 
     const shaft = scene.add.graphics().setBlendMode(Phaser.BlendModes.ADD);
     shaft.fillStyle(0xffd27a, 0.05);
@@ -397,6 +441,117 @@ function addDoormatAwakening(
     repeatDelay: 1500,
     ease: 'Sine.easeInOut',
   });
+}
+
+// A whisper of warm outside light bleeding in over the room's OPEN front edge
+// (the wall-less south side the doormat sits on): a soft, low-alpha gold band
+// hugging that edge and fading a short way into the floor, plus a couple of slow
+// faint motes rising off the threshold. Deliberately much quieter than the
+// window beams — a spill, not a shaft.
+function addDoorwayEdgeSpill(
+  scene: Phaser.Scene,
+  dressing: RoomDressing,
+  floor: FloorMapRect,
+  origin: IsoOrigin,
+  container: Phaser.GameObjects.Container,
+): void {
+  const depth = 150; // how far the glow reaches into the room from the edge (map px)
+  const band: PropColliderRect = {
+    x: floor.x0,
+    y: floor.y1 - depth,
+    width: floor.x1 - floor.x0,
+    height: depth,
+  };
+
+  const spillSrc = buildDoorwaySpillTexture(scene, dressing);
+  const spill = warpTextureToFloorQuad(scene, spillSrc, `${spillSrc}-band`, band, origin, 0);
+  if (spill) {
+    spill.setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.16);
+    scene.tweens.add({
+      targets: spill,
+      alpha: { from: 0.1, to: 0.22 },
+      duration: 4200,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+    container.add(spill);
+  }
+
+  // A couple of faint, slow motes drifting up off the threshold.
+  const moteKey = buildInteriorMoteTexture(scene, dressing);
+  const rng = mulberry32(fnv1a(`${dressing.tilesTextureKey}:doorway-spill`));
+  for (let i = 0; i < 3; i += 1) {
+    const fx = floor.x0 + (floor.x1 - floor.x0) * (0.3 + rng() * 0.4);
+    const fy = floor.y1 - 12 - rng() * 32;
+    const point = projectToIso(fx, fy, origin);
+    const mote = scene.add
+      .image(point.x, point.y, moteKey)
+      .setBlendMode(Phaser.BlendModes.ADD)
+      .setScale(0.32 + rng() * 0.4)
+      .setAlpha(0);
+    container.add(mote);
+    scene.tweens.add({
+      targets: mote,
+      y: point.y - (22 + rng() * 30),
+      duration: 7000 + rng() * 3000,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+    scene.tweens.add({
+      targets: mote,
+      alpha: { from: 0.05, to: 0.2 + rng() * 0.12 },
+      duration: 2200 + rng() * 1500,
+      hold: 400 + rng() * 600,
+      delay: rng() * 2500,
+      repeatDelay: rng() * 1800,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+  }
+}
+
+// A vertical warm gradient (transparent inward → gold at the edge) with soft
+// horizontal end-fades so the band melts into the corners rather than hard-
+// cutting. Warped onto the front-edge floor band by addDoorwayEdgeSpill.
+function buildDoorwaySpillTexture(scene: Phaser.Scene, dressing: RoomDressing): string {
+  const key = `${dressing.tilesTextureKey}-doorway-spill`;
+  if (scene.textures.exists(key)) {
+    return key;
+  }
+
+  const w = 256;
+  const h = 96;
+  const canvasTexture = scene.textures.createCanvas(key, w, h);
+  if (!canvasTexture) {
+    return key;
+  }
+  const ctx = canvasTexture.getContext();
+
+  // Top of the texture maps to the inner edge (into the room), bottom to the
+  // open front edge — so brighten toward the bottom.
+  const vertical = ctx.createLinearGradient(0, 0, 0, h);
+  vertical.addColorStop(0, 'rgba(255,221,154,0)');
+  vertical.addColorStop(0.6, 'rgba(255,224,164,0.35)');
+  vertical.addColorStop(1, 'rgba(255,236,190,0.9)');
+  ctx.fillStyle = vertical;
+  ctx.fillRect(0, 0, w, h);
+
+  // Carve soft transparent margins at both ends.
+  const ends = ctx.createLinearGradient(0, 0, w, 0);
+  ends.addColorStop(0, 'rgba(0,0,0,1)');
+  ends.addColorStop(0.14, 'rgba(0,0,0,0)');
+  ends.addColorStop(0.86, 'rgba(0,0,0,0)');
+  ends.addColorStop(1, 'rgba(0,0,0,1)');
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.fillStyle = ends;
+  ctx.fillRect(0, 0, w, h);
+  ctx.globalCompositeOperation = 'source-over';
+
+  canvasTexture.refresh();
+  return key;
 }
 
 function buildInteriorMoteTexture(scene: Phaser.Scene, dressing: RoomDressing): string {

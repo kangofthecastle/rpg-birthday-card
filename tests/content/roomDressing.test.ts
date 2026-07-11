@@ -83,6 +83,32 @@ describe('getRoomDressing', () => {
     }
   });
 
+  it('hangs multiple windows across both back walls, sheared to each wall', () => {
+    const dressing = getRoomDressing('recipient-house')!;
+    const windows = dressing.props.filter((p) => p.frame === 'window');
+
+    // More than one window (the owner asked for more light sources).
+    expect(windows.length).toBeGreaterThanOrEqual(3);
+
+    // Back-left (west) wall windows shear -0.5 like the original; back-right
+    // (north) wall windows shear +0.5 like the photo wall. At least one of each.
+    const leftWall = windows.filter((w) => w.wallShear === -0.5);
+    const rightWall = windows.filter((w) => w.wallShear === 0.5);
+    expect(leftWall.length).toBeGreaterThanOrEqual(1);
+    expect(rightWall.length).toBeGreaterThanOrEqual(1);
+
+    // A right-wall window shares the photo wall's shear (same wall band slope).
+    const photoWall = dressing.props.find((p) => p.frame === 'photoWall')!;
+    expect(rightWall[0]!.wallShear).toBe(photoWall.wallShear);
+
+    // Every window is wall decor: no footprint/collider, fixed depth behind the
+    // billboards, matching the original window's non-awakened treatment.
+    for (const win of windows) {
+      expect(win.footprint).toBeUndefined();
+      expect(win.fixedDepth).toBeLessThan(0);
+    }
+  });
+
   it('sizes floor props against the player via heightRatio, keeping bed largest', () => {
     const dressing = getRoomDressing('recipient-house')!;
     const byFrame = (frame: string) => dressing.props.find((p) => p.frame === frame)!;

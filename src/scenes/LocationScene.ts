@@ -1162,6 +1162,16 @@ export class LocationScene extends Phaser.Scene {
     }
 
     this.interiorAwakened = true;
+    // Floor rect in map px (inset from the map edges, mirroring renderRoomDressing)
+    // so the awakening can locate the open front edge for the doorway light spill.
+    const inset = this.dressing.floorInsetTiles;
+    const tile = this.mapDims.tileSize;
+    const floorMapRect = {
+      x0: inset * tile,
+      y0: inset * tile,
+      x1: this.mapDims.width - inset * tile,
+      y1: this.mapDims.height - inset * tile,
+    };
     renderInteriorAwakening(
       this,
       this.dressing,
@@ -1172,7 +1182,7 @@ export class LocationScene extends Phaser.Scene {
         height: exit.height,
       })),
       this.projection.movementOrigin,
-      { fadeInMs: options.animate ? 1500 : 0 },
+      { fadeInMs: options.animate ? 1500 : 0, floorMapRect },
     );
     // Mirror onto the DOM so smoke tests can assert the awakening appeared
     // (Phaser objects are not queryable from Playwright).

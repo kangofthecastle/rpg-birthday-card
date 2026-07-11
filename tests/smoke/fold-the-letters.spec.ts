@@ -128,7 +128,9 @@ test('makes the boat with real gestures and arrives at the lantern clearing WITH
       if (kind === 'open') await dragLine({ x: CX - 78, y: CY }, { x: CX + 78, y: CY }, 18);
       else if (axis === 'vertical') await dragLine({ x: CX, y: CY - 75 }, { x: CX, y: CY + 75 }, 18);
       else if (axis === 'horizontal') await dragLine({ x: CX - 84, y: CY }, { x: CX + 84, y: CY }, 18);
-      else await dragLine({ x: CX - 62, y: CY - 62 }, { x: CX + 62, y: CY + 62 }, 18);
+      // The sail's diagonal fold now creases top-left→bottom-right and folds the
+      // top-RIGHT corner over, so the grabbed corner travels up-right → down-left.
+      else await dragLine({ x: CX + 66, y: CY - 62 }, { x: CX - 66, y: CY + 66 }, 18);
       await page.waitForTimeout(520); // let the fold settle home
     } else if (verb === 'hoist') {
       sawHoist = true;

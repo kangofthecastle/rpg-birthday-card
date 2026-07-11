@@ -411,7 +411,14 @@ export class FoldStage {
     this.hullShape = 'sheet';
     this.assembled = assembled;
     this.textLines = textLines;
-    this.paper = { x: 176, y: 92, w: 288, h: 190 };
+    // The sail's sheet is PORTRAIT (tall) so its single diagonal fold lands an
+    // upright right triangle — a vertical LEFT (luff/mast) edge, apex at the top —
+    // the flat sail that then billows on the mast. The hull/lantern sheets stay
+    // landscape. (paper-friendtwo.png is 512×640 portrait, so it maps here truer too.)
+    this.paper =
+      componentId === 'sail'
+        ? { x: 220, y: 57, w: 200, h: 260 }
+        : { x: 176, y: 92, w: 288, h: 190 };
     this.hoist = 0;
     this.renderedHoist = 0;
     this.roll = 0;
@@ -551,9 +558,9 @@ export class FoldStage {
    * lands on (identical to reflectPlan(diagonal).base for `this.paper`). */
   private sailFoldedPoly(): Point[] {
     const b = this.paper;
-    const a = { x: b.x + b.w, y: b.y }; // top-right (crease end)
-    const bb = { x: b.x, y: b.y + b.h }; // bottom-left (crease end)
-    const f0 = { x: b.x, y: b.y }; // the folding corner (top-left)
+    const a = { x: b.x, y: b.y }; // top-left (apex / crease end)
+    const bb = { x: b.x + b.w, y: b.y + b.h }; // bottom-right (crease end)
+    const f0 = { x: b.x + b.w, y: b.y }; // the folding corner (top-right)
     return clipToHalfPlane(rectPoints(b), a, bb, -sideOf(f0, a, bb));
   }
 
@@ -1032,10 +1039,12 @@ export class FoldStage {
     let bb: Point;
     let f0: Point;
     if (diagonal) {
-      // Crease from top-right to bottom-left; the top-left triangle folds over.
-      a = { x: b.x + b.w, y: b.y };
-      bb = { x: b.x, y: b.y + b.h };
-      f0 = { x: b.x, y: b.y }; // the folding corner
+      // Crease from top-LEFT to bottom-RIGHT (the sail's hypotenuse); the top-right
+      // corner folds over onto the tall base, leaving an upright right triangle: a
+      // vertical LEFT (luff/mast) edge, the right angle at bottom-left, apex at top.
+      a = { x: b.x, y: b.y };
+      bb = { x: b.x + b.w, y: b.y + b.h };
+      f0 = { x: b.x + b.w, y: b.y }; // the folding corner (top-right)
     } else {
       // Horizontal crease through the middle; the top half folds down.
       a = { x: b.x, y: cy };

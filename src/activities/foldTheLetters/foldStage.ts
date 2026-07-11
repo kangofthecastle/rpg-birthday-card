@@ -131,6 +131,13 @@ const INK = 'rgba(74, 52, 30, 0.72)';
 const CREASE = 'rgba(120, 84, 48, 0.9)';
 
 const ASSET_BASE = '/assets/activities/fold-the-letters';
+// Optional painted stage backdrop — a full-canvas 1280×800 (2×) painting of the
+// twilight table + water, its waterline at pixel y=704 = logical y=352 =
+// WATERLINE_Y, so the tray boat sits exactly on the painted water. File-first
+// (isImageUrl probe, zero code changes): when present it is drawn covering the
+// whole canvas UNDER everything, replacing the flat gradient; the gradient is the
+// fallback when the file is absent. Keyed 'backdrop' in `this.images`.
+const BACKDROP_URL = `${ASSET_BASE}/backdrop.png`;
 const PIECE_FILES: Readonly<Record<string, string>> = {
   hull: `${ASSET_BASE}/hull.png`,
   sail: `${ASSET_BASE}/sail.png`,
@@ -563,7 +570,7 @@ export class FoldStage {
 
   private async loadPieces(): Promise<void> {
     await Promise.all(
-      Object.entries({ ...PIECE_FILES, ...PIECE_PAPER_FILES }).map(async ([key, url]) => {
+      Object.entries({ ...PIECE_FILES, ...PIECE_PAPER_FILES, backdrop: BACKDROP_URL }).map(async ([key, url]) => {
         if (!(await isImageUrl(url))) {
           return;
         }
@@ -895,11 +902,20 @@ export class FoldStage {
     ctx.setTransform(RENDER_SCALE, 0, 0, RENDER_SCALE, 0, 0);
     ctx.clearRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
 
-    const table = ctx.createLinearGradient(0, 0, 0, LOGICAL_HEIGHT);
-    table.addColorStop(0, '#241d2b');
-    table.addColorStop(1, '#140e18');
-    ctx.fillStyle = table;
-    ctx.fillRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
+    // File-first painted backdrop: when backdrop.png loaded, draw it covering the
+    // whole canvas UNDER everything (its waterline is authored at logical y=352 =
+    // WATERLINE_Y, so the tray boat sits on the painted water). The flat gradient
+    // below is the fallback when the file is absent.
+    const backdrop = this.images.backdrop;
+    if (backdrop) {
+      ctx.drawImage(backdrop, 0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
+    } else {
+      const table = ctx.createLinearGradient(0, 0, 0, LOGICAL_HEIGHT);
+      table.addColorStop(0, '#241d2b');
+      table.addColorStop(1, '#140e18');
+      ctx.fillStyle = table;
+      ctx.fillRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
+    }
 
     this.drawBoatTray();
 
@@ -1604,11 +1620,18 @@ export class FoldStage {
     const ctx = this.ctx;
     const cx = LOGICAL_WIDTH / 2;
 
-    ctx.save();
-    ctx.globalAlpha = 0.5;
-    ctx.fillStyle = '#12233a';
-    ctx.fillRect(0, WATERLINE_Y, LOGICAL_WIDTH, LOGICAL_HEIGHT - WATERLINE_Y);
-    ctx.restore();
+    // The water band. With the painted backdrop present, the painting already
+    // carries the water below its waterline (WATERLINE_Y) — a full-strength navy
+    // rect would only mud it out — so we skip it and let the paint read. Without
+    // the backdrop (flat-gradient fallback) this translucent navy band IS the
+    // water the boat floats on, so it stays.
+    if (!this.images.backdrop) {
+      ctx.save();
+      ctx.globalAlpha = 0.5;
+      ctx.fillStyle = '#12233a';
+      ctx.fillRect(0, WATERLINE_Y, LOGICAL_WIDTH, LOGICAL_HEIGHT - WATERLINE_Y);
+      ctx.restore();
+    }
 
     if (this.assembled <= 0) {
       return;

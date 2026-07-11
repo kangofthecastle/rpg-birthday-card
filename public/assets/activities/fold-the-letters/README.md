@@ -14,6 +14,7 @@ composites with the others; there is no single monolithic boat sprite.
 | `sail.png` | The sail (____'s letter) on its mast. Mounts on the hull's mast point. | 152×156 (2×) | 76×78 | tray `(2, −58)`, centred |
 | `lantern.png` | The paper lantern (____'s sheet music), glowing. Hangs at the bow. | 60×80 (2×) | 30×40 | tray `(−52, −26)`, centred |
 | `recipient-boat.png` | OPTIONAL. ____ sitting in the finished boat, used only in the sail-away cinematic as an overlay rider. | 240×180 | fits `.fold-sail__boat` (120×90) | rider slot |
+| `backdrop.png` | OPTIONAL. Full-canvas painted stage backdrop (twilight table + water). Drawn under everything, replacing the flat gradient; opaque. Its **waterline must sit at pixel y=704** (= logical y=352 = the tray waterline) so the boat floats on the paint. When present the tray's translucent navy water band is skipped. | 1280×800 (2×) | fills the 640×400 canvas | full canvas, `(0,0)` |
 
 ## Paper textures (the sheet each piece is folded from)
 

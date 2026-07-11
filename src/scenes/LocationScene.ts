@@ -297,6 +297,9 @@ export class LocationScene extends Phaser.Scene {
   private state: RunState = createInitialRunState('recipient-house');
   private player!: Phaser.Physics.Arcade.Sprite;
   private playerVisual?: Phaser.GameObjects.Sprite;
+  // The clearing's art-based shore water band (present only when shore-water.png
+  // dropped in). Kept so update() can scroll its tilePositionX for a calm drift.
+  private clearingShoreWater?: Phaser.GameObjects.TileSprite;
   private playerFacing: PlayerFacing = 'down';
   private wasPlayerMoving = false;
   private tapStepHoldUntil = 0;
@@ -370,6 +373,11 @@ export class LocationScene extends Phaser.Scene {
     // still false from startActivity() and returns before the normal
     // `canMove = true` — comes up controllable rather than frozen.
     this.canMove = true;
+    // scene.restart() reuses this instance and destroys the display list, so the
+    // old shore tileSprite is gone but this reference isn't. Clear it so update()
+    // never scrolls a destroyed object; drawClearingShore re-sets it if this area
+    // is the clearing.
+    this.clearingShoreWater = undefined;
   }
 
   create(): void {
@@ -541,7 +549,14 @@ export class LocationScene extends Phaser.Scene {
     }
   }
 
-  update(): void {
+  update(_time: number, delta: number): void {
+    // Ambient: the clearing's painted shore water drifts sideways a few px/sec —
+    // a calm, delta-timed scroll (not a current). Runs before the gameplay gates
+    // so it keeps breathing even while the dressEdit editor is frozen.
+    if (this.clearingShoreWater) {
+      this.clearingShoreWater.tilePositionX += (8 * delta) / 1000;
+    }
+
     // The dressEdit editor freezes the whole scene: the player stands still and
     // no interactions/edges fire, so arranging props never triggers gameplay.
     if (this.dressEditFrozen) {
@@ -1286,10 +1301,21 @@ export class LocationScene extends Phaser.Scene {
     // tile it across the band (its 128px height matches the 2-tile band exactly),
     // with the awakened-glow effects layered on top. Procedural water otherwise.
     if (this.textures.exists(SHORE_WATER_KEY)) {
-      this.add
+      const shore = this.add
         .tileSprite(0, top, width, bandHeight, SHORE_WATER_KEY)
         .setOrigin(0, 0)
         .setDepth(-17);
+      // The procedural fallback warms its ripples once awakened; the art branch
+      // bypasses that, so layer an equivalent subtle warm shift over the painted
+      // band here — a gentle multiply tint (blue channel eased down) that warms
+      // the whole band without recolouring it. The awakened glow blooms below
+      // still pulse on top. Kept mild, per the texture's gentle-by-design intent.
+      if (awakened) {
+        shore.setTint(0xffe9c8);
+      }
+      // Held for update() to drift its tilePositionX — a calm scroll, not a
+      // current.
+      this.clearingShoreWater = shore;
     } else {
       const water = this.add.graphics().setDepth(-17);
       // Wet sand / shoreline seam.

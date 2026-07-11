@@ -777,8 +777,8 @@
           "id": 5,
           "name": "near-friendone-pc",
           "type": "spawn",
-          "x": 800,
-          "y": 416,
+          "x": 561,
+          "y": 470,
           "point": true
         }
       ]
@@ -808,8 +808,8 @@
           "id": 3,
           "name": "friendone-host",
           "type": "dialogue",
-          "x": 512,
-          "y": 384,
+          "x": 986,
+          "y": 563,
           "width": 128,
           "height": 96
         },
@@ -817,8 +817,8 @@
           "id": 4,
           "name": "friendone-pc",
           "type": "activity",
-          "x": 768,
-          "y": 384,
+          "x": 497,
+          "y": 388,
           "width": 128,
           "height": 96
         }

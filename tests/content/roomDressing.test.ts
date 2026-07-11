@@ -28,11 +28,15 @@ interface TiledLayerJson {
   readonly objects?: readonly TiledObjectJson[];
 }
 
-function loadRecipientHouseInteractables(): readonly TiledObjectJson[] {
+function loadRecipientHouseObjects(layerName: string): readonly TiledObjectJson[] {
   const raw = readFileSync(resolve(__dirname, '../../public/maps/recipient-house.tmj'), 'utf8');
   const map = JSON.parse(raw) as { layers: readonly TiledLayerJson[] };
-  const layer = map.layers.find((candidate) => candidate.name === 'Interactables');
+  const layer = map.layers.find((candidate) => candidate.name === layerName);
   return layer?.objects ?? [];
+}
+
+function loadRecipientHouseInteractables(): readonly TiledObjectJson[] {
+  return loadRecipientHouseObjects('Interactables');
 }
 
 describe('getRoomDressing', () => {
@@ -151,9 +155,12 @@ describe('getRoomDressing', () => {
       expect(byFrame(frame).scale, frame).toBeUndefined();
     }
 
-    // Cozy-RPG canon: the bed towers over everything; the desk cluster is next.
+    // Cozy-RPG canon: the bed is the largest floor prop, with the desk cluster a
+    // hair behind it (the author's dressEdit pass resized the bed down to ~1.5x
+    // the player — no longer a full 2x tower, but still the biggest thing in the
+    // room, and still clearly above the kitchenette table).
     expect(byFrame('bed').heightRatio!).toBeGreaterThan(byFrame('desk').heightRatio!);
-    expect(byFrame('bed').heightRatio!).toBeCloseTo(2.0, 1);
+    expect(byFrame('bed').heightRatio!).toBeCloseTo(1.5, 1);
     expect(byFrame('desk').heightRatio!).toBeGreaterThan(byFrame('kitchen').heightRatio!);
 
     // The flat rug is not height-sized; it keeps an explicit scale.
@@ -350,11 +357,13 @@ describe('getPropColliders', () => {
     expect(bedRect.y).toBe(bed.mapY - bed.footprint!.d);
   });
 
-  it('applies the desk collider offsets so it clears the spawn and the exit', () => {
+  it('keeps every prop collider clear of the spawns and the exit corridor', () => {
     const dressing = getRoomDressing('recipient-house')!;
     const desk = dressing.props.find((p) => p.frame === 'desk')!;
     const colliders = getPropColliders(dressing);
 
+    // The desk still applies its authored collider offsets (colliderOffsetX/Y
+    // tuck the compact collider under the chair, west + south of the raw anchor).
     const deskRect = colliders.find(
       (c) =>
         c.width === desk.footprint!.w &&
@@ -364,9 +373,50 @@ describe('getPropColliders', () => {
     expect(deskRect.x).toBe(
       desk.mapX - desk.footprint!.w / 2 + (desk.colliderOffsetX ?? 0),
     );
-    // The recipient-pc spawn is at map (704, 768); the collider sits south of it so
-    // the player is never trapped, and north of the exit rect (y 864).
-    expect(deskRect.y).toBeGreaterThan(768);
-    expect(deskRect.y + deskRect.height).toBeLessThan(864);
+
+    // Real invariant: the player arrives on a spawn point and leaves through the
+    // exit rect, so no static prop collider may sit on either — otherwise the
+    // player is trapped on entry or the doorway is blocked. Read both from the
+    // map (the same source the scene uses) rather than hard-coding coordinates.
+    const spawns = loadRecipientHouseObjects('Spawns');
+    const exits = loadRecipientHouseObjects('Exits');
+
+    const overlaps = (
+      rect: { x: number; y: number; width: number; height: number },
+      x: number,
+      y: number,
+      w: number,
+      h: number,
+    ): boolean =>
+      rect.x < x + w && rect.x + rect.width > x && rect.y < y + h && rect.y + rect.height > y;
+
+    // Point spawns get a small standing footprint (the player is not a zero-size
+    // point); the exit already carries its own rect.
+    const SPAWN_HALF = 24;
+    for (const collider of colliders) {
+      for (const spawn of spawns) {
+        expect(
+          overlaps(
+            collider,
+            spawn.x - SPAWN_HALF,
+            spawn.y - SPAWN_HALF,
+            SPAWN_HALF * 2,
+            SPAWN_HALF * 2,
+          ),
+          `collider overlaps spawn ${spawn.name}`,
+        ).toBe(false);
+      }
+      for (const exit of exits) {
+        expect(
+          overlaps(collider, exit.x, exit.y, exit.width ?? 0, exit.height ?? 0),
+          `collider overlaps exit ${exit.name}`,
+        ).toBe(false);
+      }
+    }
+
+    // The desk specifically now sits well north of the front-door/near-pc spawn
+    // (704, 768) after the dressEdit rearrange, so its collider clears the whole
+    // spawn->exit corridor. Guards against a regression that drops it back south.
+    expect(deskRect.y + deskRect.height).toBeLessThan(768);
   });
 });

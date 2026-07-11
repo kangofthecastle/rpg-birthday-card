@@ -817,8 +817,8 @@
           "id": 6,
           "name": "recipient-mango-rice",
           "type": "easterEgg",
-          "x": 960,
-          "y": 300,
+          "x": 1111,
+          "y": 646,
           "width": 160,
           "height": 140
         },
@@ -826,7 +826,7 @@
           "id": 7,
           "name": "recipient-photo-wall",
           "type": "easterEgg",
-          "x": 1080,
+          "x": 562,
           "y": 64,
           "width": 160,
           "height": 140
@@ -835,8 +835,8 @@
           "id": 8,
           "name": "recipient-bed",
           "type": "easterEgg",
-          "x": 300,
-          "y": 600,
+          "x": 290,
+          "y": 750,
           "width": 180,
           "height": 150
         },
@@ -844,8 +844,8 @@
           "id": 9,
           "name": "recipient-pc",
           "type": "activity",
-          "x": 624,
-          "y": 720,
+          "x": 685,
+          "y": 511,
           "width": 160,
           "height": 140
         }

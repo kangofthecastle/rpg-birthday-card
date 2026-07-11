@@ -35,6 +35,7 @@ import {
   renderRoomDressing,
   growBoundsFromObject,
   type PropColliderRect,
+  type PropHandle,
   type ScreenBounds,
 } from '../game/roomRenderer';
 import { getCollisionZones, type CollisionZonesFile } from '../content/collisionZones';
@@ -246,6 +247,12 @@ export class LocationScene extends Phaser.Scene {
   private walls?: Phaser.Tilemaps.TilemapLayer;
   private projection?: Projection;
   private dressing?: RoomDressing;
+  // Dressed-prop billboards + the iso origin they were placed with, kept for the
+  // dev ?dressEdit=1 editor. When that editor is active the player is frozen so
+  // movement/interactions/edges stay inert while arranging furniture.
+  private propHandles: readonly PropHandle[] = [];
+  private roomOrigin?: IsoOrigin;
+  private dressEditFrozen = false;
   private propColliders: PropColliderRect[] = [];
   private propColliderBodies: Phaser.GameObjects.Rectangle[] = [];
   private zonesFile?: CollisionZonesFile;
@@ -339,6 +346,7 @@ export class LocationScene extends Phaser.Scene {
 
     void this.runEnterBeats();
     this.maybeStartZoneEditor();
+    this.maybeStartDressEditor();
     this.maybeAutoStartActivity();
   }
 
@@ -388,6 +396,43 @@ export class LocationScene extends Phaser.Scene {
     });
   }
 
+  // Dev-only in-game prop-placement editor (?dressEdit=1), lazily imported so it
+  // is excluded from production bundles. Freezes the player for its lifetime so
+  // dragging/nudging props never triggers movement or interactions.
+  private maybeStartDressEditor(): void {
+    if (!import.meta.env.DEV) {
+      return;
+    }
+    const params = new URLSearchParams(window.location.search);
+    if (
+      !params.has('dressEdit') ||
+      !this.projection ||
+      !this.dressing ||
+      !this.roomOrigin
+    ) {
+      return;
+    }
+
+    const projection = this.projection;
+    const dressing = this.dressing;
+    const origin = this.roomOrigin;
+    const propHandles = this.propHandles;
+    const propDepthOverrides = this.zonesFile?.propDepthOverrides ?? {};
+    void import('../game/dressEditor').then(({ startDressEditor }) => {
+      startDressEditor(this, {
+        locationId: this.location.id,
+        projection,
+        origin,
+        dressing,
+        propHandles,
+        propDepthOverrides,
+        setPlayerFrozen: (frozen: boolean) => {
+          this.dressEditFrozen = frozen;
+        },
+      });
+    });
+  }
+
   private applyWarmLightingTint(): void {
     if (
       !this.location.warmLightingRequiresAllFriendKeepsakes ||
@@ -419,6 +464,15 @@ export class LocationScene extends Phaser.Scene {
   }
 
   update(): void {
+    // The dressEdit editor freezes the whole scene: the player stands still and
+    // no interactions/edges fire, so arranging props never triggers gameplay.
+    if (this.dressEditFrozen) {
+      this.controller.update(false);
+      this.syncPlayerVisual();
+      this.promptText?.setText('');
+      return;
+    }
+
     this.controller.update(this.canMove);
     this.syncPlayerVisual();
 
@@ -565,13 +619,16 @@ export class LocationScene extends Phaser.Scene {
 
     if (this.dressing) {
       this.cameras.main.setBackgroundColor(this.dressing.backgroundColor);
+      const origin = this.getProjection().movementOrigin ?? this.createIsoOrigin(tilemap);
+      this.roomOrigin = origin;
       const rendered = renderRoomDressing(
         this,
         this.dressing,
         tilemap,
-        this.getProjection().movementOrigin ?? this.createIsoOrigin(tilemap),
+        origin,
         this.zonesFile?.propDepthOverrides ?? {},
       );
+      this.propHandles = rendered.propHandles;
       contentBounds = { ...rendered.contentBounds };
       // Polygon zones, when present, REPLACE the footprint-based prop colliders;
       // otherwise fall back to the roomDressing footprints.

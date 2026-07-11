@@ -57,6 +57,9 @@ interface FoldTiming {
   /** Cross-fade of the sail-away key art in over the fold stage. Single source
    *  for the bridge's key-art opacity transition (set inline from here). */
   readonly keyArtFadeMs: number;
+  /** The folded-triangle → mast bridge after the sail fold commits (Change 2). In
+   *  the same family as the hand-downs; fast path in test timing. */
+  readonly sailIntroMs: number;
 }
 
 const REAL_TIMING: FoldTiming = {
@@ -64,6 +67,7 @@ const REAL_TIMING: FoldTiming = {
   expandMs: 1200,
   sailAwayMs: 7000,
   keyArtFadeMs: 2600,
+  sailIntroMs: 750,
 };
 
 const TEST_TIMING: FoldTiming = {
@@ -71,6 +75,7 @@ const TEST_TIMING: FoldTiming = {
   expandMs: 40,
   sailAwayMs: 80,
   keyArtFadeMs: 40,
+  sailIntroMs: 40,
 };
 
 // The notes of ____'s piece, plucked one by one as the sheet music rolls. A
@@ -128,6 +133,9 @@ export const foldTheLettersActivity: ActivityModule = {
     let finished = false;
     let sailingAway = false;
     let assembling = false;
+    // True while the sail's fold → hoist bridge plays (the folded triangle flying
+    // to the mast). Input + keyboard-assist are locked until the sail arrives.
+    let transitioning = false;
     let lastNoteSounded = 0;
     let state: RitualState = createRitualState();
 
@@ -268,7 +276,7 @@ export const foldTheLettersActivity: ActivityModule = {
     // and only on release do we decide commit (past the threshold) vs fall back
     // open. No threshold-triggered canned tween.
     function handleFoldProgress(t: number): void {
-      if (finished || sailingAway || assembling || currentVerb(state) !== 'fold') {
+      if (finished || sailingAway || assembling || transitioning || currentVerb(state) !== 'fold') {
         return;
       }
       state = setFoldProgress(state, t);
@@ -276,7 +284,7 @@ export const foldTheLettersActivity: ActivityModule = {
     }
 
     function handleFoldRelease(): void {
-      if (finished || sailingAway || assembling || currentVerb(state) !== 'fold') {
+      if (finished || sailingAway || assembling || transitioning || currentVerb(state) !== 'fold') {
         return;
       }
       const commit = willCommitFold(state);
@@ -286,18 +294,43 @@ export const foldTheLettersActivity: ActivityModule = {
       // The stage eases the flap the rest of the way home (commit) or back open
       // (fall back), then we settle the model. Seamless: at progress 1 the flap's
       // silhouette already equals the next shape, so the swap doesn't jump.
-      stage.settleFold(commit, () => {
-        if (finished) {
-          return;
-        }
-        state = commit ? commitFold(state) : releaseFold(state);
+      stage.settleFold(commit, () => onFoldSettled(commit));
+    }
+
+    // Shared landing for a settled fold (pointer release AND keyboard-assist): the
+    // sail's diagonal fold bridges into the hoist via the folded-triangle-to-mast
+    // transition; every other fold just advances.
+    function onFoldSettled(commit: boolean): void {
+      if (finished) {
+        return;
+      }
+      const component = currentComponent(state);
+      const wasSailFold = commit && component?.id === 'sail' && currentVerb(state) === 'fold';
+      state = commit ? commitFold(state) : releaseFold(state);
+      if (wasSailFold && state.sailFolded) {
+        runSailHoistIntro();
+      } else {
         afterGesture();
+      }
+    }
+
+    // The folded sail triangle flies to the mast, then the hoist begins with the
+    // sail arriving. Configure the hoist seat (verb → hoist, hoist 0) first so the
+    // stage knows where to land the triangle, lock input, then play the bridge.
+    function runSailHoistIntro(): void {
+      transitioning = true;
+      syncStage();
+      stage.playSailHoistIntro(timing.sailIntroMs, () => {
+        transitioning = false;
+        if (!finished) {
+          syncStage();
+        }
       });
     }
 
     let wasCatching = false;
     function handleHoistProgress(progress: number): void {
-      if (finished || sailingAway || assembling || currentVerb(state) !== 'hoist') {
+      if (finished || sailingAway || assembling || transitioning || currentVerb(state) !== 'hoist') {
         return;
       }
       const next = setHoistProgress(state, progress);
@@ -315,7 +348,7 @@ export const foldTheLettersActivity: ActivityModule = {
     }
 
     function handleRoll(angle: number): void {
-      if (finished || sailingAway || assembling || currentVerb(state) !== 'roll') {
+      if (finished || sailingAway || assembling || transitioning || currentVerb(state) !== 'roll') {
         return;
       }
       const next = applyRoll(state, angle);
@@ -397,7 +430,7 @@ export const foldTheLettersActivity: ActivityModule = {
       }
       const dt = Math.min(64, ts - lastTs);
       lastTs = ts;
-      if (!sailingAway && !assembling && currentVerb(state) === 'kindle') {
+      if (!sailingAway && !assembling && !transitioning && currentVerb(state) === 'kindle') {
         const before = state;
         state = applyKindle(state, dt, kindleHeld);
         if (state !== before) {
@@ -426,7 +459,7 @@ export const foldTheLettersActivity: ActivityModule = {
       if (event.key !== 'Enter' && event.key !== ' ' && event.code !== 'Space') {
         return;
       }
-      if (sailingAway || assembling) {
+      if (sailingAway || assembling || transitioning) {
         return;
       }
       const verb = currentVerb(state);
@@ -435,15 +468,10 @@ export const foldTheLettersActivity: ActivityModule = {
       }
       event.preventDefault();
       if (verb === 'fold') {
-        // Play the whole fold as an animation, then settle it home.
+        // Play the whole fold as an animation, then settle it home — through the
+        // shared landing, so the sail fold also bridges into the hoist.
         playSfx('sfx-paper-fold');
-        stage.playAutoFold(() => {
-          if (finished) {
-            return;
-          }
-          state = commitFold(state);
-          afterGesture();
-        });
+        stage.playAutoFold(() => onFoldSettled(true));
       } else if (verb === 'hoist') {
         handleHoistProgress(state.hoistProgress + KEY_HOIST_STEP);
       } else if (verb === 'roll') {

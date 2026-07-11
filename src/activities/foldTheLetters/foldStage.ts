@@ -128,7 +128,13 @@ const PAPER_LIGHT = '#f6ecd2';
 const PAPER_MID = '#eaddba';
 const PAPER_BACK = '#d8c79c';
 const INK = 'rgba(74, 52, 30, 0.72)';
-const CREASE = 'rgba(120, 84, 48, 0.9)';
+// Guidance-hint palette. Tuned to read on ANY backdrop — the painted warm-horizon
+// backdrop.png as well as the flat dark fallback — so each arrow / crease guide
+// carries its OWN contrast instead of relying on a dark background: a light warm
+// CREAM core stroked over a dark OUTLINE underlay, round-capped and modestly
+// larger. A gentle alpha "breathe" (hintPulse) draws the eye without flashing.
+const HINT_CREAM = '#fff4d6';
+const HINT_OUTLINE = 'rgba(38, 24, 10, 0.9)';
 
 const ASSET_BASE = '/assets/activities/fold-the-letters';
 // Optional painted stage backdrop — a full-canvas 1280×800 (2×) painting of the
@@ -204,22 +210,16 @@ const BOAT_DROP_MS = 1000;
 export const TRAY_ANCHORS = {
   /** Hull sits on the waterline. */
   hull: { x: 0, y: -16, w: 132, h: 44 },
-  /** Sail mounts on the hull's mast point. Seated so the baked-in mast's foot
-   * plants DOWN into the hull's deck (its opaque foot lands at local y≈-15, just
-   * into the hull well at y≈-17) — not perched at horn-tip height with a gap. */
-  sail: { x: 2, y: -49, w: 76, h: 78 },
-  /** Lantern hangs OFF the bow tip (left horn), suspended out over the water on a
-   * little hook arm (drawn in drawBoatTray) — as the composed boat carries it in
-   * recipient-boat.png — rather than floating beside the hull. */
-  lantern: { x: -64, y: -10, w: 30, h: 40 },
-} as const;
-
-/** Where the lantern's hook arm springs from the hull (the left bow tip) and the
- * mid rise of the hook, in the boat-tray's local frame. The arm ends at the
- * lantern's top edge (derived from TRAY_ANCHORS.lantern). */
-const LANTERN_HANGER = {
-  bow: { x: -46, y: -21 },
-  rise: { x: -58, y: -30 },
+  /** Sail mounts on the hull's mast point. Seated DEEP so the baked-in mast's foot
+   * plants down INSIDE the hull's deck well (its opaque foot lands at local y≈-9,
+   * well below the horn lip at y≈-24) — not perched at the deck's edge with a gap. */
+  sail: { x: 2, y: -43, w: 76, h: 78 },
+  /** Lantern hangs OFF the bow tip (left horn): positioned so the loop at the top
+   * of lantern.png rests ON the bow point — as if the horn threads through the
+   * handle — with the body hanging just below/outboard. Seated on the horn's
+   * VISIBLE point (the tip tapers to a faint pixel, so the loop sits a touch inboard
+   * of the geometric apex to read as threaded); no drawn hook arm. */
+  lantern: { x: -43, y: -15, w: 30, h: 40 },
 } as const;
 
 interface Point {
@@ -276,6 +276,24 @@ interface HandDown {
   /** The tray-piece count this lands as (revealed on arrival). */
   target: number;
   snapshot?: HTMLCanvasElement;
+}
+
+/** The sail's fold → hoist bridge: after the diagonal fold commits, the folded
+ * paper triangle is captured as a clean alpha sprite and flown/rotated/scaled from
+ * where the fold finished to the sail's hoist-START seat at the mast foot, so the
+ * hoist doesn't begin with a hard one-frame swap. */
+interface SailIntro {
+  phase: 'capture' | 'fly';
+  start: number;
+  durationMs: number;
+  /** Folded-triangle silhouette (logical) captured to the flying buffer. */
+  srcPoly: Point[];
+  /** Padded bounds of srcPoly — the capture region. */
+  src: Rect;
+  /** The sail's hoist-start footprint at the mast (hoist = 0). */
+  dst: Rect;
+  snapshot?: HTMLCanvasElement;
+  onDone?: () => void;
 }
 
 export interface FoldStageCallbacks {
@@ -338,6 +356,10 @@ export class FoldStage {
   // stage stops drawing (no doubling) and the tray piece it lands as stays hidden
   // until the animation arrives.
   private handDown?: HandDown;
+  // The sail's fold → hoist bridge (see SailIntro). While active the hoist stage
+  // stops drawing and input is locked, so the folded triangle flies to the mast
+  // and the sail arrives instead of snapping in.
+  private sailIntro?: SailIntro;
   // Once a component's hand-down has LANDED in the tray, the big in-progress stage
   // must not redraw the finished piece behind/over the tray — otherwise the last
   // component (the lantern, plus its kindle glow) lingers full-size after it has
@@ -405,6 +427,7 @@ export class FoldStage {
     // A fresh component supersedes any in-flight hand-down; the caller has
     // already advanced the tray count (passed in `assembled`), so just drop it.
     this.handDown = undefined;
+    this.sailIntro = undefined;
     // The new component's big stage draws again (the previous one has settled).
     this.componentSettledToTray = false;
   }
@@ -500,6 +523,53 @@ export class FoldStage {
     };
   }
 
+  /**
+   * Bridges the sail's diagonal FOLD into the HOIST: the just-committed folded
+   * paper triangle is captured as a clean alpha sprite and flown/rotated/scaled
+   * from where the fold finished to the sail's hoist-start seat at the mast foot,
+   * over `durationMs`. While it runs the hoist stage doesn't draw and input is
+   * locked; `onDone` fires when the sail has arrived so the activity can resume.
+   * The caller pushes the hoist verb (hoist = 0) first, so drawHoistStage picks up
+   * exactly where the triangle lands.
+   */
+  playSailHoistIntro(durationMs: number, onDone: () => void): void {
+    const srcPoly = this.sailFoldedPoly();
+    const b = boundsRect(srcPoly);
+    const pad = 12; // room for the paper's soft shadow so it flies clean-edged
+    this.sailIntro = {
+      phase: 'capture',
+      start: performance.now(),
+      durationMs: Math.max(1, durationMs),
+      srcPoly,
+      src: { x: b.x - pad, y: b.y - pad, w: b.w + pad * 2, h: b.h + pad * 2 },
+      dst: this.sailHoistStartBounds(),
+      onDone,
+    };
+  }
+
+  /** The folded sail triangle silhouette — the base half the diagonal reflect fold
+   * lands on (identical to reflectPlan(diagonal).base for `this.paper`). */
+  private sailFoldedPoly(): Point[] {
+    const b = this.paper;
+    const a = { x: b.x + b.w, y: b.y }; // top-right (crease end)
+    const bb = { x: b.x, y: b.y + b.h }; // bottom-left (crease end)
+    const f0 = { x: b.x, y: b.y }; // the folding corner (top-left)
+    return clipToHalfPlane(rectPoints(b), a, bb, -sideOf(f0, a, bb));
+  }
+
+  /** The sail's hoist-START footprint (hoist = 0): where drawHoistStage first
+   * paints the sail cloth, so the flown triangle lands exactly where the sail
+   * arrives. Matches the sail-art draw (drawW = 104, x0 = mastX − drawW·0.26,
+   * top = headLow); the procedural fallback shares the same box. */
+  private sailHoistStartBounds(): Rect {
+    const mastX = LOGICAL_WIDTH / 2;
+    const { headLow } = this.hoistBounds();
+    const sailArt = this.images['sail-loose'] ?? this.images.sail;
+    const drawW = 104;
+    const drawH = sailArt ? drawW * (sailArt.height / sailArt.width) : 128;
+    return { x: mastX - drawW * 0.26, y: headLow, w: drawW, h: drawH };
+  }
+
   /** Logical-space bounds of the full-size finished component — the capture region
    * the hand-down flies from. */
   private handDownSourceBounds(key: 'hull' | 'sail' | 'lantern'): Rect {
@@ -508,9 +578,16 @@ export class FoldStage {
       return { x: b.x - 8, y: b.y - 8, w: b.w + 16, h: b.h + 16 };
     }
     if (key === 'sail') {
-      // The raised sail on its (short) mast — head at headHigh≈120 down to the
-      // sail foot, spanning the mast and the billowed sail (see drawHoistStage).
-      return { x: 300, y: 98, w: 106, h: 158 };
+      // Fly the SAME art the tray seats (sail.png), from a raised big size straight
+      // down onto its seat — so the flight LANDS exactly on the final composite with
+      // no size/aspect pop. The box is centred on the mast (x = mastX + 2, matching
+      // the tray anchor's screen centre) and authored at the sail anchor's aspect
+      // (w:h = TRAY_ANCHORS.sail), so fitting it into that anchor is an exact fill.
+      const mastX = LOGICAL_WIDTH / 2;
+      const a = TRAY_ANCHORS.sail;
+      const w = 104; // ~the raised sail's drawn width, so the fly starts life-size
+      const h = (w * a.h) / a.w;
+      return { x: mastX + 2 - w / 2, y: 175 - h / 2, w, h };
     }
     // The rolled, kindled lantern tube with a little of its glow.
     return { x: 176, y: 88, w: 100, h: 168 };
@@ -555,7 +632,15 @@ export class FoldStage {
         // this draws exactly the finished hull silhouette.
         this.drawHullStage();
       } else if (key === 'sail') {
-        this.drawHoistStage();
+        // Fly the SAME sail.png the tray seats (filling src, which is authored at
+        // the anchor's aspect) so the landing coincides with the final composite —
+        // no size/aspect pop at the swap. Fallback: the procedural hoist view.
+        const sailArt = this.images.sail;
+        if (sailArt) {
+          bctx.drawImage(sailArt, src.x, src.y, src.w, src.h);
+        } else {
+          this.drawHoistStage();
+        }
       } else {
         this.drawLanternStage();
       }
@@ -612,6 +697,79 @@ export class FoldStage {
     }
   }
 
+  /** Captures the folded triangle to a clean transparent buffer, then flips the
+   * sail intro into its flying phase (same technique as captureHandDown). */
+  private captureSailIntro(intro: SailIntro): void {
+    intro.snapshot = this.renderSailFoldToBuffer(intro.srcPoly, intro.src);
+    intro.phase = 'fly';
+    intro.start = performance.now();
+  }
+
+  /** Renders ONLY the folded sail triangle (paper + ____'s letter face, clipped
+   * to the folded silhouette — the same fill the committed fold lands on) into a
+   * transparent offscreen buffer covering `src`, so it flies with clean alpha
+   * edges over the painted backdrop. */
+  private renderSailFoldToBuffer(poly: Point[], src: Rect): HTMLCanvasElement | undefined {
+    const s = RENDER_SCALE;
+    const buf = document.createElement('canvas');
+    buf.width = Math.max(1, Math.round(src.w * s));
+    buf.height = Math.max(1, Math.round(src.h * s));
+    const bctx = buf.getContext('2d');
+    if (!bctx) {
+      return undefined;
+    }
+    const prev = this.ctx;
+    this.ctx = bctx;
+    bctx.setTransform(s, 0, 0, s, -src.x * s, -src.y * s);
+    try {
+      this.fillPaperPoly(poly, this.paper, this.textLines, 14, 1);
+    } finally {
+      this.ctx = prev;
+    }
+    return buf;
+  }
+
+  /** Flies the folded triangle from where the fold finished to the sail's hoist
+   * seat at the mast (ease-out-cubic + a small settle bob + a gentle unrotate into
+   * upright), then hands off to the hoist stage. */
+  private drawSailIntro(intro: SailIntro): void {
+    if (!intro.snapshot) {
+      this.finishSailIntro(intro);
+      return;
+    }
+    const t = clamp01((performance.now() - intro.start) / intro.durationMs);
+    const ease = 1 - Math.pow(1 - t, 3);
+    const bob = Math.sin(t * Math.PI * 3) * (1 - t) * 4;
+    const { src, dst } = intro;
+    const srcCx = src.x + src.w / 2;
+    const srcCy = src.y + src.h / 2;
+    const dstScale = Math.min(dst.w / src.w, dst.h / src.h);
+    const scale = 1 + (dstScale - 1) * ease;
+    const w = src.w * scale;
+    const h = src.h * scale;
+    const dstCx = dst.x + dst.w / 2;
+    const dstCy = dst.y + dst.h / 2;
+    const curCx = srcCx + (dstCx - srcCx) * ease;
+    const curCy = srcCy + (dstCy - srcCy) * ease + bob;
+    const rot = (1 - ease) * 0.22; // gentle settle from the fold angle into upright
+
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.translate(curCx, curCy);
+    ctx.rotate(rot);
+    ctx.drawImage(intro.snapshot, -w / 2, -h / 2, w, h);
+    ctx.restore();
+
+    if (t >= 1) {
+      this.finishSailIntro(intro);
+    }
+  }
+
+  private finishSailIntro(intro: SailIntro): void {
+    this.sailIntro = undefined;
+    intro.onDone?.();
+  }
+
   /** URLs of the piece art that actually loaded (file-first), so the sail-away
    * cinematic can composite the SAME pieces as <img> instead of CSS shapes. */
   getLoadedPieceUrls(): Partial<Record<string, string>> {
@@ -665,8 +823,8 @@ export class FoldStage {
   }
 
   private handlePointerDown = (event: PointerEvent): void => {
-    if (this.settle) {
-      return; // let the previous fold finish settling
+    if (this.settle || this.sailIntro) {
+      return; // let the previous fold finish settling / the sail fly to the mast
     }
     const point = this.toCanvas(event);
     this.pointerDown = true;
@@ -1040,6 +1198,18 @@ export class FoldStage {
       return;
     }
 
+    // The sail's fold → hoist bridge: fly the folded triangle to the mast instead
+    // of drawing the hoist stage (which would hard-swap the sail in). Capture and
+    // fly in the same frame — the buffer is rendered independently, so there's no
+    // one-frame blank.
+    if (this.sailIntro) {
+      if (this.sailIntro.phase === 'capture') {
+        this.captureSailIntro(this.sailIntro);
+      }
+      this.drawSailIntro(this.sailIntro);
+      return;
+    }
+
     if (this.verb === 'fold') {
       if (this.componentId === 'hull') {
         this.drawHullStage();
@@ -1269,24 +1439,14 @@ export class FoldStage {
     if (!plan) {
       return;
     }
-    const ctx = this.ctx;
     if (plan.kind === 'open') {
       // Two arrows pulling the sides outward.
       this.drawPullArrows();
       return;
     }
     for (const flap of plan.flaps ?? []) {
-      // The pulsing crease line.
-      ctx.save();
-      ctx.setLineDash([9, 8]);
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = CREASE;
-      ctx.globalAlpha = 0.55 + 0.35 * Math.sin(this.time);
-      ctx.beginPath();
-      ctx.moveTo(flap.a.x, flap.a.y);
-      ctx.lineTo(flap.b.x, flap.b.y);
-      ctx.stroke();
-      ctx.restore();
+      // The pulsing crease line, now cream-over-dark so it reads on any backdrop.
+      this.strokeHintCrease(flap.a, flap.b, this.hintPulse(1));
       // A grab-and-drag arrow from the free edge toward where it folds.
       this.drawTravelArrow(flap.f0, flap.f1);
     }
@@ -1298,76 +1458,96 @@ export class FoldStage {
       return;
     }
     const flap = plan.flaps[0];
-    const ctx = this.ctx;
-    ctx.save();
-    ctx.setLineDash([9, 8]);
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = CREASE;
-    ctx.globalAlpha = 0.55 + 0.35 * Math.sin(this.time);
-    ctx.beginPath();
-    ctx.moveTo(flap.a.x, flap.a.y);
-    ctx.lineTo(flap.b.x, flap.b.y);
-    ctx.stroke();
-    ctx.restore();
+    this.strokeHintCrease(flap.a, flap.b, this.hintPulse(1));
     this.drawTravelArrow(flap.f0, flap.f1);
   }
 
-  private drawTravelArrow(f0: Point, f1: Point): void {
+  /** A gentle attention "breathe", ~0.5..1, on the shared delta-timed hint clock
+   * (this.time) — so every guidance affordance pulses softly, never flashes. */
+  private hintPulse(speed = 1.4): number {
+    return 0.75 + 0.25 * Math.sin(this.time * speed);
+  }
+
+  /** Strokes a guidance arrow (shaft + head) so it reads on ANY backdrop: a dark
+   * outline underlay beneath a light cream core, round-capped, at `alpha`. */
+  private strokeHintArrow(
+    sx: number,
+    sy: number,
+    ex: number,
+    ey: number,
+    ux: number,
+    uy: number,
+    alpha: number,
+  ): void {
     const ctx = this.ctx;
+    const head = 13;
+    const wing = 8;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.lineTo(ex, ey);
+    ctx.moveTo(ex, ey);
+    ctx.lineTo(ex - ux * head - uy * wing, ey - uy * head + ux * wing);
+    ctx.moveTo(ex, ey);
+    ctx.lineTo(ex - ux * head + uy * wing, ey - uy * head - ux * wing);
+    ctx.strokeStyle = HINT_OUTLINE;
+    ctx.lineWidth = 7.5;
+    ctx.stroke();
+    ctx.strokeStyle = HINT_CREAM;
+    ctx.lineWidth = 3.5;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /** Strokes the pulsing crease guide (dashed) with the same cream-over-dark
+   * treatment so it stays legible over the painted backdrop. */
+  private strokeHintCrease(a: Point, b: Point, alpha: number): void {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.lineCap = 'round';
+    ctx.setLineDash([9, 9]);
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.strokeStyle = HINT_OUTLINE;
+    ctx.lineWidth = 6.5;
+    ctx.stroke();
+    ctx.strokeStyle = HINT_CREAM;
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  private drawTravelArrow(f0: Point, f1: Point): void {
     const dx = f1.x - f0.x;
     const dy = f1.y - f0.y;
     const len = Math.hypot(dx, dy) || 1;
     const ux = dx / len;
     const uy = dy / len;
-    const reach = 34 + 6 * Math.sin(this.time * 1.4);
-    const sx = f0.x + ux * 6;
-    const sy = f0.y + uy * 6;
+    // Modestly larger than before (was 34 + 6·sin), so the pull reads clearly.
+    const reach = 40 + 7 * Math.sin(this.time * 1.4);
+    const sx = f0.x + ux * 8;
+    const sy = f0.y + uy * 8;
     const ex = f0.x + ux * reach;
     const ey = f0.y + uy * reach;
-    ctx.save();
-    ctx.globalAlpha = 0.5 + 0.3 * Math.sin(this.time * 1.4);
-    ctx.strokeStyle = '#ffe1a1';
-    ctx.lineWidth = 3;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(sx, sy);
-    ctx.lineTo(ex, ey);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(ex, ey);
-    ctx.lineTo(ex - ux * 9 - uy * 7, ey - uy * 9 + ux * 7);
-    ctx.moveTo(ex, ey);
-    ctx.lineTo(ex - ux * 9 + uy * 7, ey - uy * 9 - ux * 7);
-    ctx.stroke();
-    ctx.restore();
+    this.strokeHintArrow(sx, sy, ex, ey, ux, uy, this.hintPulse());
   }
 
   private drawPullArrows(): void {
-    const ctx = this.ctx;
     const poly = this.hullPolygon('peak');
     const b = boundsRect(poly);
     const midY = b.y + b.h * 0.4;
-    const reach = 26 + 6 * Math.sin(this.time * 1.4);
-    ctx.save();
-    ctx.globalAlpha = 0.5 + 0.3 * Math.sin(this.time * 1.4);
-    ctx.strokeStyle = '#ffe1a1';
-    ctx.lineWidth = 3;
-    ctx.lineCap = 'round';
+    const reach = 32 + 7 * Math.sin(this.time * 1.4);
+    const alpha = this.hintPulse();
     for (const dir of [-1, 1]) {
       const sx = b.x + b.w / 2 + dir * b.w * 0.3;
       const ex = sx + dir * reach;
-      ctx.beginPath();
-      ctx.moveTo(sx, midY);
-      ctx.lineTo(ex, midY);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(ex, midY);
-      ctx.lineTo(ex - dir * 9, midY - 7);
-      ctx.moveTo(ex, midY);
-      ctx.lineTo(ex - dir * 9, midY + 7);
-      ctx.stroke();
+      this.strokeHintArrow(sx, midY, ex, midY, dir, 0, alpha);
     }
-    ctx.restore();
   }
 
   /** A smooth 0..1 "catching wind" factor for a given hoist progress: 1 inside a
@@ -1517,11 +1697,14 @@ export class FoldStage {
     // thing to pull up.
     if (hoist < 0.985) {
       ctx.save();
-      ctx.globalAlpha = 0.55 + 0.3 * Math.sin(this.time * 1.4);
-      ctx.fillStyle = '#ffe1a1';
+      ctx.globalAlpha = this.hintPulse();
       ctx.beginPath();
-      ctx.arc(mastX + 2, topY, 5, 0, Math.PI * 2);
+      ctx.arc(mastX + 2, topY, 6.5, 0, Math.PI * 2);
+      ctx.fillStyle = HINT_CREAM;
       ctx.fill();
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = HINT_OUTLINE;
+      ctx.stroke();
       ctx.restore();
     }
   }
@@ -1791,21 +1974,8 @@ export class FoldStage {
     }
 
     if (this.assembled >= 3) {
-      // The hook arm: a little bracket from the bow tip out to the lantern's top,
-      // so the lantern reads as SUSPENDED off the bow (see recipient-boat.png) rather
-      // than floating beside the hull.
-      const lant = TRAY_ANCHORS.lantern;
-      ctx.save();
-      ctx.strokeStyle = 'rgba(66, 46, 28, 0.95)';
-      ctx.lineWidth = 2.5;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.beginPath();
-      ctx.moveTo(LANTERN_HANGER.bow.x, LANTERN_HANGER.bow.y);
-      ctx.lineTo(LANTERN_HANGER.rise.x, LANTERN_HANGER.rise.y);
-      ctx.lineTo(lant.x, lant.y - lant.h / 2 + 2);
-      ctx.stroke();
-      ctx.restore();
+      // The lantern hangs by its own handle loop threaded on the bow tip (see the
+      // lantern anchor) — no drawn hook arm.
       this.drawPiece('lantern', TRAY_ANCHORS.lantern, () => {
         const glow = ctx.createRadialGradient(0, 0, 1, 0, 0, 22);
         glow.addColorStop(0, 'rgba(255, 226, 150, 0.95)');

@@ -116,14 +116,17 @@ const FRIEND_ONE_WARM: OutdoorPalette = {
   path: 0xc0a86a,
 };
 
+// Reworked to echo the fold-the-letters / origami stage: a deep indigo night
+// warming to a rose horizon, so the clearing reads as the same twilight world
+// the letters sail out into.
 const CLEARING_DUSK: OutdoorPalette = {
-  background: 0x1d1a2b,
-  floorA: 0x6f6a8f,
-  floorB: 0x635e82,
-  stroke: 0x4a4666,
-  border: 0x565073,
-  borderStroke: 0x3a3652,
-  path: 0x8a7f9c,
+  background: 0x161031,
+  floorA: 0x574a72,
+  floorB: 0x6d4a68,
+  stroke: 0x342a4d,
+  border: 0x3a3157,
+  borderStroke: 0x241d3a,
+  path: 0x8c6a7c,
 };
 
 const OUTDOOR_PALETTES: Readonly<Record<string, OutdoorPalette>> = {
@@ -135,4 +138,179 @@ const OUTDOOR_PALETTES: Readonly<Record<string, OutdoorPalette>> = {
 
 export function getOutdoorPalette(locationId: string): OutdoorPalette | undefined {
   return OUTDOOR_PALETTES[locationId];
+}
+
+// ── Outdoor decoration props ────────────────────────────────────────────────
+// Asset-path-driven scenery. Each prop kind names a transparent painted cutout
+// under /assets/props/<dir>/<name>.png. When the file is present (probed in
+// BootScene) it renders as an image; when absent, LocationScene draws a painted
+// procedural fallback into a same-sized canvas texture so the neighbourhood is
+// never barren before the art pack lands. Dimensions below are the intended
+// final display size in MAP PIXELS (tiles are 64px); art is authored to these so
+// a drop-in needs zero code changes. Style tags select the fallback painter.
+export const PROP_KEY_PREFIX = 'prop-';
+export function propTextureKey(name: string): string {
+  return `${PROP_KEY_PREFIX}${name}`;
+}
+export function propAssetUrl(dir: string, name: string): string {
+  return `/assets/props/${dir}/${name}.png`;
+}
+
+export interface PropKind {
+  readonly name: string;
+  /** Sub-folder under /assets/props/. */
+  readonly dir: 'outdoor' | 'clearing';
+  /** Native display width in map px (== authored PNG width). */
+  readonly w: number;
+  /** Native display height in map px (== authored PNG height). */
+  readonly h: number;
+  /** Solid base footprint (map px) at the prop's feet; omit = fully walkable. */
+  readonly collider?: { readonly w: number; readonly h: number };
+  /** Baked into the ground below the player (ground scatter) instead of y-sorted. */
+  readonly flat?: boolean;
+  /** Drawn above the player (hung / floating overhead pieces). */
+  readonly overhead?: boolean;
+  /** Fallback painter selector (see LocationScene.paintPropFallback). */
+  readonly style: string;
+  /** Horizontal tile texture (fence): fallback repeats seamlessly. */
+  readonly tileable?: boolean;
+}
+
+// The manifest, matched EXACTLY to the art being generated (paths + sizes).
+export const PROP_KINDS: Readonly<Record<string, PropKind>> = {
+  'tree-1': { name: 'tree-1', dir: 'outdoor', w: 320, h: 448, collider: { w: 96, h: 34 }, style: 'tree-a' },
+  'tree-2': { name: 'tree-2', dir: 'outdoor', w: 320, h: 448, collider: { w: 96, h: 34 }, style: 'tree-b' },
+  'bush-1': { name: 'bush-1', dir: 'outdoor', w: 192, h: 160, collider: { w: 132, h: 34 }, style: 'bush' },
+  'flower-patch-1': { name: 'flower-patch-1', dir: 'outdoor', w: 160, h: 112, flat: true, style: 'flowers-a' },
+  'flower-patch-2': { name: 'flower-patch-2', dir: 'outdoor', w: 160, h: 112, flat: true, style: 'flowers-b' },
+  'fence-h': { name: 'fence-h', dir: 'outdoor', w: 256, h: 128, collider: { w: 256, h: 26 }, style: 'fence', tileable: true },
+  'rock-1': { name: 'rock-1', dir: 'outdoor', w: 144, h: 112, collider: { w: 116, h: 40 }, style: 'rock' },
+  'lamp-post': { name: 'lamp-post', dir: 'outdoor', w: 112, h: 288, collider: { w: 34, h: 22 }, style: 'lamp' },
+  mailbox: { name: 'mailbox', dir: 'outdoor', w: 96, h: 176, collider: { w: 44, h: 22 }, style: 'mailbox' },
+  bench: { name: 'bench', dir: 'outdoor', w: 224, h: 144, collider: { w: 196, h: 30 }, style: 'bench' },
+  signpost: { name: 'signpost', dir: 'outdoor', w: 144, h: 224, collider: { w: 44, h: 22 }, style: 'signpost' },
+  'clearing-lantern-post': { name: 'clearing-lantern-post', dir: 'clearing', w: 128, h: 320, collider: { w: 34, h: 22 }, style: 'lantern-post' },
+  'clearing-lantern-string': { name: 'clearing-lantern-string', dir: 'clearing', w: 512, h: 160, overhead: true, style: 'lantern-string' },
+  'clearing-paper-boat': { name: 'clearing-paper-boat', dir: 'clearing', w: 160, h: 112, style: 'paper-boat' },
+  'clearing-cranes': { name: 'clearing-cranes', dir: 'clearing', w: 192, h: 128, overhead: true, style: 'cranes' },
+};
+
+export const ALL_PROP_KINDS: readonly PropKind[] = Object.values(PROP_KINDS);
+
+export interface PropPlacement {
+  readonly name: string;
+  /** Bottom-centre floor-contact anchor in map px (feet). Flat/overhead: centre. */
+  readonly mapX: number;
+  readonly mapY: number;
+  /** Mirror horizontally. */
+  readonly flip?: boolean;
+}
+
+// Hand-placed so nothing lands on a path, spawn, exit, hotspot or house — dense
+// enough to read as a lived-in cozy neighbourhood, thicker near the paths and
+// houses. Coordinates are map px; base anchors are the prop's feet.
+export const OUTDOOR_PROPS: Readonly<Record<string, readonly PropPlacement[]>> = {
+  'main-outside': [
+    { name: 'tree-1', mapX: 150, mapY: 470 },
+    { name: 'tree-2', mapX: 1268, mapY: 500, flip: true },
+    { name: 'tree-1', mapX: 300, mapY: 726 },
+    { name: 'tree-2', mapX: 1140, mapY: 726 },
+    { name: 'fence-h', mapX: 470, mapY: 322 },
+    { name: 'fence-h', mapX: 940, mapY: 322 },
+    { name: 'lamp-post', mapX: 590, mapY: 470 },
+    { name: 'mailbox', mapX: 812, mapY: 246 },
+    { name: 'bench', mapX: 950, mapY: 636 },
+    { name: 'bush-1', mapX: 432, mapY: 300 },
+    { name: 'bush-1', mapX: 462, mapY: 604, flip: true },
+    { name: 'bush-1', mapX: 356, mapY: 726 },
+    { name: 'bush-1', mapX: 884, mapY: 254 },
+    { name: 'bush-1', mapX: 986, mapY: 604 },
+    { name: 'bush-1', mapX: 1056, mapY: 300, flip: true },
+    { name: 'rock-1', mapX: 300, mapY: 500 },
+    { name: 'rock-1', mapX: 1096, mapY: 560, flip: true },
+    { name: 'rock-1', mapX: 520, mapY: 700 },
+    { name: 'flower-patch-1', mapX: 380, mapY: 400 },
+    { name: 'flower-patch-2', mapX: 1010, mapY: 420 },
+    { name: 'flower-patch-1', mapX: 560, mapY: 250 },
+    { name: 'flower-patch-2', mapX: 860, mapY: 250 },
+    { name: 'flower-patch-2', mapX: 700, mapY: 700 },
+    { name: 'flower-patch-1', mapX: 1130, mapY: 470 },
+  ],
+  'friendtwo-yard': [
+    { name: 'tree-2', mapX: 140, mapY: 470 },
+    { name: 'tree-1', mapX: 210, mapY: 664 },
+    { name: 'tree-1', mapX: 872, mapY: 250, flip: true },
+    { name: 'fence-h', mapX: 300, mapY: 300 },
+    { name: 'fence-h', mapX: 760, mapY: 300 },
+    { name: 'lamp-post', mapX: 620, mapY: 470 },
+    { name: 'mailbox', mapX: 604, mapY: 250 },
+    { name: 'bench', mapX: 764, mapY: 560, flip: true },
+    { name: 'bush-1', mapX: 330, mapY: 300 },
+    { name: 'bush-1', mapX: 300, mapY: 560 },
+    { name: 'bush-1', mapX: 690, mapY: 560, flip: true },
+    { name: 'bush-1', mapX: 838, mapY: 470 },
+    { name: 'rock-1', mapX: 240, mapY: 400 },
+    { name: 'rock-1', mapX: 900, mapY: 620, flip: true },
+    { name: 'flower-patch-1', mapX: 400, mapY: 460 },
+    { name: 'flower-patch-2', mapX: 700, mapY: 250 },
+    { name: 'flower-patch-2', mapX: 230, mapY: 620 },
+  ],
+  'friendone-yard': [
+    { name: 'tree-1', mapX: 884, mapY: 470, flip: true },
+    { name: 'tree-2', mapX: 814, mapY: 664, flip: true },
+    { name: 'tree-1', mapX: 160, mapY: 250 },
+    { name: 'fence-h', mapX: 300, mapY: 300 },
+    { name: 'fence-h', mapX: 760, mapY: 300 },
+    { name: 'lamp-post', mapX: 420, mapY: 470 },
+    { name: 'mailbox', mapX: 416, mapY: 250, flip: true },
+    { name: 'bench', mapX: 268, mapY: 560 },
+    { name: 'bush-1', mapX: 700, mapY: 300, flip: true },
+    { name: 'bush-1', mapX: 724, mapY: 560, flip: true },
+    { name: 'bush-1', mapX: 344, mapY: 560 },
+    { name: 'bush-1', mapX: 210, mapY: 470 },
+    { name: 'rock-1', mapX: 792, mapY: 400, flip: true },
+    { name: 'rock-1', mapX: 300, mapY: 620 },
+    { name: 'flower-patch-2', mapX: 624, mapY: 460 },
+    { name: 'flower-patch-1', mapX: 330, mapY: 250 },
+    { name: 'flower-patch-1', mapX: 790, mapY: 620 },
+    { name: 'flower-patch-2', mapX: 560, mapY: 640 },
+  ],
+  clearing: [
+    { name: 'clearing-lantern-post', mapX: 356, mapY: 476 },
+    { name: 'clearing-lantern-post', mapX: 684, mapY: 476, flip: true },
+    { name: 'clearing-lantern-string', mapX: 512, mapY: 96 },
+    { name: 'clearing-cranes', mapX: 286, mapY: 188 },
+    { name: 'clearing-cranes', mapX: 792, mapY: 150, flip: true },
+    { name: 'clearing-paper-boat', mapX: 792, mapY: 588 },
+  ],
+};
+
+export function getOutdoorProps(locationId: string): readonly PropPlacement[] {
+  return OUTDOOR_PROPS[locationId] ?? [];
+}
+
+// ── Signposts ───────────────────────────────────────────────────────────────
+// The visible signpost prop for each named area. The board is blank art; the
+// area name is rendered onto it in-game (SignpostPlacement.label). Anchored to
+// the same hotspot rect the "Read the signpost" dialogue interaction uses. Base
+// anchor is nudged to the roadside so the post never sits in the path lane.
+export interface SignpostPlacement {
+  /** Interaction / hotspot id this signpost belongs to. */
+  readonly interactionId: string;
+  /** Bottom-centre floor-contact anchor (feet), map px. */
+  readonly mapX: number;
+  readonly mapY: number;
+  /** Board caption drawn in-game. */
+  readonly label: string;
+  readonly flip?: boolean;
+}
+
+export const SIGNPOSTS: Readonly<Record<string, SignpostPlacement>> = {
+  'main-outside': { interactionId: 'main-signpost', mapX: 628, mapY: 512, label: 'GUILDFORD', flip: true },
+  'friendtwo-yard': { interactionId: 'friendtwo-signpost', mapX: 690, mapY: 492, label: 'KERRISDALE' },
+  'friendone-yard': { interactionId: 'friendone-signpost', mapX: 334, mapY: 492, label: 'ALDERGROVE', flip: true },
+};
+
+export function getSignpost(locationId: string): SignpostPlacement | undefined {
+  return SIGNPOSTS[locationId];
 }

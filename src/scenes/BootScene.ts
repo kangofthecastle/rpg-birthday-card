@@ -17,6 +17,9 @@ import {
   GROUND_TILESET_KEY,
   GROUND_TILESET_URL,
   GROUND_TILE_SIZE,
+  ALL_PROP_KINDS,
+  propAssetUrl,
+  propTextureKey,
 } from '../content/outdoorScenery';
 import { DOORMAT_DROP_KEY } from '../game/roomRenderer';
 import { listPropOverrideCandidates } from '../content/roomDressing';
@@ -106,23 +109,40 @@ export class BootScene extends Phaser.Scene {
     // when their slot is present).
     const propOverrides = listPropOverrideCandidates();
 
-    const [hasTileset, hasDoormat, hasGalaxyGround, hasShoreWater, propOverridePresence] =
-      await Promise.all([
-        isImageUrl(GROUND_TILESET_URL),
-        isImageUrl(DOORMAT_DROP_URL),
-        isImageUrl(GALAXY_GROUND_URL),
-        isImageUrl(SHORE_WATER_URL),
-        Promise.all(propOverrides.map((candidate) => isImageUrl(candidate.url))),
-      ]);
+    // Outdoor / clearing decoration prop pack: one optional painted cutout per
+    // kind. Absent kinds render a procedural fallback; present ones upgrade in
+    // place with zero code changes.
+    const outdoorProps = ALL_PROP_KINDS.map((kind) => ({
+      key: propTextureKey(kind.name),
+      url: propAssetUrl(kind.dir, kind.name),
+    }));
+
+    const [
+      hasTileset,
+      hasDoormat,
+      hasGalaxyGround,
+      hasShoreWater,
+      propOverridePresence,
+      outdoorPropPresence,
+    ] = await Promise.all([
+      isImageUrl(GROUND_TILESET_URL),
+      isImageUrl(DOORMAT_DROP_URL),
+      isImageUrl(GALAXY_GROUND_URL),
+      isImageUrl(SHORE_WATER_URL),
+      Promise.all(propOverrides.map((candidate) => isImageUrl(candidate.url))),
+      Promise.all(outdoorProps.map((candidate) => isImageUrl(candidate.url))),
+    ]);
 
     const presentOverrides = propOverrides.filter((_, index) => propOverridePresence[index]);
+    const presentOutdoorProps = outdoorProps.filter((_, index) => outdoorPropPresence[index]);
 
     if (
       !hasTileset &&
       !hasDoormat &&
       !hasGalaxyGround &&
       !hasShoreWater &&
-      presentOverrides.length === 0
+      presentOverrides.length === 0 &&
+      presentOutdoorProps.length === 0
     ) {
       return;
     }
@@ -145,6 +165,9 @@ export class BootScene extends Phaser.Scene {
         this.load.image(SHORE_WATER_KEY, SHORE_WATER_URL);
       }
       for (const candidate of presentOverrides) {
+        this.load.image(candidate.key, candidate.url);
+      }
+      for (const candidate of presentOutdoorProps) {
         this.load.image(candidate.key, candidate.url);
       }
       this.load.once(Phaser.Loader.Events.COMPLETE, () => resolve());

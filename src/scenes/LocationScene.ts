@@ -200,6 +200,29 @@ interface TilePiece {
   readonly quarter: number;
 }
 
+// One paper crane drifting on the clearing's shore water. The image is the crane
+// sprite; the ripple is a faint highlight ellipse tracked beneath it. Motion is
+// integrated per frame from these tuning values (see spawnClearingCranes).
+interface DriftingCrane {
+  readonly image: Phaser.GameObjects.Image;
+  readonly ripple: Phaser.GameObjects.Graphics;
+  /** Horizontal downstream drift, px/sec. */
+  speed: number;
+  /** Vertical bob amplitude (px) and its sine rate (rad/sec) + phase. */
+  bobAmp: number;
+  bobRate: number;
+  bobPhase: number;
+  /** Rotation wobble amplitude (rad), rate (rad/sec), phase, about a base heading. */
+  rotBase: number;
+  rotAmp: number;
+  rotRate: number;
+  rotPhase: number;
+  /** Resting waterline Y (px) the bob oscillates around. */
+  baseY: number;
+  /** Display scale already applied (so respawn can re-vary it). */
+  scale: number;
+}
+
 // Picks the ground path tile(s) for a cell from its 4-neighbour connectivity.
 // Base tile orientations (from the tileset): straight = N–S, curve = {E,S},
 // T = {E,S,W} (missing N), fade (dead-end) = open at S. Rotations are clockwise
@@ -360,6 +383,15 @@ export class LocationScene extends Phaser.Scene {
   // The clearing's art-based shore water band (present only when shore-water.png
   // dropped in). Kept so update() can scroll its tilePositionX for a calm drift.
   private clearingShoreWater?: Phaser.GameObjects.TileSprite;
+  // Paper cranes drifting on the clearing's shore water. Purely decorative (no
+  // colliders); advanced every frame in update() so they keep breathing even
+  // while the dressEdit editor is frozen. Reset on (re)start like the shore.
+  private clearingCranes: DriftingCrane[] = [];
+  private clearingCraneClock = 0;
+  // Base display scale + PRNG kept from spawn so an off-edge crane can re-roll its
+  // look on wrap-around with the same distribution.
+  private craneBaseScale = 0;
+  private craneWrapRng: () => number = Math.random;
   private playerFacing: PlayerFacing = 'down';
   private wasPlayerMoving = false;
   private tapStepHoldUntil = 0;
@@ -452,6 +484,10 @@ export class LocationScene extends Phaser.Scene {
     // never scrolls a destroyed object; drawClearingShore re-sets it if this area
     // is the clearing.
     this.clearingShoreWater = undefined;
+    // Same story for the drifting cranes: the display list is gone, so drop the
+    // stale references. spawnClearingCranes repopulates this for the clearing.
+    this.clearingCranes = [];
+    this.clearingCraneClock = 0;
   }
 
   create(): void {
@@ -634,6 +670,9 @@ export class LocationScene extends Phaser.Scene {
     if (this.clearingShoreWater) {
       this.clearingShoreWater.tilePositionX += (8 * delta) / 1000;
     }
+    // Same beat: nudge the drifting paper cranes downstream (also before the
+    // gates, so they keep floating even while the dressEdit editor is frozen).
+    this.advanceClearingCranes(delta);
 
     // The dressEdit editor freezes the whole scene: the player stands still and
     // no interactions/edges fire, so arranging props never triggers gameplay.
@@ -1126,6 +1165,7 @@ export class LocationScene extends Phaser.Scene {
       if (this.location.id === 'clearing') {
         this.decorateClearing(width, height, tile);
         this.drawClearingShore(width, height, tile);
+        this.spawnClearingCranes(width, height, tile);
       }
       return;
     }
@@ -1204,6 +1244,7 @@ export class LocationScene extends Phaser.Scene {
     if (this.location.id === 'clearing') {
       this.decorateClearing(width, height, tile);
       this.drawClearingShore(width, height, tile);
+      this.spawnClearingCranes(width, height, tile);
     }
   }
 
@@ -1471,6 +1512,131 @@ export class LocationScene extends Phaser.Scene {
       repeat: -1,
       ease: 'Sine.easeInOut',
     });
+  }
+
+  // A sparse trickle of origami paper cranes drifting along the clearing's shore
+  // water — the in-game seed for why ____ later folds a boat: paper floats. Not
+  // static props: several instances of the single `clearing-crane` sprite (art or
+  // procedural fallback) are spawned across the water band, each with its own
+  // scale (±15%), heading, drift speed and bob/rotation phase, then advanced every
+  // frame in advanceClearingCranes() and wrapped back upstream on exit so the
+  // trickle never runs dry. Purely decorative: no colliders, so they never touch
+  // the "Kneel at the water" interaction. Depth sits above the water/glow but well
+  // below any standing figure, so ____ draws in front when he kneels at the shore.
+  private spawnClearingCranes(width: number, height: number, tile: number): void {
+    const kind = PROP_KINDS['clearing-crane'];
+    if (!kind) {
+      return;
+    }
+    const key = this.ensurePropTexture(kind);
+    const source = this.textures.get(key).getSourceImage() as { width: number };
+    // Base display size: shrink the sprite so ~3 cranes read as a contemplative
+    // few, not a flock, on the 2-tile water band.
+    const baseScale = (kind.w / (source.width || kind.w)) * 0.66;
+    const rng = mulberry32(fnv1a(`${this.location.id}:cranes`));
+    this.craneBaseScale = baseScale;
+    this.craneWrapRng = rng;
+    const bandTop = height - tile * 2;
+    // Keep cranes on the near/upper surface of the band (the far edge stays open
+    // water), and clear of the darkest deep-water lip.
+    const yMin = bandTop + tile * 0.35;
+    const yMax = bandTop + tile * 1.15;
+    const count = 3;
+    for (let i = 0; i < count; i += 1) {
+      const ripple = this.add.graphics().setDepth(-15.5);
+      const image = this.add
+        .image(0, 0, key)
+        .setOrigin(0.5, 0.5)
+        .setDepth(-15);
+      // Cranes warm with the shore once the world has awakened (see
+      // drawClearingShore's tint) so they read correctly under the golden light.
+      if (isFinalSpotUnlocked(this.state)) {
+        image.setTint(0xffe9c8);
+      }
+      const crane: DriftingCrane = {
+        image,
+        ripple,
+        speed: 0,
+        bobAmp: 0,
+        bobRate: 0,
+        bobPhase: 0,
+        rotBase: 0,
+        rotAmp: 0,
+        rotRate: 0,
+        rotPhase: 0,
+        baseY: 0,
+        scale: 0,
+      };
+      // Stagger the initial X so the three are spread across the water at start.
+      const startX = width * ((i + 0.5) / count) + (rng() - 0.5) * tile;
+      this.randomizeCrane(crane, rng, baseScale, yMin, yMax);
+      crane.image.setX(startX).setY(crane.baseY);
+      this.clearingCranes.push(crane);
+    }
+  }
+
+  // (Re)rolls a crane's per-instance motion + look. Called at spawn and whenever a
+  // crane drifts off the downstream (east) edge so it re-enters upstream fresh.
+  private randomizeCrane(
+    crane: DriftingCrane,
+    rng: () => number,
+    baseScale: number,
+    yMin: number,
+    yMax: number,
+  ): void {
+    crane.scale = baseScale * (0.85 + rng() * 0.3); // ±15%
+    crane.image.setScale(crane.scale).setFlipX(rng() < 0.5);
+    crane.speed = 5 + rng() * 4; // 5–9 px/sec: unhurried
+    crane.bobAmp = 2 + rng() * 2.5; // 2–4.5 px
+    crane.bobRate = 0.5 + rng() * 0.4; // slow
+    crane.bobPhase = rng() * Math.PI * 2;
+    crane.rotBase = (rng() - 0.5) * 0.5; // ±~0.25 rad resting heading
+    crane.rotAmp = 0.05 + rng() * 0.05; // ±3–6° wobble
+    crane.rotRate = 0.4 + rng() * 0.35;
+    crane.rotPhase = rng() * Math.PI * 2;
+    crane.baseY = yMin + rng() * (yMax - yMin);
+  }
+
+  // Integrates the drifting cranes one frame: downstream drift, a gentle vertical
+  // bob and a slight rotation wobble, wrapping any crane that leaves the east edge
+  // back to the west so the trickle loops. Driven from update() before the
+  // gameplay gates, so the water keeps breathing even while dressEdit is frozen.
+  private advanceClearingCranes(deltaMs: number): void {
+    if (this.clearingCranes.length === 0) {
+      return;
+    }
+    const dt = deltaMs / 1000;
+    this.clearingCraneClock += dt;
+    const t = this.clearingCraneClock;
+    const width = this.mapDims.width;
+    // Re-derive the band bounds for respawn (cheap; matches spawnClearingCranes).
+    const tile = this.mapDims.tileSize;
+    const bandTop = this.mapDims.height - tile * 2;
+    const yMin = bandTop + tile * 0.35;
+    const yMax = bandTop + tile * 1.15;
+    const rng = this.craneWrapRng;
+    for (const crane of this.clearingCranes) {
+      const nextX = crane.image.x + crane.speed * dt;
+      const halfW = (crane.image.width * crane.scale) / 2;
+      if (nextX - halfW > width + tile) {
+        // Off the downstream edge: re-roll and re-enter from upstream.
+        this.randomizeCrane(crane, rng, this.craneBaseScale, yMin, yMax);
+        crane.image.setX(-tile - halfW);
+      } else {
+        crane.image.setX(nextX);
+      }
+      const y = crane.baseY + Math.sin(t * crane.bobRate + crane.bobPhase) * crane.bobAmp;
+      crane.image.setY(y);
+      crane.image.setRotation(crane.rotBase + Math.sin(t * crane.rotRate + crane.rotPhase) * crane.rotAmp);
+      // Faint reflected highlight tracking just beneath the fold.
+      const r = crane.ripple;
+      r.clear();
+      const rw = halfW * 0.8;
+      r.fillStyle(0xcdddf0, 0.1);
+      r.fillEllipse(crane.image.x, y + halfW * 0.32, rw, rw * 0.22);
+      r.lineStyle(1, 0xdfeaf6, 0.08);
+      r.strokeEllipse(crane.image.x, y + halfW * 0.34, rw * 1.15, rw * 0.28);
+    }
   }
 
   // The galaxy place's ground: the painted ocean-galaxy you stand ON. A file-first
@@ -2723,57 +2889,58 @@ export class LocationScene extends Phaser.Scene {
         }
         break;
       }
-      case 'paper-boat': {
-        // A folded paper boat, cream with crease lines.
+      case 'crane': {
+        // A single origami paper crane seen from a top-down 3/4, sitting on the
+        // water: a folded body wing in cream, an upswept blush wing catching the
+        // last light, a lifted head/neck and a tail point. Centred in the canvas
+        // (no ground contact — it floats); the engine drifts several of these
+        // across the shore water with per-instance scale/rotation/phase.
+        ctx.save();
+        ctx.translate(cx, h * 0.52);
+        // Faint reflection smear just beneath the fold, so it reads as floating.
+        ell(0, h * 0.2, w * 0.26, h * 0.05, 'rgba(232,220,235,0.16)');
+        // Lower/back wing fold (cream body).
         ctx.beginPath();
-        ctx.moveTo(w * 0.1, h * 0.55);
-        ctx.lineTo(w * 0.9, h * 0.55);
-        ctx.lineTo(w * 0.72, h * 0.85);
-        ctx.lineTo(w * 0.28, h * 0.85);
+        ctx.moveTo(-w * 0.06, -h * 0.02);
+        ctx.lineTo(w * 0.3, -h * 0.16);
+        ctx.lineTo(w * 0.14, h * 0.06);
+        ctx.lineTo(w * 0.34, h * 0.2);
+        ctx.lineTo(-w * 0.12, h * 0.14);
         ctx.closePath();
-        ctx.fillStyle = '#efe7d4';
+        ctx.fillStyle = '#efe4d2';
+        ctx.fill();
+        // Upswept front wing (blush, the lit side).
+        ctx.beginPath();
+        ctx.moveTo(-w * 0.04, -h * 0.01);
+        ctx.lineTo(-w * 0.02, -h * 0.24);
+        ctx.lineTo(w * 0.2, -h * 0.05);
+        ctx.lineTo(w * 0.02, h * 0.05);
+        ctx.closePath();
+        ctx.fillStyle = '#f3c6d6';
+        ctx.fill();
+        // Head + neck lifting to the left, and the tail point trailing right.
+        ctx.beginPath();
+        ctx.moveTo(-w * 0.04, h * 0.0);
+        ctx.lineTo(-w * 0.28, -h * 0.14);
+        ctx.lineTo(-w * 0.12, h * 0.06);
+        ctx.closePath();
+        ctx.fillStyle = '#ecdcc9';
         ctx.fill();
         ctx.beginPath();
-        ctx.moveTo(w * 0.5, h * 0.18);
-        ctx.lineTo(w * 0.5, h * 0.55);
-        ctx.lineTo(w * 0.16, h * 0.55);
+        ctx.moveTo(w * 0.14, h * 0.06);
+        ctx.lineTo(w * 0.4, h * 0.02);
+        ctx.lineTo(w * 0.18, h * 0.14);
         ctx.closePath();
-        ctx.fillStyle = '#e2d7bf';
+        ctx.fillStyle = '#e6d6c2';
         ctx.fill();
-        ctx.strokeStyle = 'rgba(120,104,72,0.5)';
-        ctx.lineWidth = 1.5;
+        // Soft centre crease.
+        ctx.strokeStyle = 'rgba(120,104,72,0.4)';
+        ctx.lineWidth = 1.2;
         ctx.beginPath();
-        ctx.moveTo(w * 0.5, h * 0.2);
-        ctx.lineTo(w * 0.5, h * 0.85);
+        ctx.moveTo(-w * 0.04, -h * 0.02);
+        ctx.lineTo(w * 0.18, h * 0.1);
         ctx.stroke();
-        break;
-      }
-      case 'cranes': {
-        // Two small origami cranes drifting.
-        const crane = (ox: number, oy: number, s: number, col: string): void => {
-          ctx.save();
-          ctx.translate(ox, oy);
-          ctx.scale(s, s);
-          ctx.beginPath();
-          ctx.moveTo(0, 0);
-          ctx.lineTo(38, -14);
-          ctx.lineTo(20, 6);
-          ctx.lineTo(44, 20);
-          ctx.lineTo(6, 14);
-          ctx.closePath();
-          ctx.fillStyle = col;
-          ctx.fill();
-          ctx.beginPath();
-          ctx.moveTo(6, 2);
-          ctx.lineTo(-14, -10);
-          ctx.lineTo(2, 8);
-          ctx.closePath();
-          ctx.fillStyle = col;
-          ctx.fill();
-          ctx.restore();
-        };
-        crane(w * 0.14, h * 0.4, 1.0, '#f2c3d5');
-        crane(w * 0.5, h * 0.62, 0.82, '#e9dccb');
+        ctx.restore();
         break;
       }
       default: {

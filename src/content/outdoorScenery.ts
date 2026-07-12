@@ -191,8 +191,11 @@ export const PROP_KINDS: Readonly<Record<string, PropKind>> = {
   signpost: { name: 'signpost', dir: 'outdoor', w: 144, h: 224, collider: { w: 44, h: 22 }, style: 'signpost' },
   'clearing-lantern-post': { name: 'clearing-lantern-post', dir: 'clearing', w: 128, h: 320, collider: { w: 34, h: 22 }, style: 'lantern-post' },
   'clearing-lantern-string': { name: 'clearing-lantern-string', dir: 'clearing', w: 512, h: 160, overhead: true, style: 'lantern-string' },
-  'clearing-paper-boat': { name: 'clearing-paper-boat', dir: 'clearing', w: 160, h: 112, style: 'paper-boat' },
-  'clearing-cranes': { name: 'clearing-cranes', dir: 'clearing', w: 192, h: 128, overhead: true, style: 'cranes' },
+  // A single origami crane sitting on the water (top-down 3/4). Not placed via
+  // OUTDOOR_PROPS — the clearing scene instantiates several of these itself and
+  // drifts them along the shore water (see LocationScene.spawnClearingCranes),
+  // varying scale/rotation/phase per instance. `flat` so no ground shadow bakes.
+  'clearing-crane': { name: 'clearing-crane', dir: 'clearing', w: 96, h: 80, flat: true, style: 'crane' },
 };
 
 export const ALL_PROP_KINDS: readonly PropKind[] = Object.values(PROP_KINDS);
@@ -279,9 +282,9 @@ export const OUTDOOR_PROPS: Readonly<Record<string, readonly PropPlacement[]>> =
     { name: 'clearing-lantern-post', mapX: 356, mapY: 476 },
     { name: 'clearing-lantern-post', mapX: 684, mapY: 476, flip: true },
     { name: 'clearing-lantern-string', mapX: 512, mapY: 96 },
-    { name: 'clearing-cranes', mapX: 286, mapY: 188 },
-    { name: 'clearing-cranes', mapX: 792, mapY: 150, flip: true },
-    { name: 'clearing-paper-boat', mapX: 792, mapY: 588 },
+    // The paper cranes are no longer static props here: they drift on the shore
+    // water, spawned by LocationScene.spawnClearingCranes. (The paper boat was
+    // removed entirely — narratively it doesn't exist until ____ folds it.)
   ],
 };
 

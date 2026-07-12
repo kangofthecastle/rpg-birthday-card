@@ -32,7 +32,18 @@ import {
 import { playSfx as playAudioSfx, type SfxKey } from '../../game/audio';
 import { isImageUrl } from '../../game/assetProbe';
 
-type SfxEvent = 'shot' | 'heart' | 'beep' | 'tick' | 'checkpoint' | 'complete' | 'detonate' | 'clutch';
+type SfxEvent =
+  | 'shot'
+  | 'heart'
+  | 'beep'
+  | 'tick'
+  | 'checkpoint'
+  | 'complete'
+  | 'detonate'
+  | 'clutch'
+  | 'reload'
+  | 'death'
+  | 'dryfire';
 
 const SFX_BY_EVENT: Readonly<Record<SfxEvent, SfxKey>> = {
   shot: 'sfx-shot',
@@ -43,6 +54,9 @@ const SFX_BY_EVENT: Readonly<Record<SfxEvent, SfxKey>> = {
   complete: 'sfx-defuse-complete',
   detonate: 'sfx-detonate',
   clutch: 'sfx-clutch',
+  reload: 'sfx-reload',
+  death: 'sfx-death',
+  dryfire: 'sfx-dryfire',
 };
 
 export interface SplitSceneCallbacks {
@@ -61,6 +75,22 @@ const CLUTCH_DELAY_MS = 1600;
 const HIT_FLASH_MS = 90;
 const DEATH_FADE_MS = 260;
 const COVER_OVERHANG = 1.08;
+
+// HUD geometry (arena is 960x540). The bottom bar carries health on the left and
+// the ammo counter on the right; a slim top strip carries the fuse and the live
+// enemy count. Colors reuse the game palette: teal 0x2ee6c4, gold 0xffd15c, red
+// 0xff5470 on a near-black panel.
+const HUD = {
+  panel: 0x0c1220,
+  teal: 0x2ee6c4,
+  gold: 0xffd15c,
+  red: 0xff5470,
+  edge: 0x2b3a52,
+  barBottomY: 486,
+  barHeight: 54,
+  topStripY: 6,
+  topStripH: 40,
+} as const;
 
 // Every combatant carries a Vandal-silhouette rifle that rotates toward its
 // aim/target. It's anchored in the character's hands (see gunHandY) and muzzle
@@ -95,9 +125,10 @@ const MUZZLE_COLOR = {
 const BARKS = {
   roundStart: "Site's lost, spike's down — we're taking it back. On me, ____.",
   firstBlood: "That's the one. Knew you'd pop off.",
-  revive: "I've got you. Get up — we're not done.",
+  died: "You're down — but we reset and run it clean. From the top, ____.",
   reinforcement: "More inbound from Heaven. Hold the angle, I've got trades.",
-  onSite: "You're on it — plant your feet and hold E. I've got the site.",
+  defuseWave: "You tapped it — they're collapsing! Two on the flank, hold!",
+  onSite: "You're on it — plant your feet and hold 4. I've got the site.",
   interrupted: "They knocked you off it! Reset and get back on — go, go.",
   detonate: "Spike's gone. Shake it off — we run it back. Same as always.",
   runback: "Fresh round. Site's down again. Let's take it back.",
@@ -151,7 +182,13 @@ export class SplitScene extends Phaser.Scene {
   // beneath the activity modal and captures (preventDefaults) keys like E,
   // which makes this second Phaser instance drop those keydowns entirely.
   private heldCodes = new Set<string>();
+  // Edge-triggered reload request, set on the R keydown and consumed by the
+  // next readInput() so holding R doesn't machine-gun reload attempts.
+  private reloadQueued = false;
   private readonly onWindowKeyDown = (event: KeyboardEvent): void => {
+    if (event.code === 'KeyR' && !this.heldCodes.has('KeyR')) {
+      this.reloadQueued = true;
+    }
     this.heldCodes.add(event.code);
   };
   private readonly onWindowKeyUp = (event: KeyboardEvent): void => {
@@ -159,9 +196,13 @@ export class SplitScene extends Phaser.Scene {
   };
   private readonly onWindowBlur = (): void => {
     this.heldCodes.clear();
+    this.pointerDown = false;
   };
 
   private firePressed = false;
+  // The rifle is fully automatic: hold the mouse to keep firing (model cadence
+  // gates the rate). Tracked here from pointer up/down.
+  private pointerDown = false;
   private pointer = { x: ARENA.width / 2, y: ARENA.height / 2 };
 
   private dynamic!: Phaser.GameObjects.Graphics;
@@ -176,6 +217,12 @@ export class SplitScene extends Phaser.Scene {
   private enemyViews = new Map<number, EnemyView>();
   private heartImages: Phaser.GameObjects.Image[] = [];
   private medalImage?: Phaser.GameObjects.Image;
+  // Bottom-bar + top-strip HUD (Valorant-flavored, drawn in-canvas so the
+  // generic .activity-panel CSS can't out-specify it).
+  private healthNumberText!: Phaser.GameObjects.Text;
+  private ammoMagText!: Phaser.GameObjects.Text;
+  private ammoReserveText!: Phaser.GameObjects.Text;
+  private enemiesText!: Phaser.GameObjects.Text;
   private roundText!: Phaser.GameObjects.Text;
   private statusText!: Phaser.GameObjects.Text;
   private barkText!: Phaser.GameObjects.Text;
@@ -266,15 +313,15 @@ export class SplitScene extends Phaser.Scene {
       .setOrigin(0.5, 0)
       .setDepth(810);
     this.statusText = this.add
-      .text(ARENA.width / 2, ARENA.height - 38, '', {
+      .text(ARENA.width / 2, HUD.barBottomY - 16, '', {
         align: 'center',
         color: '#e6f2ff',
         fontFamily: 'Arial, sans-serif',
-        fontSize: '20px',
+        fontSize: '16px',
         stroke: '#141414',
         strokeThickness: 5,
       })
-      .setOrigin(0.5)
+      .setOrigin(0.5, 1)
       .setDepth(810);
     this.barkText = this.add
       .text(0, 0, '', {
@@ -305,7 +352,7 @@ export class SplitScene extends Phaser.Scene {
       .setDepth(820)
       .setVisible(false);
     this.promptText = this.add
-      .text(SPLIT_CONFIG.spike.x, SPLIT_CONFIG.spike.y + 52, 'HOLD E TO DEFUSE', {
+      .text(SPLIT_CONFIG.spike.x, SPLIT_CONFIG.spike.y + 52, 'HOLD 4 TO DEFUSE', {
         align: 'center',
         color: '#2ee6c4',
         fontFamily: 'Arial, sans-serif',
@@ -400,6 +447,10 @@ export class SplitScene extends Phaser.Scene {
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
       this.pointer = { x: pointer.worldX, y: pointer.worldY };
       this.firePressed = true;
+      this.pointerDown = true;
+    });
+    this.input.on('pointerup', () => {
+      this.pointerDown = false;
     });
   }
 
@@ -422,9 +473,19 @@ export class SplitScene extends Phaser.Scene {
 
     const player = this.state.player.pos;
     const aimAngle = Math.atan2(this.pointer.y - player.y, this.pointer.x - player.x);
-    const holdDefuse = held.has('KeyE') && this.state.phase === 'retake';
+    // Defuse is bound to the 4 key (top-row Digit4 or the numpad 4).
+    const holdDefuse =
+      (held.has('Digit4') || held.has('Numpad4')) && this.state.phase === 'retake';
+    const reload = this.reloadQueued;
+    this.reloadQueued = false;
 
-    return { move: { x, y }, aimAngle, fire: this.firePressed, holdDefuse };
+    return {
+      move: { x, y },
+      aimAngle,
+      fire: this.firePressed || this.pointerDown,
+      holdDefuse,
+      reload,
+    };
   }
 
   // ------------------------------------------------------------------
@@ -463,9 +524,25 @@ export class SplitScene extends Phaser.Scene {
           this.playerFlashUntil = now + HIT_FLASH_MS + 30;
           this.cameras.main.shake(120, 0.006);
           break;
-        case 'revive':
-          this.showBark(BARKS.revive);
-          this.cameras.main.flash(220, 120, 170, 255);
+        case 'player-died':
+          this.playSfx('death');
+          this.showBark(BARKS.died);
+          this.showPopup('YOU DIED', '#ff5470');
+          this.cameras.main.flash(400, 200, 20, 30);
+          this.cameras.main.shake(500, 0.014);
+          break;
+        case 'reload-start':
+          this.playSfx('reload');
+          break;
+        case 'reload-complete':
+          this.showWarn('RELOADED');
+          break;
+        case 'dry-fire':
+          this.playSfx('dryfire');
+          break;
+        case 'defuse-wave':
+          this.showBark(BARKS.defuseWave);
+          this.showWarn('CONTESTED — 2 INBOUND');
           break;
         case 'first-blood':
           this.showBark(BARKS.firstBlood);
@@ -813,8 +890,8 @@ export class SplitScene extends Phaser.Scene {
   private drawSpikeAndDefuse(now: number): void {
     const phase = this.state.phase;
 
-    // Freeze the spike FX during the detonation overlay.
-    if (phase === 'detonated') {
+    // Freeze the spike FX during the detonation / death overlays.
+    if (phase === 'detonated' || phase === 'dead') {
       return;
     }
 
@@ -895,56 +972,182 @@ export class SplitScene extends Phaser.Scene {
   }
 
   private createHud(): void {
-    if (!this.hasArt(ART_KEYS.ui)) {
-      return;
-    }
+    const barTop = HUD.barBottomY;
+    const midY = barTop + HUD.barHeight / 2;
+    const uiArt = this.hasArt(ART_KEYS.ui);
 
-    const max = SPLIT_CONFIG.player.maxHearts;
-
-    for (let i = 0; i < max; i += 1) {
-      const heart = this.add
-        .image(30 + i * 40, 34, ART_KEYS.ui, 'heartFull')
-        .setScale(HEART_SCALE)
-        .setDepth(805)
+    // --- Top strip: fuse medallion (center) + live enemy count (right) ---
+    if (uiArt) {
+      this.medalImage = this.add
+        .image(ARENA.width / 2, 40, ART_KEYS.ui, 'medal')
+        .setScale(MEDAL_SCALE)
+        .setDepth(808)
         .setScrollFactor(0);
-      this.heartImages.push(heart);
     }
 
-    // Gold round-counter medallion behind the round number.
-    this.medalImage = this.add
-      .image(ARENA.width / 2, 40, ART_KEYS.ui, 'medal')
-      .setScale(MEDAL_SCALE)
-      .setDepth(808)
+    this.enemiesText = this.add
+      .text(ARENA.width - 20, HUD.topStripY + HUD.topStripH / 2, '', {
+        color: '#ff9aa8',
+        fontFamily: 'Consolas, "Courier New", monospace',
+        fontSize: '18px',
+        fontStyle: '700',
+        stroke: '#0c1220',
+        strokeThickness: 4,
+      })
+      .setOrigin(1, 0.5)
+      .setDepth(811)
+      .setScrollFactor(0);
+
+    // --- Bottom-left: health number + heart pips ---
+    this.add
+      .text(24, barTop + 8, 'HEALTH', {
+        color: '#7fe9d6',
+        fontFamily: 'Consolas, "Courier New", monospace',
+        fontSize: '11px',
+        fontStyle: '700',
+      })
+      .setOrigin(0, 0)
+      .setDepth(811)
+      .setScrollFactor(0);
+    this.healthNumberText = this.add
+      .text(22, midY + 4, '100', {
+        color: '#e9fff8',
+        fontFamily: 'Consolas, "Courier New", monospace',
+        fontSize: '34px',
+        fontStyle: '800',
+        stroke: '#0c1220',
+        strokeThickness: 5,
+      })
+      .setOrigin(0, 0.5)
+      .setDepth(812)
+      .setScrollFactor(0);
+
+    if (uiArt) {
+      const max = SPLIT_CONFIG.player.maxHearts;
+      for (let i = 0; i < max; i += 1) {
+        const heart = this.add
+          .image(96 + i * 20, midY + 2, ART_KEYS.ui, 'heartFull')
+          .setScale(HEART_SCALE * 0.62)
+          .setDepth(812)
+          .setScrollFactor(0);
+        this.heartImages.push(heart);
+      }
+    }
+
+    // --- Bottom-right: ammo counter (mag | reserve) + weapon label ---
+    this.add
+      .text(ARENA.width - 24, barTop + 8, 'VANDAL', {
+        color: '#ffe6a0',
+        fontFamily: 'Consolas, "Courier New", monospace',
+        fontSize: '11px',
+        fontStyle: '700',
+      })
+      .setOrigin(1, 0)
+      .setDepth(811)
+      .setScrollFactor(0);
+    this.ammoReserveText = this.add
+      .text(ARENA.width - 24, midY + 6, '75', {
+        color: '#c7b06a',
+        fontFamily: 'Consolas, "Courier New", monospace',
+        fontSize: '20px',
+        fontStyle: '700',
+        stroke: '#0c1220',
+        strokeThickness: 4,
+      })
+      .setOrigin(1, 0.5)
+      .setDepth(812)
+      .setScrollFactor(0);
+    this.ammoMagText = this.add
+      .text(ARENA.width - 82, midY + 4, '25', {
+        color: '#fff4d6',
+        fontFamily: 'Consolas, "Courier New", monospace',
+        fontSize: '34px',
+        fontStyle: '800',
+        stroke: '#0c1220',
+        strokeThickness: 5,
+      })
+      .setOrigin(1, 0.5)
+      .setDepth(812)
       .setScrollFactor(0);
   }
 
   private drawHud(): void {
-    const hearts = this.state.player.hearts;
-    const max = SPLIT_CONFIG.player.maxHearts;
+    const player = this.state.player;
+    const maxHearts = SPLIT_CONFIG.player.maxHearts;
+    const hearts = Math.max(0, player.hearts);
+    const graphics = this.hudGraphics;
 
+    graphics.clear();
+
+    // Bottom bar backing.
+    const barY = HUD.barBottomY;
+    const barH = HUD.barHeight;
+    graphics.fillStyle(HUD.panel, 0.82);
+    graphics.fillRect(0, barY, ARENA.width, barH);
+    graphics.lineStyle(2, HUD.edge, 0.9);
+    graphics.lineBetween(0, barY, ARENA.width, barY);
+    // Teal accent under the health block, gold under the ammo block.
+    graphics.fillStyle(HUD.teal, 0.9);
+    graphics.fillRect(0, barY, 4, barH);
+    graphics.fillStyle(HUD.gold, 0.9);
+    graphics.fillRect(ARENA.width - 4, barY, 4, barH);
+
+    // Top strip backing.
+    graphics.fillStyle(HUD.panel, 0.55);
+    graphics.fillRect(0, HUD.topStripY, ARENA.width, HUD.topStripH);
+
+    // --- Health ---
+    const low = hearts <= 1;
+    this.healthNumberText.setText(String(hearts * 25));
+    this.healthNumberText.setColor(low ? '#ff5470' : '#e9fff8');
     if (this.heartImages.length > 0) {
       this.heartImages.forEach((img, i) => {
         img.setFrame(i < hearts ? 'heartFull' : 'heartEmpty');
+        img.setAlpha(i < hearts ? 1 : 0.4);
       });
-      return;
+    } else {
+      // Fallback pips (no ui.png): four small squares by the number.
+      for (let i = 0; i < maxHearts; i += 1) {
+        graphics.fillStyle(i < hearts ? HUD.red : 0x3a2530, 1);
+        graphics.fillRect(92 + i * 16, barY + barH / 2 - 4, 11, 9);
+      }
     }
 
-    const graphics = this.hudGraphics;
-    graphics.clear();
+    // --- Ammo ---
+    const { magSize } = SPLIT_CONFIG.player;
+    const reloading = player.reloadingMs > 0;
+    this.ammoMagText.setText(reloading ? '· ·' : String(player.ammoInMag));
+    const magEmpty = player.ammoInMag <= 0 && !reloading;
+    this.ammoMagText.setColor(magEmpty ? '#ff5470' : reloading ? '#ffd15c' : '#fff4d6');
+    this.ammoReserveText.setText(`| ${player.reserveRounds}`);
 
-    for (let i = 0; i < max; i += 1) {
-      const x = 24 + i * 30;
-      const y = 26;
-      const filled = i < hearts;
-      graphics.fillStyle(filled ? 0xff5470 : 0x3a2530, 1);
-      this.fillHeart(graphics, x, y, 10);
+    // Segmented magazine bar (fills left→right) above the numbers.
+    const barW = 150;
+    const bx = ARENA.width - 24 - barW;
+    const by = barY + 8;
+    const segH = 6;
+    graphics.fillStyle(0x000000, 0.4);
+    graphics.fillRect(bx - 2, by - 2, barW + 4, segH + 4);
+    if (reloading) {
+      const t = 1 - player.reloadingMs / SPLIT_CONFIG.player.reloadMs;
+      graphics.fillStyle(HUD.gold, 0.95);
+      graphics.fillRect(bx, by, barW * t, segH);
+    } else {
+      const frac = player.ammoInMag / magSize;
+      const lowAmmo = player.ammoInMag <= magSize * 0.2;
+      graphics.fillStyle(lowAmmo ? HUD.red : HUD.gold, 0.95);
+      graphics.fillRect(bx, by, barW * frac, segH);
+      // Tick marks every 5 rounds.
+      graphics.fillStyle(HUD.panel, 0.9);
+      for (let r = 5; r < magSize; r += 5) {
+        graphics.fillRect(bx + (barW * r) / magSize - 1, by, 2, segH);
+      }
     }
-  }
+    graphics.lineStyle(1, HUD.edge, 0.8);
+    graphics.strokeRect(bx, by, barW, segH);
 
-  private fillHeart(graphics: Phaser.GameObjects.Graphics, x: number, y: number, size: number): void {
-    graphics.fillCircle(x - size / 3, y, size / 2);
-    graphics.fillCircle(x + size / 3, y, size / 2);
-    graphics.fillTriangle(x - size / 1.4, y, x + size / 1.4, y, x, y + size);
+    // --- Enemies remaining (top-right) ---
+    this.enemiesText.setText(`ENEMIES ${aliveEnemyCount(this.state)}`);
   }
 
   private updateStatusText(): void {
@@ -958,8 +1161,13 @@ export class SplitScene extends Phaser.Scene {
       return;
     }
 
+    if (this.state.phase === 'dead') {
+      this.statusText.setText('You went down — restarting the retake from the top.');
+      return;
+    }
+
     this.statusText.setText(
-      `WASD move · aim mouse · click fire · hold E on the spike to defuse. ${aliveEnemyCount(this.state)} enemies. Esc leaves.`,
+      `WASD move · aim mouse · hold to fire · R reload · hold 4 on the spike to defuse. ${aliveEnemyCount(this.state)} enemies. Esc leaves.`,
     );
   }
 
@@ -974,6 +1182,13 @@ export class SplitScene extends Phaser.Scene {
 
     if (this.state.phase === 'detonated') {
       this.roundText.setText('0');
+      this.roundText.setColor('#ff5470');
+      this.medalImage?.setVisible(true);
+      return;
+    }
+
+    if (this.state.phase === 'dead') {
+      this.roundText.setText(String(Math.ceil(spikeTimeRemainingMs(this.state) / 1000)));
       this.roundText.setColor('#ff5470');
       this.medalImage?.setVisible(true);
       return;
@@ -995,7 +1210,7 @@ export class SplitScene extends Phaser.Scene {
       return;
     }
 
-    this.promptText.setText(this.state.defuse.defusing ? 'DEFUSING…' : 'HOLD E TO DEFUSE');
+    this.promptText.setText(this.state.defuse.defusing ? 'DEFUSING…' : 'HOLD 4 TO DEFUSE');
 
     if (!this.onSiteBarked) {
       this.onSiteBarked = true;
@@ -1150,8 +1365,14 @@ export class SplitScene extends Phaser.Scene {
       .image(0, 0, gunArt ? ART_KEYS.gun : GUN_TEX)
       .setOrigin(gunArt ? GUN_ART_ORIGIN_X : GUN_GRIP_ORIGIN_X, 0.5)
       .setScale(gunArt ? GUN_ART_SCALE : GUN_SCALE)
-      .setTint(GUN_TINT[role])
       .setVisible(false);
+
+    // Only the procedural silhouette is team-tinted; a dropped-in gun.png is
+    // shown at its own colors (a full multiply tint would fight painted art).
+    // Team identity is carried by the character sprite, not the weapon.
+    if (!gunArt) {
+      gun.setTint(GUN_TINT[role]);
+    }
 
     return {
       img,

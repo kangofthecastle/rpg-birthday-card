@@ -191,11 +191,15 @@ export const PROP_KINDS: Readonly<Record<string, PropKind>> = {
   signpost: { name: 'signpost', dir: 'outdoor', w: 144, h: 224, collider: { w: 44, h: 22 }, style: 'signpost' },
   'clearing-lantern-post': { name: 'clearing-lantern-post', dir: 'clearing', w: 128, h: 320, collider: { w: 34, h: 22 }, style: 'lantern-post' },
   'clearing-lantern-string': { name: 'clearing-lantern-string', dir: 'clearing', w: 512, h: 160, overhead: true, style: 'lantern-string' },
-  // A single origami crane sitting on the water (top-down 3/4). Not placed via
-  // OUTDOOR_PROPS — the clearing scene instantiates several of these itself and
-  // drifts them along the shore water (see LocationScene.spawnClearingCranes),
-  // varying scale/rotation/phase per instance. `flat` so no ground shadow bakes.
-  'clearing-crane': { name: 'clearing-crane', dir: 'clearing', w: 96, h: 80, flat: true, style: 'crane' },
+  // Three colour variants of a single origami crane sitting on the water
+  // (top-down 3/4): 1 = cream/blush, 2 = pale warm gold, 3 = soft lavender.
+  // Not placed via OUTDOOR_PROPS — the clearing scene instantiates one drifting
+  // crane per variant along the shore water (LocationScene.spawnClearingCranes),
+  // varying scale/rotation/phase per instance, so all three colours are always
+  // on screen. `flat` so no ground shadow bakes.
+  'clearing-crane-1': { name: 'clearing-crane-1', dir: 'clearing', w: 96, h: 80, flat: true, style: 'crane-1' },
+  'clearing-crane-2': { name: 'clearing-crane-2', dir: 'clearing', w: 96, h: 80, flat: true, style: 'crane-2' },
+  'clearing-crane-3': { name: 'clearing-crane-3', dir: 'clearing', w: 96, h: 80, flat: true, style: 'crane-3' },
 };
 
 export const ALL_PROP_KINDS: readonly PropKind[] = Object.values(PROP_KINDS);

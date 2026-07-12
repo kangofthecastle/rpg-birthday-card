@@ -206,6 +206,9 @@ interface TilePiece {
 interface DriftingCrane {
   readonly image: Phaser.GameObjects.Image;
   readonly ripple: Phaser.GameObjects.Graphics;
+  /** Un-varied display scale for this crane's texture (colour variants may drop
+   * in at different resolutions), kept so wrap-around can re-vary from it. */
+  readonly baseScale: number;
   /** Horizontal downstream drift, px/sec. */
   speed: number;
   /** Vertical bob amplitude (px) and its sine rate (rad/sec) + phase. */
@@ -388,9 +391,8 @@ export class LocationScene extends Phaser.Scene {
   // while the dressEdit editor is frozen. Reset on (re)start like the shore.
   private clearingCranes: DriftingCrane[] = [];
   private clearingCraneClock = 0;
-  // Base display scale + PRNG kept from spawn so an off-edge crane can re-roll its
-  // look on wrap-around with the same distribution.
-  private craneBaseScale = 0;
+  // PRNG kept from spawn so an off-edge crane can re-roll its look on
+  // wrap-around with the same distribution.
   private craneWrapRng: () => number = Math.random;
   private playerFacing: PlayerFacing = 'down';
   private wasPlayerMoving = false;
@@ -1516,25 +1518,17 @@ export class LocationScene extends Phaser.Scene {
 
   // A sparse trickle of origami paper cranes drifting along the clearing's shore
   // water — the in-game seed for why ____ later folds a boat: paper floats. Not
-  // static props: several instances of the single `clearing-crane` sprite (art or
-  // procedural fallback) are spawned across the water band, each with its own
-  // scale (±15%), heading, drift speed and bob/rotation phase, then advanced every
-  // frame in advanceClearingCranes() and wrapped back upstream on exit so the
-  // trickle never runs dry. Purely decorative: no colliders, so they never touch
-  // the "Kneel at the water" interaction. Depth sits above the water/glow but well
-  // below any standing figure, so ____ draws in front when he kneels at the shore.
+  // static props: one instance per `clearing-crane-N` colour variant (art or
+  // procedural fallback; 1 = cream/blush, 2 = pale gold, 3 = lavender) is spawned
+  // across the water band — a STABLE assignment, so all three colours are always
+  // on screen — each with its own scale (±15%), heading, drift speed and
+  // bob/rotation phase, then advanced every frame in advanceClearingCranes() and
+  // wrapped back upstream on exit so the trickle never runs dry. Purely
+  // decorative: no colliders, so they never touch the "Kneel at the water"
+  // interaction. Depth sits above the water/glow but well below any standing
+  // figure, so ____ draws in front when he kneels at the shore.
   private spawnClearingCranes(width: number, height: number, tile: number): void {
-    const kind = PROP_KINDS['clearing-crane'];
-    if (!kind) {
-      return;
-    }
-    const key = this.ensurePropTexture(kind);
-    const source = this.textures.get(key).getSourceImage() as { width: number };
-    // Base display size: shrink the sprite so ~3 cranes read as a contemplative
-    // few, not a flock, on the 2-tile water band.
-    const baseScale = (kind.w / (source.width || kind.w)) * 0.66;
     const rng = mulberry32(fnv1a(`${this.location.id}:cranes`));
-    this.craneBaseScale = baseScale;
     this.craneWrapRng = rng;
     const bandTop = height - tile * 2;
     // Keep cranes on the near/upper surface of the band (the far edge stays open
@@ -1543,6 +1537,17 @@ export class LocationScene extends Phaser.Scene {
     const yMax = bandTop + tile * 1.15;
     const count = 3;
     for (let i = 0; i < count; i += 1) {
+      // Stable variant assignment: crane i carries colour variant i+1.
+      const kind = PROP_KINDS[`clearing-crane-${i + 1}`];
+      if (!kind) {
+        continue;
+      }
+      const key = this.ensurePropTexture(kind);
+      const source = this.textures.get(key).getSourceImage() as { width: number };
+      // Base display size: shrink the sprite so the 3 cranes read as a
+      // contemplative few, not a flock, on the 2-tile water band. Derived per
+      // variant so dropped-in art of any resolution lands at the same size.
+      const baseScale = (kind.w / (source.width || kind.w)) * 0.66;
       const ripple = this.add.graphics().setDepth(-15.5);
       const image = this.add
         .image(0, 0, key)
@@ -1556,6 +1561,7 @@ export class LocationScene extends Phaser.Scene {
       const crane: DriftingCrane = {
         image,
         ripple,
+        baseScale,
         speed: 0,
         bobAmp: 0,
         bobRate: 0,
@@ -1619,8 +1625,9 @@ export class LocationScene extends Phaser.Scene {
       const nextX = crane.image.x + crane.speed * dt;
       const halfW = (crane.image.width * crane.scale) / 2;
       if (nextX - halfW > width + tile) {
-        // Off the downstream edge: re-roll and re-enter from upstream.
-        this.randomizeCrane(crane, rng, this.craneBaseScale, yMin, yMax);
+        // Off the downstream edge: re-roll and re-enter from upstream (the
+        // texture — and so the colour variant — stays with the crane).
+        this.randomizeCrane(crane, rng, crane.baseScale, yMin, yMax);
         crane.image.setX(-tile - halfW);
       } else {
         crane.image.setX(nextX);
@@ -2889,17 +2896,39 @@ export class LocationScene extends Phaser.Scene {
         }
         break;
       }
-      case 'crane': {
+      case 'crane-1':
+      case 'crane-2':
+      case 'crane-3': {
         // A single origami paper crane seen from a top-down 3/4, sitting on the
-        // water: a folded body wing in cream, an upswept blush wing catching the
-        // last light, a lifted head/neck and a tail point. Centred in the canvas
-        // (no ground contact — it floats); the engine drifts several of these
-        // across the shore water with per-instance scale/rotation/phase.
+        // water: a folded body wing, an upswept lit-side wing catching the last
+        // light, a lifted head/neck and a tail point. Centred in the canvas
+        // (no ground contact — it floats); the engine drifts one crane per
+        // colour variant across the shore water with per-instance
+        // scale/rotation/phase. The three palettes harmonize with the clearing's
+        // twilight indigo/rose/gold: 1 = cream with blush facets, 2 = pale warm
+        // gold, 3 = soft lavender-lilac.
+        const cranePalettes: Record<string, {
+          body: string; lit: string; head: string; tail: string; crease: string;
+        }> = {
+          'crane-1': {
+            body: '#efe4d2', lit: '#f3c6d6', head: '#ecdcc9', tail: '#e6d6c2',
+            crease: 'rgba(120,104,72,0.4)',
+          },
+          'crane-2': {
+            body: '#f2e5c2', lit: '#f6d492', head: '#eedcb2', tail: '#e9d2a0',
+            crease: 'rgba(138,108,54,0.4)',
+          },
+          'crane-3': {
+            body: '#e7dff2', lit: '#d3bfe8', head: '#dfd3ee', tail: '#d7c9e6',
+            crease: 'rgba(96,82,128,0.45)',
+          },
+        };
+        const pal = cranePalettes[kind.style] ?? cranePalettes['crane-1'];
         ctx.save();
         ctx.translate(cx, h * 0.52);
         // Faint reflection smear just beneath the fold, so it reads as floating.
         ell(0, h * 0.2, w * 0.26, h * 0.05, 'rgba(232,220,235,0.16)');
-        // Lower/back wing fold (cream body).
+        // Lower/back wing fold (the paper body).
         ctx.beginPath();
         ctx.moveTo(-w * 0.06, -h * 0.02);
         ctx.lineTo(w * 0.3, -h * 0.16);
@@ -2907,16 +2936,16 @@ export class LocationScene extends Phaser.Scene {
         ctx.lineTo(w * 0.34, h * 0.2);
         ctx.lineTo(-w * 0.12, h * 0.14);
         ctx.closePath();
-        ctx.fillStyle = '#efe4d2';
+        ctx.fillStyle = pal.body;
         ctx.fill();
-        // Upswept front wing (blush, the lit side).
+        // Upswept front wing (the lit side).
         ctx.beginPath();
         ctx.moveTo(-w * 0.04, -h * 0.01);
         ctx.lineTo(-w * 0.02, -h * 0.24);
         ctx.lineTo(w * 0.2, -h * 0.05);
         ctx.lineTo(w * 0.02, h * 0.05);
         ctx.closePath();
-        ctx.fillStyle = '#f3c6d6';
+        ctx.fillStyle = pal.lit;
         ctx.fill();
         // Head + neck lifting to the left, and the tail point trailing right.
         ctx.beginPath();
@@ -2924,17 +2953,17 @@ export class LocationScene extends Phaser.Scene {
         ctx.lineTo(-w * 0.28, -h * 0.14);
         ctx.lineTo(-w * 0.12, h * 0.06);
         ctx.closePath();
-        ctx.fillStyle = '#ecdcc9';
+        ctx.fillStyle = pal.head;
         ctx.fill();
         ctx.beginPath();
         ctx.moveTo(w * 0.14, h * 0.06);
         ctx.lineTo(w * 0.4, h * 0.02);
         ctx.lineTo(w * 0.18, h * 0.14);
         ctx.closePath();
-        ctx.fillStyle = '#e6d6c2';
+        ctx.fillStyle = pal.tail;
         ctx.fill();
         // Soft centre crease.
-        ctx.strokeStyle = 'rgba(120,104,72,0.4)';
+        ctx.strokeStyle = pal.crease;
         ctx.lineWidth = 1.2;
         ctx.beginPath();
         ctx.moveTo(-w * 0.04, -h * 0.02);

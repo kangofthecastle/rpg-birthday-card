@@ -1,4 +1,4 @@
-import { rollChance, seedRng } from './rng';
+import { nextInRange, rollChance, seedRng } from './rng';
 import { clamp } from '../../game/mathUtils';
 
 // ---------------------------------------------------------------------------
@@ -44,7 +44,16 @@ export const SPLIT_CONFIG = {
     speed: 158,
     maxHearts: 4,
     shotCooldownMs: 180,
-    reviveInvulnMs: 2000,
+    // Weapon: 25 rounds per magazine, four mags total (one loaded + three in
+    // reserve = 75 reserve rounds). Reload refills the current mag from the
+    // reserve pool and takes reloadMs (locked out of firing during it).
+    magSize: 25,
+    magazines: 4,
+    reloadMs: 850,
+    // Valorant-style movement error: near-pinpoint standing still, a heavy cone
+    // while moving. Values are the ± half-angle of the shot cone in RADIANS.
+    spreadStillRad: 0.014,
+    spreadMovingRad: 0.19,
   },
   teammate: {
     width: 26,
@@ -58,21 +67,29 @@ export const SPLIT_CONFIG = {
     width: 26,
     height: 34,
     headFraction: 0.22,
+    // "Harder still" tuning pass. Bots push faster, pause and telegraph for a
+    // much shorter beat (so they fire a lot more often), weave harder, and land
+    // a higher fraction of their shots. Kept beatable: still capped under a coin
+    // flip per shot, death restarts (not permadeath), ____ softens targets,
+    // and the player has full spawn protection each round.
     bodyHp: 4,
-    speed: 62,
-    advanceMs: 850,
-    pauseMs: 280,
-    telegraphMs: 300,
-    hitChance: 0.38,
-    range: 560,
+    speed: 80, // was 62
+    advanceMs: 700, // was 850
+    pauseMs: 170, // was 280
+    telegraphMs: 185, // was 300 — sharper reaction time
+    hitChance: 0.47, // was 0.38
+    range: 580,
     // While advancing, each bot weaves side-to-side (perpendicular to its
     // approach vector) so it's harder to line up a clean headshot. This is a
     // pure deterministic sway from elapsed time + the bot's id — no RNG. Peak
     // perpendicular speed in px/s and the full weave period in ms.
-    strafeSpeed: 48,
-    strafePeriodMs: 500,
+    strafeSpeed: 70, // was 48 — jukes harder
+    strafePeriodMs: 420, // was 500
   },
-  revive: { holdFireMs: 2000 },
+  // Spawn protection granted at the start of every round (fresh start, death
+  // restart, or detonation reset): brief invulnerability plus a bot hold-fire so
+  // the player is never insta-melted the instant a round begins.
+  spawn: { invulnMs: 1100, holdFireMs: 1100 },
   // The spike is live from the first frame. spikeTimerMs is the total fuse; a
   // clean run defuses (7s of hold) with well over ten seconds to spare.
   spikeTimerMs: 60000,
@@ -82,13 +99,25 @@ export const SPLIT_CONFIG = {
     // ____ must stand within this radius of the spike (centre-to-centre) to
     // make defuse progress.
     radius: 74,
-    // No slow drain: the moment ____ stops actively defusing (releases E,
+    // No slow drain: the moment ____ stops actively defusing (releases 4,
     // leaves the radius, or takes a hit) progress SNAPS instantly back to the
     // last banked checkpoint — the half-mark once reached, otherwise zero.
   },
+  // The instant the spike is first tapped (defuse initiated for the first time
+  // this round) a two-bot ambush wave drops in from Heaven to contest it.
+  defuseAmbush: {
+    spawns: [
+      { x: 322, y: 150 },
+      { x: 638, y: 150 },
+    ],
+  } as const,
   // When the fuse hits zero the round soft-resets. This is the "RUN IT BACK."
   // beat: screen flash/shake, then a fresh round. No keepsake loss, no exit.
   detonation: { holdMs: 1500 },
+  // On death (all hearts spent) the round hard-restarts from the beginning —
+  // fresh fuse, full hearts, full ammo, defuse back to zero. This is the brief
+  // death overlay before that restart. No partial checkpoints survive a death.
+  death: { holdMs: 1400 },
   // The spike sits on the painted "B" site stencil at the arena center.
   spike: { x: 480, y: 290, size: 26 },
   playerStart: { x: 480, y: 415 },
@@ -139,7 +168,7 @@ export const SPLIT_CONFIG = {
 
 const MAX_STEP_MS = 50;
 
-export type SplitPhase = 'retake' | 'won' | 'detonated';
+export type SplitPhase = 'retake' | 'won' | 'detonated' | 'dead';
 
 export type EnemyAiState = 'advancing' | 'pausing' | 'telegraphing';
 
@@ -148,7 +177,11 @@ export interface PlayerState {
   readonly hearts: number;
   readonly invulnMs: number;
   readonly shotCooldownMs: number;
-  readonly reviving: boolean;
+  // Ammo: rounds loaded in the current magazine, rounds left in the reserve
+  // pool, and the remaining reload lockout (0 when not reloading).
+  readonly ammoInMag: number;
+  readonly reserveRounds: number;
+  readonly reloadingMs: number;
 }
 
 export interface TeammateState {
@@ -197,8 +230,16 @@ export type SplitEvent =
       readonly hit: boolean;
     }
   | { readonly type: 'heart-lost'; readonly hearts: number }
-  | { readonly type: 'revive' }
+  // All hearts spent: begin the death overlay before the round restarts.
+  | { readonly type: 'player-died' }
   | { readonly type: 'first-blood' }
+  // Ammo: a reload has begun / finished, or the trigger was pulled with nothing
+  // left to fire (mag empty and reserve dry).
+  | { readonly type: 'reload-start' }
+  | { readonly type: 'reload-complete' }
+  | { readonly type: 'dry-fire' }
+  // The first-tap ambush wave dropped in when the defuse was initiated.
+  | { readonly type: 'defuse-wave'; readonly count: number }
   | {
       readonly type: 'enemy-killed';
       readonly enemyId: number;
@@ -222,6 +263,8 @@ export interface SplitState {
   readonly spikeTimerMs: number;
   // Countdown for the detonation overlay while phase === 'detonated'.
   readonly detonationMs: number;
+  // Countdown for the death overlay while phase === 'dead'.
+  readonly deathMs: number;
   // How many times the fuse has run out (0 on the first attempt). Purely for
   // flavor/bark text — failure never ends the game.
   readonly attempt: number;
@@ -233,6 +276,8 @@ export interface SplitState {
   readonly reinforcementsSpawned: number;
   readonly holdFireMs: number;
   readonly firstBloodDone: boolean;
+  // Whether the first-tap ambush wave has already dropped this round.
+  readonly defuseWaveSpawned: boolean;
   readonly defuse: DefuseState;
   readonly events: readonly SplitEvent[];
 }
@@ -242,6 +287,8 @@ export interface SplitInput {
   readonly aimAngle: number;
   readonly fire: boolean;
   readonly holdDefuse: boolean;
+  // Manual reload request (edge-triggered by the scene on the reload key).
+  readonly reload: boolean;
 }
 
 export interface ShotResult {
@@ -270,19 +317,25 @@ function freshRound(
   attempt: number,
   events: readonly SplitEvent[],
 ): SplitState {
+  const { player, spawn } = SPLIT_CONFIG;
+  const reserveRounds = (player.magazines - 1) * player.magSize;
+
   return {
     phase: 'retake',
     elapsedMs: 0,
     spikeTimerMs: SPLIT_CONFIG.spikeTimerMs,
     detonationMs: 0,
+    deathMs: 0,
     attempt,
     rngState,
     player: {
       pos: SPLIT_CONFIG.playerStart,
-      hearts: SPLIT_CONFIG.player.maxHearts,
-      invulnMs: 0,
+      hearts: player.maxHearts,
+      invulnMs: spawn.invulnMs,
       shotCooldownMs: 0,
-      reviving: false,
+      ammoInMag: player.magSize,
+      reserveRounds,
+      reloadingMs: 0,
     },
     teammate: {
       pos: SPLIT_CONFIG.teammateStart,
@@ -290,8 +343,9 @@ function freshRound(
     },
     enemies: spawnReinforcement(0, 0),
     reinforcementsSpawned: 1,
-    holdFireMs: 0,
+    holdFireMs: spawn.holdFireMs,
     firstBloodDone: false,
+    defuseWaveSpawned: false,
     defuse: { progressMs: 0, checkpointReached: false, defusing: false },
     events,
   };
@@ -308,6 +362,20 @@ function spawnReinforcement(reinforcementIndex: number, idOffset: number): Enemy
     ai: 'advancing' as EnemyAiState,
     stateTimerMs: SPLIT_CONFIG.enemy.advanceMs,
     wave: reinforcementIndex,
+  }));
+}
+
+// The first-tap ambush wave (see updateDefuse). Its own wave tag (99) so it's
+// distinguishable from the scheduled reinforcements.
+function spawnAmbush(idOffset: number): EnemyState[] {
+  return SPLIT_CONFIG.defuseAmbush.spawns.map((pos, index) => ({
+    id: idOffset + index,
+    pos,
+    bodyHp: SPLIT_CONFIG.enemy.bodyHp,
+    alive: true,
+    ai: 'advancing' as EnemyAiState,
+    stateTimerMs: SPLIT_CONFIG.enemy.advanceMs,
+    wave: 99,
   }));
 }
 
@@ -593,30 +661,28 @@ export function fireTeammateShot(state: SplitState): {
   return { state: next, result: { fired: true, hitEnemyId: enemy.id } };
 }
 
-// Apply a single body hit to ____. Body only — one heart. Respects the revive
-// invulnerability window. At zero hearts there is no fail: she revives on site
-// with full hearts, brief invulnerability, and the bots hold fire. Any landed
-// hit also knocks her off the defuse (progress falls to the last checkpoint).
+// Apply a single body hit to ____. Body only — one heart. Respects the spawn
+// invulnerability window. At zero hearts she DIES: the round enters the death
+// overlay and then hard-restarts from the beginning (no partial checkpoints).
+// Any landed hit also knocks her off the defuse (progress falls to the last
+// checkpoint).
 export function damagePlayer(state: SplitState): SplitState {
-  if (state.player.invulnMs > 0) {
+  if (state.player.invulnMs > 0 || state.phase !== 'retake') {
     return state;
   }
 
   const hearts = state.player.hearts - 1;
 
   if (hearts <= 0) {
-    const revived: SplitState = knockOffDefuse({
+    const dead: SplitState = {
       ...state,
-      player: {
-        ...state.player,
-        hearts: SPLIT_CONFIG.player.maxHearts,
-        invulnMs: SPLIT_CONFIG.player.reviveInvulnMs,
-        reviving: true,
-      },
-      holdFireMs: Math.max(state.holdFireMs, SPLIT_CONFIG.revive.holdFireMs),
-    });
+      phase: 'dead',
+      deathMs: SPLIT_CONFIG.death.holdMs,
+      player: { ...state.player, hearts: 0 },
+      defuse: { ...state.defuse, defusing: false },
+    };
 
-    return pushEvent(revived, { type: 'revive' });
+    return pushEvent(dead, { type: 'player-died' });
   }
 
   const damaged: SplitState = knockOffDefuse({
@@ -646,24 +712,113 @@ function knockOffDefuse(state: SplitState): SplitState {
 }
 
 // ---------------------------------------------------------------------------
+// Ammo / firing
+// ---------------------------------------------------------------------------
+
+// Resolve one player shot: apply movement inaccuracy (near-pinpoint standing
+// still, a heavy cone while moving), spend a round, and set the shot clock.
+function resolvePlayerFire(state: SplitState, input: SplitInput): SplitState {
+  const { spreadStillRad, spreadMovingRad, shotCooldownMs } = SPLIT_CONFIG.player;
+  const moving = Math.hypot(input.move.x, input.move.y) > 0.001;
+  const cone = moving ? spreadMovingRad : spreadStillRad;
+
+  // Deterministic ± offset within the cone, drawn from the model RNG so replays
+  // stay reproducible.
+  const draw = nextInRange(state.rngState, -cone, cone);
+  const aimAngle = input.aimAngle + draw.value;
+
+  const shot = firePlayerShot({ ...state, rngState: draw.state }, aimAngle);
+
+  return {
+    ...shot.state,
+    player: {
+      ...shot.state.player,
+      shotCooldownMs,
+      ammoInMag: Math.max(0, shot.state.player.ammoInMag - 1),
+    },
+  };
+}
+
+// Start a reload if one is warranted (not already reloading, mag not full,
+// reserve not empty). The mag is topped up when the lockout elapses in
+// stepSplit().
+function beginReload(state: SplitState): SplitState {
+  const { magSize, reloadMs } = SPLIT_CONFIG.player;
+  const p = state.player;
+
+  if (p.reloadingMs > 0 || p.ammoInMag >= magSize || p.reserveRounds <= 0) {
+    return state;
+  }
+
+  return pushEvent(
+    { ...state, player: { ...p, reloadingMs: reloadMs } },
+    { type: 'reload-start' },
+  );
+}
+
+// Advance the reload lockout; when it elapses, pull rounds from the reserve pool
+// to top up the current magazine (keeping any leftover rounds).
+function tickReload(state: SplitState, deltaMs: number): SplitState {
+  const p = state.player;
+
+  if (p.reloadingMs <= 0) {
+    return state;
+  }
+
+  const reloadingMs = p.reloadingMs - deltaMs;
+
+  if (reloadingMs > 0) {
+    return { ...state, player: { ...p, reloadingMs } };
+  }
+
+  const need = SPLIT_CONFIG.player.magSize - p.ammoInMag;
+  const take = Math.min(need, p.reserveRounds);
+
+  return pushEvent(
+    {
+      ...state,
+      player: {
+        ...p,
+        reloadingMs: 0,
+        ammoInMag: p.ammoInMag + take,
+        reserveRounds: p.reserveRounds - take,
+      },
+    },
+    { type: 'reload-complete' },
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Tick
 // ---------------------------------------------------------------------------
 
 export function tickSplit(state: SplitState, input: SplitInput, deltaMs: number): SplitState {
   let next: SplitState = { ...state, events: [] };
 
-  // Player shot resolves once per tick (edge-triggered click), gated by cadence.
-  if (
-    input.fire &&
-    next.phase === 'retake' &&
-    next.player.shotCooldownMs <= 0 &&
-    !next.player.reviving
-  ) {
-    const shot = firePlayerShot(next, input.aimAngle);
-    next = {
-      ...shot.state,
-      player: { ...shot.state.player, shotCooldownMs: SPLIT_CONFIG.player.shotCooldownMs },
-    };
+  if (next.phase === 'retake') {
+    // Manual reload request (R). Auto-reload also fires below when the trigger
+    // is pulled on an empty mag.
+    if (input.reload) {
+      next = beginReload(next);
+    }
+
+    // Player shot resolves once per tick (edge-triggered click), gated by the
+    // shot clock, the reload lockout, and ammo in the magazine.
+    if (input.fire && next.player.shotCooldownMs <= 0 && next.player.reloadingMs <= 0) {
+      if (next.player.ammoInMag > 0) {
+        next = resolvePlayerFire(next, input);
+      } else if (next.player.reserveRounds > 0) {
+        // Click on empty with ammo to spare → kick off a reload (Valorant-style).
+        next = beginReload(next);
+      } else {
+        // Fully dry, nothing in reserve: a hollow dry-fire click, rate-limited by
+        // the shot clock so it doesn't machine-gun.
+        next = pushEvent(
+          { ...next, player: { ...next.player, shotCooldownMs: SPLIT_CONFIG.player.shotCooldownMs } },
+          { type: 'dry-fire' },
+        );
+      }
+    }
   }
 
   let remaining = Math.max(0, deltaMs);
@@ -674,9 +829,9 @@ export function tickSplit(state: SplitState, input: SplitInput, deltaMs: number)
     next = stepSplit(next, input, step);
     remaining -= step;
 
-    // A detonation soft-reset is a frame boundary: the fresh round starts on
-    // the next tick, not on this tick's leftover sub-steps.
-    if (before === 'detonated' && next.phase === 'retake') {
+    // A detonation/death soft-reset is a frame boundary: the fresh round starts
+    // on the next tick, not on this tick's leftover sub-steps.
+    if ((before === 'detonated' || before === 'dead') && next.phase === 'retake') {
       break;
     }
   } while (remaining > 0);
@@ -704,6 +859,21 @@ function stepSplit(state: SplitState, input: SplitInput, deltaMs: number): Split
     }
 
     return { ...next, detonationMs };
+  }
+
+  if (next.phase === 'dead') {
+    const deathMs = next.deathMs - deltaMs;
+
+    if (deathMs <= 0) {
+      // Death hard-restart: a completely fresh round from the beginning. The
+      // attempt counter (a detonation tally) is deliberately left untouched.
+      return freshRound(next.rngState, next.attempt, [
+        ...next.events,
+        { type: 'round-reset', attempt: next.attempt },
+      ]);
+    }
+
+    return { ...next, deathMs };
   }
 
   if (next.phase !== 'retake') {
@@ -738,14 +908,21 @@ function stepSplit(state: SplitState, input: SplitInput, deltaMs: number): Split
       ...next.player,
       shotCooldownMs: Math.max(0, next.player.shotCooldownMs - deltaMs),
       invulnMs: Math.max(0, next.player.invulnMs - deltaMs),
-      reviving: next.player.invulnMs - deltaMs > 0 ? next.player.reviving : false,
     },
   };
 
+  next = tickReload(next, deltaMs);
   next = spawnPendingReinforcements(next);
   next = movePlayer(next, input, seconds);
   next = updateTeammate(next, seconds, deltaMs);
   next = updateEnemies(next, seconds, deltaMs);
+
+  // Enemy fire can kill ____ mid-step (phase → 'dead'); stop processing the
+  // defuse for a round that's already ending.
+  if (next.phase !== 'retake') {
+    return next;
+  }
+
   next = updateDefuse(next, input, deltaMs);
 
   return next;
@@ -920,17 +1097,27 @@ function resolveEnemyFire(state: SplitState, index: number, enemyPos: Vec2): Spl
 function updateDefuse(state: SplitState, input: SplitInput, deltaMs: number): SplitState {
   const { totalMs, checkpointMs, radius } = SPLIT_CONFIG.defuse;
   const inRadius = distance(state.player.pos, SPLIT_CONFIG.spike) <= radius;
-  const defusing = input.holdDefuse && inRadius && !state.player.reviving;
+  const defusing = input.holdDefuse && inRadius;
 
-  let progressMs = state.defuse.progressMs;
-  let checkpointReached = state.defuse.checkpointReached;
-  const floor = checkpointReached ? checkpointMs : 0;
   let next = state;
+
+  // First tap on the spike: a two-bot ambush wave drops in immediately.
+  if (defusing && !next.defuseWaveSpawned) {
+    const fresh = spawnAmbush(next.enemies.length);
+    next = pushEvent(
+      { ...next, enemies: [...next.enemies, ...fresh], defuseWaveSpawned: true },
+      { type: 'defuse-wave', count: fresh.length },
+    );
+  }
+
+  let progressMs = next.defuse.progressMs;
+  let checkpointReached = next.defuse.checkpointReached;
+  const floor = checkpointReached ? checkpointMs : 0;
 
   if (defusing) {
     progressMs = Math.min(totalMs, progressMs + deltaMs);
   } else {
-    // No drain: releasing E / leaving the radius snaps instantly back to the
+    // No drain: releasing 4 / leaving the radius snaps instantly back to the
     // last banked checkpoint (the half-mark once reached, otherwise zero).
     progressMs = floor;
   }

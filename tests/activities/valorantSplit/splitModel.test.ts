@@ -27,6 +27,7 @@ const IDLE_INPUT: SplitInput = {
   aimAngle: 0,
   fire: false,
   holdDefuse: false,
+  reload: false,
 };
 
 const UP = -Math.PI / 2;
@@ -46,8 +47,17 @@ function enemyAt(pos: Vec2, overrides: Partial<EnemyState> = {}): EnemyState {
   };
 }
 
+// A "hot" live round with no spawn protection (invuln / hold-fire cleared) so
+// direct damage lands and combat is testable. Tests that want spawn protection
+// set player.invulnMs explicitly.
 function withState(partial: Partial<SplitState>): SplitState {
-  return { ...createSplitState(1), ...partial };
+  const base = createSplitState(1);
+  return {
+    ...base,
+    player: { ...base.player, invulnMs: 0 },
+    holdFireMs: 0,
+    ...partial,
+  };
 }
 
 function setPlayerPos(state: SplitState, pos: Vec2): SplitState {
@@ -169,31 +179,56 @@ describe('teammate fire (____ / Omen)', () => {
   });
 });
 
-describe('player hearts, revive, and no-fail', () => {
+describe('player hearts and death restart', () => {
   it('loses exactly one heart per body hit', () => {
-    const state = createSplitState(1);
+    // Clear the spawn invulnerability so the hit lands.
+    const state = { ...createSplitState(1), player: { ...createSplitState(1).player, invulnMs: 0 } };
     const next = damagePlayer(state);
 
     expect(next.player.hearts).toBe(3);
     expect(collect(next.events, 'heart-lost')).toHaveLength(1);
   });
 
-  it('revives on site at zero hearts instead of failing', () => {
-    let state = createSplitState(1);
+  it('dies at zero hearts and enters the death overlay (no revive)', () => {
+    let state = { ...createSplitState(1), player: { ...createSplitState(1).player, invulnMs: 0 } };
 
     state = damagePlayer(state); // 3
     state = damagePlayer(state); // 2
     state = damagePlayer(state); // 1
-    const revived = damagePlayer(state); // would hit 0 -> revive
+    const dead = damagePlayer(state); // hits 0 -> death
 
-    expect(revived.player.hearts).toBe(SPLIT_CONFIG.player.maxHearts);
-    expect(revived.player.reviving).toBe(true);
-    expect(revived.player.invulnMs).toBeGreaterThan(0);
-    expect(revived.holdFireMs).toBeGreaterThanOrEqual(SPLIT_CONFIG.revive.holdFireMs);
-    expect(collect(revived.events, 'revive')).toHaveLength(1);
+    expect(dead.phase).toBe('dead');
+    expect(dead.player.hearts).toBe(0);
+    expect(dead.deathMs).toBe(SPLIT_CONFIG.death.holdMs);
+    expect(collect(dead.events, 'player-died')).toHaveLength(1);
   });
 
-  it('ignores damage during the revive invulnerability window', () => {
+  it('hard-restarts from the beginning after the death overlay elapses', () => {
+    // Take a couple of hits and bank some defuse progress, then die.
+    let state = setPlayerPos(withState({ enemies: [] }), SPIKE);
+    state = { ...state, player: { ...state.player, invulnMs: 0 } };
+    state = tickSplit(state, { ...IDLE_INPUT, holdDefuse: true }, 2000);
+    expect(state.defuse.progressMs).toBeGreaterThan(0);
+
+    state = damagePlayer(state); // 3
+    state = damagePlayer(state); // 2
+    state = damagePlayer(state); // 1
+    state = damagePlayer(state); // 0 -> dead
+    expect(state.phase).toBe('dead');
+
+    // Ride out the death overlay: it soft-resets into a completely fresh round.
+    state = tickSplit(state, IDLE_INPUT, SPLIT_CONFIG.death.holdMs + 50);
+
+    expect(collect(state.events, 'round-reset')).toHaveLength(1);
+    expect(state.phase).toBe('retake');
+    expect(state.player.hearts).toBe(SPLIT_CONFIG.player.maxHearts);
+    expect(state.defuse.progressMs).toBe(0); // no partial checkpoints survive
+    expect(state.spikeTimerMs).toBe(SPLIT_CONFIG.spikeTimerMs);
+    expect(state.player.ammoInMag).toBe(SPLIT_CONFIG.player.magSize);
+    expect(aliveEnemyCount(state)).toBe(3);
+  });
+
+  it('ignores damage during the spawn invulnerability window', () => {
     const state = {
       ...createSplitState(1),
       player: { ...createSplitState(1).player, invulnMs: 1500 },
@@ -205,27 +240,157 @@ describe('player hearts, revive, and no-fail', () => {
     expect(next.events).toHaveLength(0);
   });
 
-  it('never fails across a long firefight against an enemy in line of sight', () => {
+  it('dies and restarts under sustained fire, never getting stuck', () => {
     let state = withState({
-      enemies: [enemyAt({ x: 360, y: 430 }, { ai: 'telegraphing', stateTimerMs: 40 })],
+      enemies: [enemyAt({ x: 480, y: 430 }, { ai: 'telegraphing', stateTimerMs: 40 })],
+      player: { ...createSplitState(1).player, invulnMs: 0 },
     });
-    let heartLossEvents = 0;
-    let reviveEvents = 0;
+    let deaths = 0;
+    let resets = 0;
 
-    // Stay well under the 60s fuse so the round never detonates out from
-    // under the assertion.
+    // Stay well under the 60s fuse so the round never detonates out from under
+    // the assertion.
     for (let elapsed = 0; elapsed < 40000; elapsed += 32) {
       state = tickSplit(state, IDLE_INPUT, 32);
-      heartLossEvents += collect(state.events, 'heart-lost').length;
-      reviveEvents += collect(state.events, 'revive').length;
+      deaths += collect(state.events, 'player-died').length;
+      resets += collect(state.events, 'round-reset').length;
 
-      expect(state.player.hearts).toBeGreaterThanOrEqual(1);
+      // Phase is always a legal state; hearts never go negative.
+      expect(['retake', 'dead', 'won', 'detonated']).toContain(state.phase);
+      expect(state.player.hearts).toBeGreaterThanOrEqual(0);
       expect(state.player.hearts).toBeLessThanOrEqual(4);
-      expect(state.phase).toBe('retake');
     }
 
-    expect(heartLossEvents).toBeGreaterThan(0);
-    expect(reviveEvents).toBeGreaterThan(0);
+    expect(deaths).toBeGreaterThan(0);
+    // Every death is followed by a clean restart (equal counts, off by at most
+    // one if the loop ends mid-overlay).
+    expect(resets).toBeGreaterThanOrEqual(deaths - 1);
+  });
+});
+
+describe('ammo, reload, and dry fire', () => {
+  function firing(extra: Partial<SplitInput> = {}): SplitInput {
+    return { ...IDLE_INPUT, fire: true, ...extra };
+  }
+
+  it('starts with a full mag and three mags in reserve', () => {
+    const state = createSplitState(1);
+
+    expect(state.player.ammoInMag).toBe(SPLIT_CONFIG.player.magSize);
+    expect(state.player.reserveRounds).toBe(
+      (SPLIT_CONFIG.player.magazines - 1) * SPLIT_CONFIG.player.magSize,
+    );
+  });
+
+  it('spends one round per shot', () => {
+    let state = setPlayerPos(withState({ enemies: [] }), { x: 200, y: 400 });
+    const before = state.player.ammoInMag;
+
+    // One shot fires per tick (gated by the shot clock); 200ms clears the 180ms
+    // cooldown between calls.
+    state = tickSplit(state, firing(), 200);
+
+    expect(state.player.ammoInMag).toBe(before - 1);
+  });
+
+  it('reloads from the reserve pool after the reload lockout', () => {
+    let state = setPlayerPos(withState({ enemies: [] }), { x: 200, y: 400 });
+    state = { ...state, player: { ...state.player, ammoInMag: 5 } };
+    const reserveBefore = state.player.reserveRounds;
+
+    state = tickSplit(state, { ...IDLE_INPUT, reload: true }, 16);
+    expect(state.player.reloadingMs).toBeGreaterThan(0);
+    expect(collect(state.events, 'reload-start')).toHaveLength(1);
+
+    // Let the lockout elapse.
+    state = tickSplit(state, IDLE_INPUT, SPLIT_CONFIG.player.reloadMs + 20);
+
+    expect(state.player.ammoInMag).toBe(SPLIT_CONFIG.player.magSize);
+    expect(state.player.reserveRounds).toBe(reserveBefore - (SPLIT_CONFIG.player.magSize - 5));
+    expect(collect(state.events, 'reload-complete')).toHaveLength(1);
+  });
+
+  it('emits a dry-fire when the mag and reserve are both empty', () => {
+    let state = setPlayerPos(withState({ enemies: [] }), { x: 200, y: 400 });
+    state = { ...state, player: { ...state.player, ammoInMag: 0, reserveRounds: 0 } };
+
+    state = tickSplit(state, firing(), 200);
+
+    expect(collect(state.events, 'dry-fire')).toHaveLength(1);
+    expect(state.player.ammoInMag).toBe(0);
+  });
+});
+
+describe('movement inaccuracy (Valorant-style spread)', () => {
+  // Enemy 200px straight above; standing spread (±0.014 rad) can never miss a
+  // 26px-wide body at that range, but the moving cone (±0.19 rad) sprays wide.
+  const FIXED = { x: 200, y: 400 };
+  const TARGET = { x: 200, y: 200 };
+
+  function countHits(move: Vec2, seed: number, shots: number): number {
+    let state = setPlayerPos(withState({ enemies: [enemyAt(TARGET)], rngState: seedRng(seed) }), FIXED);
+    let hits = 0;
+
+    for (let i = 0; i < shots; i += 1) {
+      // Reset each iteration so displacement/HP/ammo never confound the geometry;
+      // only the RNG stream carries forward.
+      state = {
+        ...state,
+        player: {
+          ...state.player,
+          pos: FIXED,
+          shotCooldownMs: 0,
+          invulnMs: 5000,
+          ammoInMag: 25,
+          reloadingMs: 0,
+        },
+        holdFireMs: 5000,
+        enemies: [enemyAt(TARGET)],
+      };
+      state = tickSplit(state, { ...IDLE_INPUT, move, aimAngle: UP, fire: true }, 200);
+      if (state.events.some((e) => e.type === 'player-shot' && e.hitEnemyId !== null)) {
+        hits += 1;
+      }
+    }
+
+    return hits;
+  }
+
+  it('never misses standing still but sprays a lot while moving', () => {
+    const shots = 30;
+    const standing = countHits({ x: 0, y: 0 }, 4242, shots);
+    const moving = countHits({ x: 1, y: 0 }, 4242, shots);
+
+    expect(standing).toBe(shots); // pinpoint when planted
+    expect(moving).toBeLessThan(standing); // heavy movement error
+    expect(moving).toBeLessThan(shots * 0.85);
+  });
+});
+
+describe('first-tap ambush wave', () => {
+  it('drops two extra bots the instant the defuse is initiated', () => {
+    let state = setPlayerPos(withState({ enemies: [] }), SPIKE);
+
+    expect(state.defuseWaveSpawned).toBe(false);
+
+    state = tickSplit(state, { ...IDLE_INPUT, holdDefuse: true }, 32);
+
+    expect(state.defuseWaveSpawned).toBe(true);
+    expect(aliveEnemyCount(state)).toBe(2);
+    const wave = collect(state.events, 'defuse-wave');
+    expect(wave).toHaveLength(1);
+    expect((wave[0] as { count: number }).count).toBe(2);
+  });
+
+  it('does not spawn a second ambush on subsequent defuse ticks', () => {
+    let state = setPlayerPos(withState({ enemies: [] }), SPIKE);
+
+    state = tickSplit(state, { ...IDLE_INPUT, holdDefuse: true }, 32);
+    state = tickSplit(state, { ...IDLE_INPUT, holdDefuse: true }, 32);
+    state = tickSplit(state, { ...IDLE_INPUT, holdDefuse: true }, 32);
+
+    expect(aliveEnemyCount(state)).toBe(2);
+    expect(collect(state.events, 'defuse-wave')).toHaveLength(0);
   });
 });
 
@@ -261,8 +426,10 @@ describe('enemy accuracy is poor and seed-deterministic', () => {
 
 describe('timed reinforcements', () => {
   it('bleeds in a single mid-round wave and caps at five bots', () => {
-    // No starting enemies so the schedule is the only thing that spawns.
+    // No starting enemies so the schedule is the only thing that spawns; keep
+    // ____ invulnerable so the wave's bots can't restart the round on her.
     let state = withState({ enemies: [], reinforcementsSpawned: 1 });
+    state = { ...state, player: { ...state.player, invulnMs: 1e7 } };
 
     expect(state.reinforcementsSpawned).toBe(1);
 
@@ -288,9 +455,11 @@ describe('timed reinforcements', () => {
   });
 
   it('does not require killing everyone — the win is the defuse', () => {
-    // Winning while enemies are still alive.
+    // Winning while enemies are still alive. Keep ____ invulnerable so the
+    // first-tap ambush wave can't knock her off the defuse mid-assertion.
     let state = setPlayerPos(withState({ enemies: [enemyAt({ x: 480, y: 145 })] }), SPIKE);
     state = withDefuse(state, { progressMs: SPLIT_CONFIG.defuse.checkpointMs, checkpointReached: true });
+    state = { ...state, player: { ...state.player, invulnMs: 5000 } };
 
     state = tickSplit(state, { ...IDLE_INPUT, holdDefuse: true }, 3600);
 
@@ -307,12 +476,13 @@ describe('difficulty tuning (max five meaner bots)', () => {
     expect(total).toBe(5);
   });
 
-  it('makes each bot meaner than the old baseline', () => {
-    expect(SPLIT_CONFIG.enemy.hitChance).toBeGreaterThan(0.26);
-    expect(SPLIT_CONFIG.enemy.telegraphMs).toBeLessThan(540);
-    expect(SPLIT_CONFIG.enemy.pauseMs).toBeLessThan(480);
-    expect(SPLIT_CONFIG.enemy.speed).toBeGreaterThan(52);
-    expect(SPLIT_CONFIG.enemy.strafeSpeed).toBeGreaterThan(0);
+  it('makes each bot meaner than the previous baseline (0.38 / 300 / 280 / 62)', () => {
+    expect(SPLIT_CONFIG.enemy.hitChance).toBeGreaterThan(0.38);
+    expect(SPLIT_CONFIG.enemy.hitChance).toBeLessThan(0.5); // still under a coin flip
+    expect(SPLIT_CONFIG.enemy.telegraphMs).toBeLessThan(300);
+    expect(SPLIT_CONFIG.enemy.pauseMs).toBeLessThan(280);
+    expect(SPLIT_CONFIG.enemy.speed).toBeGreaterThan(62);
+    expect(SPLIT_CONFIG.enemy.strafeSpeed).toBeGreaterThan(48);
     expect(SPLIT_CONFIG.enemy.strafePeriodMs).toBeGreaterThan(0);
   });
 
@@ -320,8 +490,11 @@ describe('difficulty tuning (max five meaner bots)', () => {
     let state = withState({ enemies: createSplitState(7).enemies });
     let maxAlive = aliveEnemyCount(state);
 
-    // Ride most of the fuse without shooting; the only growth is the one wave.
+    // Ride most of the fuse without ever tapping the spike (so no ambush wave)
+    // and keep ____ invulnerable so the meaner bots can't restart the round out
+    // from under the count. The only growth is the single scheduled wave.
     for (let t = 0; t < 55000; t += 250) {
+      state = { ...state, player: { ...state.player, invulnMs: 5000 } };
       state = tickSplit(state, IDLE_INPUT, 250);
       maxAlive = Math.max(maxAlive, aliveEnemyCount(state));
     }
@@ -336,7 +509,10 @@ describe('contested defuse', () => {
   }
 
   function atSpike(): SplitState {
-    return setPlayerPos(withState({ enemies: [] }), SPIKE);
+    // Invulnerable so the first-tap ambush wave (spawned the instant defusing
+    // begins) can't interrupt these pure defuse-mechanics assertions.
+    const base = setPlayerPos(withState({ enemies: [] }), SPIKE);
+    return { ...base, player: { ...base.player, invulnMs: 1e7 } };
   }
 
   it('accumulates progress only while in radius and holding E', () => {

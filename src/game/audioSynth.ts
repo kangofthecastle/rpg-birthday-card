@@ -694,17 +694,167 @@ function sfxLetterOpen(ctx: AudioContext, output: AudioNode, { rate, volume }: S
 }
 
 function sfxShot(ctx: AudioContext, output: AudioNode, { rate, volume }: SfxSynthOptions): number {
-  // Soft "pew" — a gentle sine pitch drop, deliberately not harsh.
+  // A punchy rifle crack, layered like a real gunshot:
+  //   1. a bright high-passed noise "crack" (the supersonic snap),
+  //   2. a mid bandpassed noise "body" (the mechanical report),
+  //   3. a low sine "thump" that pitch-drops fast (the chest-thump), and
+  //   4. a tiny click transient for the attack.
+  // All decays are short so rapid automatic fire stays crisp, not muddy.
   const start = ctx.currentTime;
-  const end = playTone(ctx, output, {
-    type: 'sine',
-    frequency: 720 * rate,
-    endFrequency: 220 * rate,
-    gain: 0.3 * volume,
-    attackMs: 2,
-    holdMs: 20,
-    releaseMs: 110,
+
+  // 1. High crack.
+  playNoiseBurst(ctx, output, {
+    seconds: 0.09,
+    filterType: 'highpass',
+    filterFreq: 2600,
+    gain: 0.32 * volume,
+    attackMs: 0.5,
+    releaseMs: 70,
     startAt: start,
+  });
+  // 2. Mid body.
+  playNoiseBurst(ctx, output, {
+    seconds: 0.1,
+    filterType: 'bandpass',
+    filterFreq: 950 * rate,
+    filterQ: 0.9,
+    gain: 0.26 * volume,
+    attackMs: 0.5,
+    releaseMs: 90,
+    startAt: start,
+  });
+  // 3. Low thump.
+  const thumpEnd = playTone(ctx, output, {
+    type: 'sine',
+    frequency: 190 * rate,
+    endFrequency: 62 * rate,
+    gain: 0.34 * volume,
+    attackMs: 1,
+    holdMs: 8,
+    releaseMs: 120,
+    startAt: start,
+  });
+  // 4. Click transient.
+  playNoiseBurst(ctx, output, {
+    seconds: 0.012,
+    filterType: 'highpass',
+    filterFreq: 5000,
+    gain: 0.2 * volume,
+    attackMs: 0.3,
+    releaseMs: 10,
+    startAt: start,
+  });
+
+  return (thumpEnd - start) * 1000;
+}
+
+function sfxReload(ctx: AudioContext, output: AudioNode, { volume }: SfxSynthOptions): number {
+  // Mechanical reload: mag-out click, mag-in thunk, then a charging-handle
+  // clack — three filtered noise transients spread across ~0.5s.
+  const start = ctx.currentTime;
+
+  // Mag release click.
+  playNoiseBurst(ctx, output, {
+    seconds: 0.04,
+    filterType: 'highpass',
+    filterFreq: 3200,
+    gain: 0.18 * volume,
+    attackMs: 0.5,
+    releaseMs: 35,
+    startAt: start,
+  });
+  // Mag seat thunk (lower body) around 0.22s.
+  playNoiseBurst(ctx, output, {
+    seconds: 0.07,
+    filterType: 'bandpass',
+    filterFreq: 420,
+    filterQ: 1,
+    gain: 0.24 * volume,
+    attackMs: 1,
+    releaseMs: 70,
+    startAt: start + 0.22,
+  });
+  playTone(ctx, output, {
+    type: 'sine',
+    frequency: 160,
+    endFrequency: 90,
+    gain: 0.18 * volume,
+    attackMs: 1,
+    holdMs: 10,
+    releaseMs: 90,
+    startAt: start + 0.22,
+  });
+  // Charging-handle clack near the end (~0.44s).
+  playNoiseBurst(ctx, output, {
+    seconds: 0.05,
+    filterType: 'bandpass',
+    filterFreq: 2200,
+    filterQ: 1.4,
+    gain: 0.2 * volume,
+    attackMs: 0.5,
+    releaseMs: 45,
+    startAt: start + 0.44,
+  });
+
+  return 520;
+}
+
+function sfxDryfire(ctx: AudioContext, output: AudioNode, { volume }: SfxSynthOptions): number {
+  // Hollow "click" of the trigger on an empty chamber.
+  const start = ctx.currentTime;
+  playNoiseBurst(ctx, output, {
+    seconds: 0.03,
+    filterType: 'highpass',
+    filterFreq: 3800,
+    gain: 0.16 * volume,
+    attackMs: 0.3,
+    releaseMs: 25,
+    startAt: start,
+  });
+  const end = playTone(ctx, output, {
+    type: 'square',
+    frequency: 320,
+    gain: 0.06 * volume,
+    attackMs: 0.5,
+    holdMs: 4,
+    releaseMs: 18,
+    startAt: start,
+  });
+  return Math.max((end - start) * 1000, 40);
+}
+
+function sfxDeath(ctx: AudioContext, output: AudioNode, { rate, volume }: SfxSynthOptions): number {
+  // Heavy downed impact: a low pitch-collapsing thud under a lowpassed noise
+  // whump, plus a short descending "flatline" tone so death reads clearly.
+  const start = ctx.currentTime;
+  playNoiseBurst(ctx, output, {
+    seconds: 0.26,
+    filterType: 'lowpass',
+    filterFreq: 520,
+    gain: 0.34 * volume,
+    attackMs: 2,
+    releaseMs: 260,
+    startAt: start,
+  });
+  playTone(ctx, output, {
+    type: 'sine',
+    frequency: 180 * rate,
+    endFrequency: 34 * rate,
+    gain: 0.42 * volume,
+    attackMs: 2,
+    holdMs: 40,
+    releaseMs: 320,
+    startAt: start,
+  });
+  const end = playTone(ctx, output, {
+    type: 'triangle',
+    frequency: 300,
+    endFrequency: 150,
+    gain: 0.16 * volume,
+    attackMs: 4,
+    holdMs: 30,
+    releaseMs: 260,
+    startAt: start + 0.06,
   });
   return (end - start) * 1000;
 }
@@ -1359,6 +1509,9 @@ export const SFX_SYNTHS: Record<SfxKey, SfxSynthFactory> = {
   'sfx-keepsake': sfxKeepsake,
   'sfx-letter-open': sfxLetterOpen,
   'sfx-shot': sfxShot,
+  'sfx-reload': sfxReload,
+  'sfx-dryfire': sfxDryfire,
+  'sfx-death': sfxDeath,
   'sfx-hit': sfxHit,
   'sfx-headshot': sfxHeadshot,
   'sfx-heart-loss': sfxHeartLoss,

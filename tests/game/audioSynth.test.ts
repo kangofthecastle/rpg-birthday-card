@@ -260,12 +260,14 @@ describe('SFX synth definitions', () => {
     expect(fakeCtx.oscillators[0].frequency.value).toBeCloseTo(900 * 1.5, 5);
   });
 
-  it('sfx-shot is a soft descending tone with no harsh noise burst layered under it', () => {
+  it('sfx-shot is a layered gunshot: a low sine thump under noise-burst cracks', () => {
     const { ctx, fakeCtx, output } = createFakeGraph();
     SFX_SYNTHS['sfx-shot'](ctx, output as unknown as AudioNode, { rate: 1, volume: 1 });
 
+    // A low pitch-dropping sine "thump"...
     expect(fakeCtx.oscillators).toHaveLength(1);
-    expect(fakeCtx.bufferSources).toHaveLength(0);
     expect(fakeCtx.oscillators[0].type).toBe('sine');
+    // ...plus layered filtered noise bursts (crack + body + click) for punch.
+    expect(fakeCtx.bufferSources.length).toBeGreaterThanOrEqual(2);
   });
 });

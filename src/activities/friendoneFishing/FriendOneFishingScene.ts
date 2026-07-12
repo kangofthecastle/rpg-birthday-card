@@ -11,6 +11,17 @@ import {
   type FishConfig,
   type FishingRoundState,
 } from './fishingModel';
+import {
+  createFishBehaviorParams,
+  createFishBehaviorState,
+  isFishBiting,
+  spookFish,
+  updateFishBehavior,
+  type FishBehaviorParams,
+  type FishBehaviorState,
+} from './fishBehavior';
+import { FISH_SPRITE_NOSE_ANGLE, fishSpriteFor } from './fishSprites';
+import { isImageUrl } from '../../game/assetProbe';
 
 export interface FriendOneFishingSceneCallbacks {
   readonly onComplete: () => void;
@@ -33,6 +44,22 @@ const NEXT_FISH_DELAY_MS = 850;
 const POND_BACKGROUND_KEY = 'friendone-fishing-pond-dock';
 const POND_BACKGROUND_URL = '/assets/activities/friendone-fishing/pond-dock-v2.png';
 
+// Rod-tip anchor points in the 640x360 scene, measured from the painted rods on
+// the dock (both rods angle up-and-right, so the line hangs from a tip that
+// sits ABOVE the hand — the previous origins sat on the forearm). The fishing
+// line is drawn from these tips down to the bobber in every frame.
+const PLAYER_ROD_TIP = { x: 205, y: 118 } as const;
+const FRIEND_ONE_ROD_TIP = { x: 262, y: 113 } as const;
+
+// The player's bobber rests here (in the open water just off the dock); the
+// pond fish steers toward it. ____'s line is decorative company.
+const PLAYER_BOBBER = { x: 202, y: 246 } as const;
+const FRIEND_ONE_BOBBER = { x: 265, y: 248 } as const;
+
+// Open-water rectangle the pond fish may roam within (avoids the dock/reeds).
+const POND_BOUNDS = { minX: 196, maxX: 606, minY: 214, maxY: 332 } as const;
+const FISH_SPAWN = { x: 560, y: 286 } as const;
+
 export class FriendOneFishingScene extends Phaser.Scene {
   private readonly callbacks: FriendOneFishingSceneCallbacks;
   private round: FishingRoundState = createFishingRound(FRIEND_ONE_FISH_SEQUENCE[0]);
@@ -51,6 +78,19 @@ export class FriendOneFishingScene extends Phaser.Scene {
   private counterText!: Phaser.GameObjects.Text;
   private helperText!: Phaser.GameObjects.Text;
   private transitionText!: Phaser.GameObjects.Text;
+  private behavior: FishBehaviorState = createFishBehaviorState(FISH_SPAWN, 0x1a2b3c);
+  private behaviorParams: FishBehaviorParams = createFishBehaviorParams(
+    FRIEND_ONE_FISH_SEQUENCE[0].speedPerSecond,
+    POND_BOUNDS,
+  );
+  private lastBobber: { x: number; y: number } = {
+    x: PLAYER_BOBBER.x,
+    y: PLAYER_BOBBER.y,
+  };
+  /** Fish ids whose sprite PNG was found and loaded; the rest render as vectors. */
+  private readonly spriteReady = new Set<string>();
+  private pondFishSprite?: Phaser.GameObjects.Image;
+  private meterFishSprite?: Phaser.GameObjects.Image;
 
   constructor(callbacks: FriendOneFishingSceneCallbacks = DEFAULT_CALLBACKS) {
     super('FriendOneFishingScene');
@@ -69,8 +109,54 @@ export class FriendOneFishingScene extends Phaser.Scene {
 
     this.createHud();
     this.createInput();
+    this.resetBehaviorForCurrentFish();
     this.updateHudText();
+    void this.loadFishSprites();
     this.drawDynamicElements(0, false);
+  }
+
+  // Probe the optional per-fish sprite PNGs and load any that exist, mirroring
+  // BootScene's console-clean drop-in pattern. Absent files are skipped and the
+  // renderer keeps using the vector fish.
+  private async loadFishSprites(): Promise<void> {
+    const configs = FRIEND_ONE_FISH_SEQUENCE.map((fish) => fishSpriteFor(fish.id));
+    const presence = await Promise.all(configs.map((cfg) => isImageUrl(cfg.url)));
+    const present = configs.filter((_, index) => presence[index]);
+    if (present.length === 0 || !this.scene.isActive()) {
+      return;
+    }
+
+    await new Promise<void>((resolve) => {
+      for (const cfg of present) {
+        if (!this.textures.exists(cfg.key)) {
+          this.load.image(cfg.key, cfg.url);
+        }
+      }
+      this.load.once(Phaser.Loader.Events.COMPLETE, () => resolve());
+      this.load.start();
+    });
+
+    for (const fish of FRIEND_ONE_FISH_SEQUENCE) {
+      if (this.textures.exists(fishSpriteFor(fish.id).key)) {
+        this.textures.get(fishSpriteFor(fish.id).key).setFilter(
+          Phaser.Textures.FilterMode.NEAREST,
+        );
+        this.spriteReady.add(fish.id);
+      }
+    }
+  }
+
+  private resetBehaviorForCurrentFish(): void {
+    this.behaviorParams = createFishBehaviorParams(
+      this.currentFish.speedPerSecond,
+      POND_BOUNDS,
+    );
+    // Seed varies per fish so each round wanders differently but reproducibly.
+    const seed = 0x1a2b3c + this.currentFishIndex * 0x9e3779b1;
+    this.behavior = createFishBehaviorState(
+      { x: FISH_SPAWN.x, y: FISH_SPAWN.y - this.currentFishIndex * 14 },
+      seed | 0,
+    );
   }
 
   update(time: number, _delta: number): void {
@@ -102,6 +188,21 @@ export class FriendOneFishingScene extends Phaser.Scene {
         this.completeCurrentFish();
       }
     }
+
+    // Drive the in-water fish steering toward the player's bobber every frame
+    // (including during the catch/next-fish transition, so a caught fish darts
+    // away). The bobber the fish targets is the live, dipping player bobber.
+    this.behavior = updateFishBehavior(
+      this.behavior,
+      {
+        x: this.lastBobber.x,
+        y: this.lastBobber.y,
+        active: !this.isFinalizing,
+        reeling: this.round.progress,
+      },
+      this.behaviorParams,
+      modelDelta,
+    );
 
     this.updateHudText(holdActive);
     this.drawDynamicElements(time, holdActive);
@@ -231,27 +332,55 @@ export class FriendOneFishingScene extends Phaser.Scene {
 
   private drawFishingLines(time: number, holdActive: boolean): void {
     const bob = Math.sin(time / 340) * 4;
+    // The fish's nibble/commit tug pulls the player's bobber down (and jitters
+    // it sideways) — the visible "bite" tell tied to the water behavior.
+    const dip = this.behavior.bobberDip;
+    const biting = isFishBiting(this.behavior);
     const playerBobber = {
-      x: 202,
-      y: 246 + bob,
+      x: PLAYER_BOBBER.x + (biting ? Math.sin(time / 55) * 1.6 : 0),
+      y: PLAYER_BOBBER.y + bob + dip * 7,
     };
     const friendoneBobber = {
-      x: 265,
-      y: 248 - bob * 0.5,
+      x: FRIEND_ONE_BOBBER.x,
+      y: FRIEND_ONE_BOBBER.y - bob * 0.5,
     };
+    // Remember where the bobber actually sits so the fish targets it next frame.
+    this.lastBobber = { x: playerBobber.x, y: playerBobber.y };
+
     const lineColor = holdActive ? 0xfff2b0 : 0xe7d7a8;
 
     this.drawBobberRipple(playerBobber.x, playerBobber.y, time);
     this.drawBobberRipple(friendoneBobber.x, friendoneBobber.y, time + 220);
 
+    // Lines originate exactly at the painted rod tips, in every state.
     this.motionGraphics.lineStyle(2, 0x4a2b18, 0.86);
-    this.motionGraphics.lineBetween(180, 142, playerBobber.x, playerBobber.y);
-    this.motionGraphics.lineBetween(264, 135, friendoneBobber.x, friendoneBobber.y);
+    this.motionGraphics.lineBetween(
+      PLAYER_ROD_TIP.x,
+      PLAYER_ROD_TIP.y,
+      playerBobber.x,
+      playerBobber.y,
+    );
+    this.motionGraphics.lineBetween(
+      FRIEND_ONE_ROD_TIP.x,
+      FRIEND_ONE_ROD_TIP.y,
+      friendoneBobber.x,
+      friendoneBobber.y,
+    );
     this.motionGraphics.lineStyle(1, lineColor, 0.96);
-    this.motionGraphics.lineBetween(180, 141, playerBobber.x, playerBobber.y);
-    this.motionGraphics.lineBetween(264, 134, friendoneBobber.x, friendoneBobber.y);
+    this.motionGraphics.lineBetween(
+      PLAYER_ROD_TIP.x,
+      PLAYER_ROD_TIP.y - 1,
+      playerBobber.x,
+      playerBobber.y,
+    );
+    this.motionGraphics.lineBetween(
+      FRIEND_ONE_ROD_TIP.x,
+      FRIEND_ONE_ROD_TIP.y - 1,
+      friendoneBobber.x,
+      friendoneBobber.y,
+    );
 
-    this.drawLiveBobber(playerBobber.x, playerBobber.y, holdActive, 0xc94c32);
+    this.drawLiveBobber(playerBobber.x, playerBobber.y, holdActive || biting, 0xc94c32);
     this.drawLiveBobber(friendoneBobber.x, friendoneBobber.y, false, 0xf2d0d0);
   }
 
@@ -281,25 +410,90 @@ export class FriendOneFishingScene extends Phaser.Scene {
 
   private drawPondFish(time: number): void {
     const fish = this.currentFish;
-    const swim = Math.sin(time / 480);
-    const x = fish.isSpecial ? 298 + swim * 34 : 330 + swim * 26;
-    const y = fish.isSpecial ? 286 + Math.cos(time / 520) * 12 : 252 + Math.cos(time / 430) * 9;
-    const tailFlick = Math.sin(time / 90) * 4;
+    const { x, y } = this.behavior.position;
+    const heading = this.behavior.heading;
 
+    // Koi glow trails the fish wherever it swims.
     if (fish.isSpecial) {
       const pulse = 0.55 + Math.sin(time / 160) * 0.2;
       this.motionGraphics.fillStyle(0xffc85a, 0.22 + pulse * 0.22);
-      this.motionGraphics.fillCircle(x, y, 28 + pulse * 14);
+      this.motionGraphics.fillCircle(x, y, 24 + pulse * 12);
+    }
+
+    if (this.spriteReady.has(fish.id)) {
+      this.drawPondFishSprite(fish.id, x, y, heading);
+      if (fish.isSpecial) {
+        // Koi art ships without a baked glow — keep sparkles procedural on top.
+        this.motionGraphics.fillStyle(0xfff0a3, 0.8);
+        this.motionGraphics.fillCircle(x + Math.sin(time / 130) * 16, y - 14, 2.5);
+        this.motionGraphics.fillCircle(x - Math.cos(time / 170) * 18, y + 12, 2);
+      }
+      return;
+    }
+
+    if (this.pondFishSprite) {
+      this.pondFishSprite.setVisible(false);
+    }
+    this.drawPondFishVector(fish, x, y, heading, time);
+  }
+
+  private drawPondFishSprite(
+    fishId: string,
+    x: number,
+    y: number,
+    heading: number,
+  ): void {
+    const cfg = fishSpriteFor(fishId);
+    if (!this.pondFishSprite) {
+      this.pondFishSprite = this.add
+        .image(x, y, cfg.key)
+        .setOrigin(0.5)
+        .setDepth(5);
+    } else if (this.pondFishSprite.texture.key !== cfg.key) {
+      this.pondFishSprite.setTexture(cfg.key);
+    }
+
+    const source = this.textures.get(cfg.key).getSourceImage();
+    const scale = cfg.pondWidth / Math.max(1, source.width);
+    // Top-down cutout: rotate the whole sprite to the travel heading (art nose
+    // points left, so subtract the nose angle). No flip — a top-down fish reads
+    // correctly at any rotation.
+    this.pondFishSprite
+      .setVisible(true)
+      .setPosition(x, y)
+      .setScale(scale)
+      .setFlipX(false)
+      .setRotation(heading - FISH_SPRITE_NOSE_ANGLE);
+  }
+
+  private drawPondFishVector(
+    fish: FishConfig,
+    x: number,
+    y: number,
+    heading: number,
+    time: number,
+  ): void {
+    const dir = Math.cos(heading) >= 0 ? 1 : -1; // tail trails behind travel
+    const tailFlick = Math.sin(time / 90) * 4;
+
+    if (fish.isSpecial) {
       this.motionGraphics.fillStyle(0xfff0a3, 0.75);
-      this.motionGraphics.fillCircle(x + 18, y - 16, 2.5);
-      this.motionGraphics.fillCircle(x - 22, y + 12, 2);
+      this.motionGraphics.fillCircle(x + 18 * dir, y - 16, 2.5);
+      this.motionGraphics.fillCircle(x - 22 * dir, y + 12, 2);
     }
 
     this.motionGraphics.fillStyle(fish.isSpecial ? 0xffa13d : 0x7fd6d0, 0.86);
     this.motionGraphics.fillEllipse(x, y, 28, 12);
-    this.motionGraphics.fillTriangle(x - 18, y, x - 30, y - 8 + tailFlick, x - 30, y + 8 + tailFlick);
+    this.motionGraphics.fillTriangle(
+      x - 18 * dir,
+      y,
+      x - 30 * dir,
+      y - 8 + tailFlick,
+      x - 30 * dir,
+      y + 8 + tailFlick,
+    );
     this.motionGraphics.fillStyle(0xfff8cf, fish.isSpecial ? 0.7 : 0.42);
-    this.motionGraphics.fillCircle(x + 6, y - 2, 2);
+    this.motionGraphics.fillCircle(x + 6 * dir, y - 2, 2);
   }
 
   private drawMeter(time: number): void {
@@ -358,6 +552,24 @@ export class FriendOneFishingScene extends Phaser.Scene {
       graphics.fillCircle(centerX, centerY, 24 + pulse * 5);
       graphics.lineStyle(2, 0xfff1a8, 0.72);
       graphics.strokeCircle(centerX, centerY, 23 + pulse * 3);
+    }
+
+    if (this.spriteReady.has(fish.id)) {
+      this.drawMeterFishSprite(fish.id, centerX, centerY);
+      if (fish.isSpecial) {
+        // Procedural sparkle over the (glow-free) koi cutout in the meter too.
+        graphics.fillStyle(0xfff3af, 0.88);
+        graphics.fillCircle(centerX + 17, centerY - 10, 2.5);
+        graphics.fillCircle(centerX - 18, centerY + 9, 2);
+      }
+      return;
+    }
+
+    if (this.meterFishSprite) {
+      this.meterFishSprite.setVisible(false);
+    }
+
+    if (fish.isSpecial) {
       graphics.fillStyle(0xfff3af, 0.88);
       graphics.fillCircle(centerX + 17, centerY - 10, 2.5);
       graphics.fillCircle(centerX - 18, centerY + 9, 2);
@@ -368,6 +580,27 @@ export class FriendOneFishingScene extends Phaser.Scene {
     graphics.fillTriangle(centerX - 18, centerY, centerX - 30, centerY - 10, centerX - 30, centerY + 10);
     graphics.fillStyle(0x173139, 1);
     graphics.fillCircle(centerX + 9, centerY - 3, 2);
+  }
+
+  private drawMeterFishSprite(fishId: string, centerX: number, centerY: number): void {
+    const cfg = fishSpriteFor(fishId);
+    if (!this.meterFishSprite) {
+      this.meterFishSprite = this.add
+        .image(centerX, centerY, cfg.key)
+        .setOrigin(0.5)
+        .setDepth(6);
+    } else if (this.meterFishSprite.texture.key !== cfg.key) {
+      this.meterFishSprite.setTexture(cfg.key);
+    }
+    const source = this.textures.get(cfg.key).getSourceImage();
+    const scale = cfg.meterWidth / Math.max(1, source.width);
+    // In the meter the fish points left (canonical art orientation).
+    this.meterFishSprite
+      .setVisible(true)
+      .setPosition(centerX, centerY)
+      .setScale(scale)
+      .setFlipX(false)
+      .setRotation(0);
   }
 
   private completeCurrentFish(): void {
@@ -382,6 +615,8 @@ export class FriendOneFishingScene extends Phaser.Scene {
     };
     this.caughtCount += 1;
     this.pointerHeld = false;
+    // The hooked fish is landed: it darts off the bobber.
+    this.behavior = spookFish(this.behavior);
 
     if (this.currentFishIndex === FRIEND_ONE_FISH_SEQUENCE.length - 1) {
       this.isFinalizing = true;
@@ -406,6 +641,7 @@ export class FriendOneFishingScene extends Phaser.Scene {
       fishDirection: this.currentFishIndex % 2 === 0 ? 1 : -1,
       fishY: 124 + this.currentFishIndex * 24,
     });
+    this.resetBehaviorForCurrentFish();
     this.isTransitioning = false;
     this.transitionText.setText('');
   }

@@ -813,6 +813,8 @@ body {
   display: grid;
   place-items: center;
   padding: clamp(16px, 5vw, 48px);
+  /* Above the Letters HUD (z-150) so a re-read letter always covers it. */
+  z-index: 400;
   pointer-events: auto;
   background:
     linear-gradient(rgba(16, 21, 17, 0.68), rgba(16, 21, 17, 0.68)),
@@ -1072,6 +1074,17 @@ body {
   right: 20px;
   width: 220px;
   padding: 14px;
+  /* Own stacking context (below the mute button z-200, above the game) so the
+     fanned envelopes never paint above the letter-modal reader (z-400). */
+  z-index: 150;
+  /* Let the fan-out spill past the panel edge without a scrollbar. */
+  overflow: visible;
+}
+
+/* While the player is frozen (dialogue / activity / reading a letter) the HUD
+   goes inert: no hover-fan, no click or keyboard activation stealing focus. */
+.collection-panel--inert {
+  pointer-events: none;
 }
 
 .mute-button {
@@ -1115,43 +1128,149 @@ body {
 }
 
 .collection-panel h2 {
-  margin: 0 0 10px;
+  margin: 0 0 8px;
   font-size: 16px;
+  text-align: center;
 }
 
-.collection-panel ul {
-  display: grid;
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.collection-item {
-  display: grid;
-  grid-template-columns: 28px 1fr;
-  gap: 8px;
-  align-items: center;
+.collection-panel__empty {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
   color: #b9c0b8;
+  text-align: center;
 }
 
-.collection-item__icon {
-  width: 28px;
-  height: 28px;
+/* ------------------------------------------------------------------ */
+/* The Letters HUD: a soft stack of envelopes that fans out on hover.  */
+/* Each envelope is a keepsake letter; picking one re-opens the reader. */
+/* ------------------------------------------------------------------ */
+
+.letter-stack {
+  position: relative;
+  height: 92px;
+  margin: 2px 0 0;
+  /* Fan geometry — kept gentle: these are precious things, not a card trick. */
+  --spread: 26px; /* horizontal step per letter when fanned */
+  --tilt: 6deg; /* rotation step per letter when fanned */
+}
+
+.letter-stack__item {
+  position: absolute;
+  left: 50%;
+  top: 12px;
+  width: 52px;
+  height: 66px;
+  margin: 0 0 0 -26px;
+  padding: 0;
+  border: 2px solid #6f3d27;
+  /* Warm aged-paper envelope, echoing the letter-modal's paper. */
+  background:
+    linear-gradient(#efd7a6, #e3c594 62%, #d8b884);
+  box-shadow:
+    2px 3px 0 rgba(67, 39, 27, 0.55),
+    inset 0 0 0 1px rgba(255, 244, 214, 0.5);
+  cursor: pointer;
+  transform-origin: 50% 100%;
+  /* Idle: a barely-there pile, nudged + tilted around the centre. */
+  transform:
+    translateX(calc((var(--i) - (var(--n) - 1) / 2) * 3px))
+    translateY(calc(var(--i) * -1px))
+    rotate(calc((var(--i) - (var(--n) - 1) / 2) * 1.4deg));
+  transition:
+    transform 240ms cubic-bezier(0.22, 0.7, 0.28, 1),
+    box-shadow 180ms ease;
+  z-index: calc(var(--i) + 1);
+}
+
+/* The envelope flap — a folded-paper triangle across the top. */
+.letter-stack__item::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 26px;
+  background: linear-gradient(#e9cf98, #dcbe86);
+  border-bottom: 1px solid rgba(111, 61, 39, 0.5);
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+}
+
+.letter-stack__face {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  z-index: 1;
+}
+
+.letter-stack__icon {
+  width: 30px;
+  height: 30px;
   display: block;
   object-fit: contain;
   image-rendering: pixelated;
+  filter: drop-shadow(0 1px 0 rgba(67, 39, 27, 0.35));
 }
 
-.collection-item__icon--empty {
-  border: 1px dashed rgba(185, 192, 184, 0.4);
-  border-radius: 6px;
-  background: rgba(185, 192, 184, 0.08);
-  opacity: 0.6;
+/* Label stays in the DOM (accessible name + smoke-test text); the visible
+   caption echoes it on hover, so it's clipped out of the stack itself. */
+.letter-stack__label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
 }
 
-.collection-item--collected {
-  color: #fff7e8;
+/* Fan out when the stack is hovered or holds keyboard focus. */
+.letter-stack:hover .letter-stack__item,
+.letter-stack:focus-within .letter-stack__item {
+  transform:
+    translateX(calc((var(--i) - (var(--n) - 1) / 2) * var(--spread)))
+    translateY(-2px)
+    rotate(calc((var(--i) - (var(--n) - 1) / 2) * var(--tilt)));
+}
+
+/* The picked-up letter lifts a little higher and comes to the front. */
+.letter-stack__item:hover,
+.letter-stack__item:focus-visible {
+  z-index: 30;
+  box-shadow:
+    3px 5px 0 rgba(67, 39, 27, 0.5),
+    0 8px 18px rgba(0, 0, 0, 0.32),
+    inset 0 0 0 1px rgba(255, 244, 214, 0.7);
+  outline: none;
+}
+
+.letter-stack:hover .letter-stack__item:hover,
+.letter-stack:focus-within .letter-stack__item:focus-visible {
+  transform:
+    translateX(calc((var(--i) - (var(--n) - 1) / 2) * var(--spread)))
+    translateY(-14px)
+    rotate(calc((var(--i) - (var(--n) - 1) / 2) * var(--tilt)))
+    scale(1.07);
+}
+
+.letter-stack__item:focus-visible {
+  border-color: #f1d79a;
+}
+
+.collection-panel__caption {
+  margin: 8px 0 0;
+  min-height: 1.3em;
+  font-size: 12px;
+  line-height: 1.3;
+  color: #e9dcc0;
+  text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .letter-stack__item {
+    transition: none;
+  }
 }
 
 @media (max-width: 640px) {

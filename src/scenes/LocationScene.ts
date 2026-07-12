@@ -90,6 +90,53 @@ import { showPhotoWall } from '../ui/photoWall';
 import { fnv1a, mulberry32 } from '../game/rng';
 import { SceneKeys } from './sceneKeys';
 
+// --- Post-music-game outdoor awakening: tunable intensity --------------------
+// When the player steps outside after the violin, the world should read as
+// genuinely LIT UP — like walking into streaming daylight — carried by two
+// headline knobs:
+//   • additiveLift — peak alpha of a screen-wide warm ADDITIVE overlay that
+//     raises the whole scene's exposure (the daylight itself, not a flat tint).
+//   • the beckoning mote stream — `moteCount` bulbs flowing south toward the
+//     clearing at `motePeakAlpha`, read as an unmistakable ribbon of light you
+//     follow, not sparse ambient specks.
+// MEDIUM is the shipped default. For the contact-sheet captures, set
+// `window.__awakenTune` to 'before' | 'subtle' | 'medium' | 'strong' (or a
+// partial object) before the outdoor scene builds; production never sets it.
+interface OutdoorAwakenTune {
+  /** Peak alpha of the screen-wide warm additive exposure lift (0 disables). */
+  additiveLift: number;
+  /** Number of glowing bulbs in the southward-streaming ribbon. */
+  moteCount: number;
+  /** Base peak alpha per bulb (a per-bulb +rng()*0.25 jitter rides on top). */
+  motePeakAlpha: number;
+  /**
+   * When true, the beckoning motes form a concentrated, additive-glow RIBBON
+   * down the central path toward the south exit — a continuous flow you'd follow.
+   * When false (base look), they are a sparse, full-width, normal-blend field.
+   */
+  ribbon: boolean;
+}
+const OUTDOOR_AWAKEN_PRESETS: Record<string, OutdoorAwakenTune> = {
+  // Faithful reproduction of base (36a55a2) outdoor behaviour: no exposure lift,
+  // 16 sparse full-width motes, base peak alpha — used only for the BEFORE cap.
+  before: { additiveLift: 0, moteCount: 16, motePeakAlpha: 0.4, ribbon: false },
+  subtle: { additiveLift: 0.12, moteCount: 40, motePeakAlpha: 0.5, ribbon: true },
+  medium: { additiveLift: 0.2, moteCount: 56, motePeakAlpha: 0.62, ribbon: true },
+  strong: { additiveLift: 0.32, moteCount: 76, motePeakAlpha: 0.78, ribbon: true },
+};
+const OUTDOOR_AWAKEN_DEFAULT: OutdoorAwakenTune = OUTDOOR_AWAKEN_PRESETS.medium;
+
+function resolveOutdoorAwakenTune(): OutdoorAwakenTune {
+  const override = (globalThis as { __awakenTune?: unknown }).__awakenTune;
+  if (typeof override === 'string' && OUTDOOR_AWAKEN_PRESETS[override]) {
+    return OUTDOOR_AWAKEN_PRESETS[override];
+  }
+  if (override && typeof override === 'object') {
+    return { ...OUTDOOR_AWAKEN_DEFAULT, ...(override as Partial<OutdoorAwakenTune>) };
+  }
+  return OUTDOOR_AWAKEN_DEFAULT;
+}
+
 interface LocationSceneData {
   readonly locationId: string;
   readonly spawnId?: string;
@@ -1768,11 +1815,12 @@ export class LocationScene extends Phaser.Scene {
       return;
     }
 
-    // Warm tint pull, camera-fixed and low, layered under the HUD. A gentle
-    // top→bottom gradient leans the warmth toward the bottom of the screen —
-    // the south, where the clearing waits — so the wash itself tips that way.
-    // Same alphas/tween character as the old flat rect; the lean is subtle by
-    // design (the motes and threshold glow carry the actual "go south" cue).
+    const tune = resolveOutdoorAwakenTune();
+
+    // Gentle warm ambient wash, camera-fixed and low, layered under the HUD — a
+    // NORMAL-blend colour grade with a top→bottom lean toward the south (where the
+    // clearing waits). Kept at its base character; the real "lit up" lift is the
+    // additive daylight overlay below.
     const tint = this.add.graphics().setScrollFactor(0).setDepth(895);
     tint.fillGradientStyle(0xffcf7a, 0xffcf7a, 0xffd98c, 0xffd98c, 0.72, 0.72, 1, 1);
     tint.fillRect(0, 0, this.cameras.main.width, this.cameras.main.height);
@@ -1786,7 +1834,31 @@ export class LocationScene extends Phaser.Scene {
       ease: 'Sine.easeInOut',
     });
 
-    this.spawnLightMotes();
+    // Headline: a screen-fixed ADDITIVE warm overlay that genuinely lifts the
+    // whole scene's exposure, so stepping outside reads as walking into streaming
+    // daylight — not a faint tint but light actually flooding the world. Warmer,
+    // gold-leaning toward the bottom (south). Peak alpha is the `additiveLift`
+    // knob; a slow breathe keeps it alive. `before` sets it to 0 (base look).
+    if (tune.additiveLift > 0) {
+      const daylight = this.add
+        .graphics()
+        .setScrollFactor(0)
+        .setDepth(896)
+        .setBlendMode(Phaser.BlendModes.ADD);
+      daylight.fillGradientStyle(0xffe9ba, 0xffe9ba, 0xffd992, 0xffd992, 1, 1, 1, 1);
+      daylight.fillRect(0, 0, this.cameras.main.width, this.cameras.main.height);
+      daylight.setAlpha(tune.additiveLift);
+      this.tweens.add({
+        targets: daylight,
+        alpha: { from: tune.additiveLift * 0.82, to: tune.additiveLift },
+        duration: 4200,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+      });
+    }
+
+    this.spawnLightMotes(tune);
     this.createSouthThresholdGlow();
   }
 
@@ -1835,20 +1907,22 @@ export class LocationScene extends Phaser.Scene {
     document.body.dataset.interiorAwakened = 'true';
   }
 
-  private spawnLightMotes(): void {
+  private spawnLightMotes(tune: OutdoorAwakenTune): void {
     this.createMoteTexture();
     // Seeded like the outdoor ground so the mote field is stable across reloads.
     const rng = mulberry32(fnv1a(`${this.location.id}:motes`));
-    const count = 16;
     // On the hub map, once the way south has opened, the motes stop drifting at
-    // random and stream gently toward the clearing exit — the light itself
-    // beckoning that way. Other outdoor areas keep the ambient, aimless drift.
+    // random and stream toward the clearing exit — the light itself beckoning
+    // that way. Denser than the ambient field (tune.moteCount) so the flow reads
+    // as an unmistakable ribbon of bulbs you'd follow, not sparse specks. Other
+    // outdoor areas keep the ambient 16-mote aimless drift.
     const beckonSouth =
       this.location.id === 'main-outside' &&
       (this.location.edgeExits ?? []).some((exit) => exit.edge === 'south');
+    const count = beckonSouth ? tune.moteCount : 16;
     for (let i = 0; i < count; i += 1) {
       if (beckonSouth) {
-        this.spawnBeckoningMote(rng);
+        this.spawnBeckoningMote(rng, tune);
         continue;
       }
       const x = rng() * this.mapDims.width;
@@ -1882,19 +1956,38 @@ export class LocationScene extends Phaser.Scene {
     }
   }
 
-  // One mote in the southward-streaming field. It rides a slow, continuous
-  // downward drift (looping — a stream, not a one-shot), biased into the
-  // southern half of the map so the flow reads clearly toward the clearing
-  // exit. A synced alpha cycle fades it up at the top of its run and back to
-  // zero at the bottom, so the loop's snap-back never shows. Gentle by design:
-  // a quiet current in the air, not a particle storm.
-  private spawnBeckoningMote(rng: () => number): void {
+  // One bulb in the southward-streaming ribbon. It rides a slow, continuous
+  // downward drift (looping — a stream, not a one-shot). A synced alpha cycle
+  // fades it up at the top of its run and back to zero at the bottom, so the
+  // loop's snap-back never shows.
+  //
+  // In `ribbon` mode (post-boost) the bulbs concentrate into a loose vertical
+  // band down the central path — where the signpost and the south exit sit — and
+  // spawn across the full height, so the whole flow reads as an unmistakable
+  // ribbon of light you'd follow toward the clearing. They glow ADDITIVELY so
+  // they pop as warm bulbs even over the brightened ground. In base mode they
+  // stay a sparse, full-width, normal-blend field (the original ambient look).
+  private spawnBeckoningMote(rng: () => number, tune: OutdoorAwakenTune): void {
     const width = this.mapDims.width;
     const height = this.mapDims.height;
-    const x = rng() * width;
-    // Spawn biased into the southern ~two-thirds so the field leans that way.
-    const startY = height * (0.3 + rng() * 0.55);
-    const travel = height * (0.22 + rng() * 0.16);
+    let x: number;
+    let startY: number;
+    let travel: number;
+    let scale: number;
+    if (tune.ribbon) {
+      // Loose central ribbon: clustered around mid-x (the path) with a soft
+      // spread, flowing from just below the player all the way to the exit.
+      const spread = (rng() + rng() - 1) * 0.26; // triangular ~[-0.26,0.26], centre-weighted
+      x = width * (0.5 + spread);
+      startY = height * (0.1 + rng() * 0.8);
+      travel = height * (0.24 + rng() * 0.16);
+      scale = 0.7 + rng() * 1.0;
+    } else {
+      x = rng() * width;
+      startY = height * (0.3 + rng() * 0.55);
+      travel = height * (0.22 + rng() * 0.16);
+      scale = 0.5 + rng() * 0.9;
+    }
     const sway = 12 + rng() * 20;
     const runMs = 6400 + rng() * 3600;
     const delay = rng() * runMs;
@@ -1902,7 +1995,10 @@ export class LocationScene extends Phaser.Scene {
       .image(x, startY, 'awaken-mote')
       .setDepth(startY + travel + 6)
       .setAlpha(0)
-      .setScale(0.5 + rng() * 0.9);
+      .setScale(scale);
+    if (tune.ribbon) {
+      mote.setBlendMode(Phaser.BlendModes.ADD);
+    }
     // Steady southward drift; on each loop the position snaps back up while the
     // alpha cycle (below) has it at zero, so the reset is invisible.
     this.tweens.add({
@@ -1923,17 +2019,34 @@ export class LocationScene extends Phaser.Scene {
       delay,
       ease: 'Sine.easeInOut',
     });
-    // Fade up over the first half of the run and back down over the second, so
-    // one alpha cycle == one descent: brightest mid-stream, dark at both ends.
-    this.tweens.add({
-      targets: mote,
-      alpha: { from: 0, to: 0.4 + rng() * 0.25 },
-      duration: runMs * 0.5,
-      yoyo: true,
-      repeat: -1,
-      delay,
-      ease: 'Sine.easeInOut',
-    });
+    // Alpha cycle synced to one descent: fade up, (in ribbon mode) HOLD near peak
+    // so the bulb stays lit through most of its run, then fade back to zero before
+    // the loop snaps back up. The hold is what makes the ribbon read as a solid,
+    // sustained flow rather than a sparse twinkle — at any instant most bulbs are
+    // near peak, so the stream is always dense. Base mode keeps the plain triangle.
+    const peak = tune.motePeakAlpha + rng() * 0.25;
+    if (tune.ribbon) {
+      this.tweens.add({
+        targets: mote,
+        alpha: { from: 0, to: peak },
+        duration: runMs * 0.32,
+        hold: runMs * 0.36,
+        yoyo: true,
+        repeat: -1,
+        delay,
+        ease: 'Sine.easeInOut',
+      });
+    } else {
+      this.tweens.add({
+        targets: mote,
+        alpha: { from: 0, to: peak },
+        duration: runMs * 0.5,
+        yoyo: true,
+        repeat: -1,
+        delay,
+        ease: 'Sine.easeInOut',
+      });
+    }
   }
 
   // A soft, pulsing warm band across the south exit once the way has opened —

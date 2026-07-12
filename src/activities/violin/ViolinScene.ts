@@ -45,6 +45,19 @@ const RENDER_SCALE = 2;
 const BACKDROP_KEY = 'violin-room-backdrop';
 const BACKDROP_URL = '/assets/activities/violin/room-backdrop.png';
 
+// Optional drop-in treble-clef art. File-first: if present it replaces the
+// hand-drawn vector clef flourish in the left margin, otherwise the procedural
+// clef (drawVectorClef) is used. Authored to match the warm-ink / cream-paper
+// look — see public/assets/activities/violin/README.md for the asset spec.
+const CLEF_KEY = 'violin-treble-clef';
+const CLEF_URL = '/assets/activities/violin/treble-clef.png';
+// Paper-local placement for the clef glyph. It sits in the left margin, centred
+// on the staff, sized to this target height (~120px ≈ the vector flourish's
+// span, reaching a touch above the top line and below the bottom line). The
+// image is scaled UNIFORMLY to this height so any source aspect (~1:2.8 for the
+// incoming hand-inked art) keeps its true proportions — width follows.
+const CLEF_DISPLAY_HEIGHT = 120;
+
 // The model is driven by real elapsed wall-clock time (not Phaser's smoothed
 // per-frame delta), so playback tempo is correct regardless of render FPS. A
 // single step is clamped so a backgrounded tab resuming can't teleport the model.
@@ -118,6 +131,7 @@ export class ViolinScene extends Phaser.Scene {
   private beamFx!: Phaser.GameObjects.Graphics; // additive finale flood
   private sheet!: Phaser.GameObjects.Container; // tilted paper + staff + notes
   private staff!: Phaser.GameObjects.Graphics; // (child of sheet) live note layer
+  private clefFallback?: Phaser.GameObjects.Graphics; // vector clef, hidden if art loads
   private legendGfx!: Phaser.GameObjects.Graphics;
   private titleText!: Phaser.GameObjects.Text;
   private helperText!: Phaser.GameObjects.Text;
@@ -794,14 +808,58 @@ export class ViolinScene extends Phaser.Scene {
     const paper = this.add.image(0, 0, 'violin-paper').setOrigin(0.5);
     this.sheet.add(paper);
 
-    // Static staff ruling + clef + a little heading, drawn once into the sheet.
+    // Static staff ruling + time-signature + heading, drawn once into the sheet.
     const ruling = this.add.graphics();
     this.drawStaffRuling(ruling);
     this.sheet.add(ruling);
 
+    // The treble clef lives in its own layer so a drop-in art asset can replace
+    // it. Draw the vector fallback now; maybeLoadClef swaps in the PNG if present.
+    const clef = this.add.graphics();
+    this.drawVectorClef(clef);
+    this.sheet.add(clef);
+    this.clefFallback = clef;
+    void this.maybeLoadClef();
+
     // Live note layer (redrawn each frame).
     this.staff = this.add.graphics();
     this.sheet.add(this.staff);
+  }
+
+  // The treble clef is optional drop-in art. Probe with a content-type check
+  // first (mirrors maybeLoadBackdrop) so a missing PNG stays silent, then load
+  // it, hide the vector fallback and drop the image into the clef's margin slot.
+  private async maybeLoadClef(): Promise<void> {
+    if (this.textures.exists(CLEF_KEY)) {
+      this.placeClefImage();
+      return;
+    }
+    if (!(await isImageUrl(CLEF_URL))) {
+      return;
+    }
+    if (!this.scene.isActive()) {
+      return;
+    }
+    this.load.image(CLEF_KEY, CLEF_URL);
+    this.load.once(Phaser.Loader.Events.COMPLETE, () => {
+      if (this.scene.isActive() && this.textures.exists(CLEF_KEY)) {
+        this.placeClefImage();
+      }
+    });
+    this.load.start();
+  }
+
+  private placeClefImage(): void {
+    this.clefFallback?.setVisible(false);
+    // Same margin slot + vertical span as the vector clef: centred on the staff,
+    // reaching a touch above the top line and below the bottom line. Scale
+    // uniformly to the target height so the art keeps its own aspect ratio.
+    const midY = this.staffLineLocalY(2);
+    const clef = this.add.image(CLEF_LOCAL_X + 2, midY + 6, CLEF_KEY).setOrigin(0.5);
+    if (clef.height > 0) {
+      clef.setScale(CLEF_DISPLAY_HEIGHT / clef.height);
+    }
+    this.sheet.add(clef);
   }
 
   private staffLineLocalY(lineIndex: number): number {
@@ -822,16 +880,6 @@ export class ViolinScene extends Phaser.Scene {
       g.lineBetween(STAFF_LEFT_LOCAL, y, STAFF_RIGHT_LOCAL, y);
     }
 
-    // A treble-clef flourish: a spiral-ish stroke + vertical stem.
-    g.lineStyle(3, INK, 0.85);
-    const cx = CLEF_LOCAL_X;
-    const midY = this.staffLineLocalY(2);
-    g.strokeCircle(cx, midY + 3, 8);
-    g.beginPath();
-    g.arc(cx, midY - 6, 11, Phaser.Math.DegToRad(60), Phaser.Math.DegToRad(300), false);
-    g.strokePath();
-    g.lineBetween(cx + 8, this.staffLineLocalY(0) - 8, cx + 8, this.staffLineLocalY(4) + 10);
-
     // A small time-signature-ish marking and a soft tempo word in warm ink.
     const sigX = CLEF_LOCAL_X + 26;
     g.lineStyle(2.5, INK, 0.6);
@@ -849,6 +897,20 @@ export class ViolinScene extends Phaser.Scene {
       .setOrigin(0.5, 0.5)
       .setAlpha(0.7);
     this.sheet.add(tempo);
+  }
+
+  // Hand-drawn treble-clef flourish (a spiral-ish stroke + vertical stem), the
+  // fallback used when no treble-clef.png drop-in art is present. Authored to
+  // the same margin slot the image occupies (CLEF_LOCAL_X, centred on the staff).
+  private drawVectorClef(g: Phaser.GameObjects.Graphics): void {
+    g.lineStyle(3, INK, 0.85);
+    const cx = CLEF_LOCAL_X;
+    const midY = this.staffLineLocalY(2);
+    g.strokeCircle(cx, midY + 3, 8);
+    g.beginPath();
+    g.arc(cx, midY - 6, 11, Phaser.Math.DegToRad(60), Phaser.Math.DegToRad(300), false);
+    g.strokePath();
+    g.lineBetween(cx + 8, this.staffLineLocalY(0) - 8, cx + 8, this.staffLineLocalY(4) + 10);
   }
 
   private currentNoteMarks(phrase: ViolinPhrase): NoteMark[] {

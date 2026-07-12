@@ -49,7 +49,7 @@ const maps = [
     // open east edge is the road back to the neighbourhood.
     spawns: [point(1, 'start', 512, 460), point(2, 'from-friend-b', 512, 320)],
     exits: [rect(3, 'to-friend-b', 'exit', 448, 150, 128, 84)],
-    interactables: [],
+    interactables: [rect(4, 'friendtwo-signpost', 'dialogue', 640, 400, 96, 96)],
   },
   {
     file: 'friendone-yard.tmj',
@@ -59,7 +59,7 @@ const maps = [
     // Mirror of ____'s yard: house top-center, open west edge back to the road.
     spawns: [point(1, 'start', 512, 460), point(2, 'from-friend-a', 512, 320)],
     exits: [rect(3, 'to-friend-a', 'exit', 448, 150, 128, 84)],
-    interactables: [],
+    interactables: [rect(4, 'friendone-signpost', 'dialogue', 288, 400, 96, 96)],
   },
   {
     file: 'clearing.tmj',

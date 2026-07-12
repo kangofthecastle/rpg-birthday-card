@@ -58,11 +58,17 @@ import {
 import {
   getExteriors,
   getOutdoorPalette,
+  getOutdoorProps,
+  getSignpost,
   exteriorTextureKey,
+  propTextureKey,
+  PROP_KINDS,
   GROUND_TILESET_KEY,
   GROUND_TILES,
   type ExteriorPlacement,
   type OutdoorPalette,
+  type PropKind,
+  type PropPlacement,
 } from '../content/outdoorScenery';
 import {
   completeLocation,
@@ -79,7 +85,13 @@ import { isInteractionLocked, shouldPlayEnterBeat } from '../game/interactionSta
 import { type IsoOrigin, type IsoPoint } from '../game/isometricProjection';
 import { createProjection, type Projection } from '../game/projection';
 import { playMusic, playSfx, type MusicKey } from '../game/audio';
-import { getPointObject, getRectObjects, type RectObject, type TiledMapJson } from '../game/mapHelpers';
+import {
+  getObjectLayer,
+  getPointObject,
+  getRectObjects,
+  type RectObject,
+  type TiledMapJson,
+} from '../game/mapHelpers';
 import { getPlayerFacingFromScreenMovement, PlayerController } from '../game/playerController';
 import { createCollectionPanel, type CollectionPanelHandle } from '../ui/collectionPanel';
 import { showDialogue } from '../ui/dialogueBox';
@@ -772,6 +784,14 @@ export class LocationScene extends Phaser.Scene {
     this.dressing = getRoomDressing(this.location.id);
     this.zonesFile = getCollisionZones(this.location.id);
 
+    // Parse the map's object layers UP FRONT: the flat-ground path routing reads
+    // this.exits to draw worn paths toward each door, so exits must be populated
+    // before createFlatGround runs (previously set after, leaving yard door paths
+    // undrawn and the lone edge road reading as a floating dead-end stub).
+    const mapJson = this.getMapJson();
+    this.exits = getRectObjects(mapJson, 'Exits');
+    this.interactions = getRectObjects(mapJson, 'Interactables');
+
     this.propColliders = [];
     this.propColliderBodies = [];
     let contentBounds: ScreenBounds | undefined;
@@ -806,6 +826,8 @@ export class LocationScene extends Phaser.Scene {
       this.cameras.main.setBackgroundColor(colorToHex(palette?.floorB ?? 0x7fa46b));
       this.createFlatGround(tilemap, palette);
       this.propColliders = [...this.propColliders, ...this.renderOutdoorExteriors()];
+      this.propColliders = [...this.propColliders, ...this.renderOutdoorProps(tilemap)];
+      this.propColliders = [...this.propColliders, ...this.renderSignpost(tilemap)];
     } else {
       const palette = getOutdoorPalette(this.location.id);
       this.cameras.main.setBackgroundColor(
@@ -825,9 +847,6 @@ export class LocationScene extends Phaser.Scene {
     walls?.setCollisionByExclusion([-1, 0]);
     this.walls = walls ?? undefined;
 
-    const mapJson = this.getMapJson();
-    this.exits = getRectObjects(mapJson, 'Exits');
-    this.interactions = getRectObjects(mapJson, 'Interactables');
     this.physics.world.setBounds(0, 0, tilemap.widthInPixels, tilemap.heightInPixels);
 
     this.createWorldMarkers();
@@ -1105,6 +1124,7 @@ export class LocationScene extends Phaser.Scene {
     if (this.textures.exists(GROUND_TILESET_KEY)) {
       this.buildTilesetGround(tilemap, pal, openEdges);
       if (this.location.id === 'clearing') {
+        this.decorateClearing(width, height, tile);
         this.drawClearingShore(width, height, tile);
       }
       return;
@@ -1182,6 +1202,7 @@ export class LocationScene extends Phaser.Scene {
     // always reads as water, and glows with light from beyond once the world
     // has awakened (every letter collected).
     if (this.location.id === 'clearing') {
+      this.decorateClearing(width, height, tile);
       this.drawClearingShore(width, height, tile);
     }
   }
@@ -1217,16 +1238,19 @@ export class LocationScene extends Phaser.Scene {
         let frame: number;
         if (dusk) {
           frame = roll < 0.26 ? GROUND_TILES.duskGrass[1] : GROUND_TILES.duskGrass[0];
-        } else if (roll < 0.06) {
+        } else if (roll < 0.05) {
+          // Rare tufted accent. The bright full-tile variant (grass[1]) is
+          // dropped here: at tile scale it read as jarring checkerboard blobs.
           frame = GROUND_TILES.grass[3];
-        } else if (roll < 0.13) {
-          frame = GROUND_TILES.grass[1];
-        } else if (roll < 0.32) {
+        } else if (roll < 0.34) {
           frame = GROUND_TILES.grass[2];
         } else {
           frame = GROUND_TILES.grass[0];
         }
-        this.stampGroundTile(rt, frame, 0, column * tile, row * tile, tile);
+        // Break the grid: rotate the base/textured grass in 90° steps so the
+        // seams between identical tiles disappear.
+        const gq = frame === GROUND_TILES.grass[3] ? 0 : Math.floor(rng() * 4);
+        this.stampGroundTile(rt, frame, gq, column * tile, row * tile, tile);
       }
     }
 
@@ -1251,18 +1275,26 @@ export class LocationScene extends Phaser.Scene {
     // 3. Hedge band ~1 tile thick on each CLOSED edge (dusk areas have no hedge
     //    tile set — the shore reads the boundary there, so skip when dusk).
     if (!dusk) {
-      const hedge = GROUND_TILES.hedgeStraight;
+      // Vary the hedge to kill the visible repeat + hard seam: alternate the
+      // straight tile (frame 8) with the bushier canopy tile (frame 10, row 2 of
+      // the tileset) and randomly flip each 180°, so no two neighbours match.
+      const hedgeVariants = [
+        GROUND_TILES.hedgeStraight,
+        GROUND_TILES.hedgeStraight,
+        GROUND_TILES.hedgeStraight + 2,
+      ];
+      const stampHedge = (col: number, row: number, baseQuarter: number): void => {
+        const f = hedgeVariants[Math.floor(rng() * hedgeVariants.length)];
+        const q = baseQuarter + (rng() < 0.5 ? 2 : 0);
+        this.stampGroundTile(rt, f, q, col * tile, row * tile, tile);
+      };
       for (let column = 0; column < cols; column += 1) {
-        if (!openEdges.has('north')) this.stampGroundTile(rt, hedge, 0, column * tile, 0, tile);
-        if (!openEdges.has('south')) {
-          this.stampGroundTile(rt, hedge, 0, column * tile, (rows - 1) * tile, tile);
-        }
+        if (!openEdges.has('north')) stampHedge(column, 0, 0);
+        if (!openEdges.has('south')) stampHedge(column, rows - 1, 0);
       }
       for (let row = 0; row < rows; row += 1) {
-        if (!openEdges.has('west')) this.stampGroundTile(rt, hedge, 1, 0, row * tile, tile);
-        if (!openEdges.has('east')) {
-          this.stampGroundTile(rt, hedge, 1, (cols - 1) * tile, row * tile, tile);
-        }
+        if (!openEdges.has('west')) stampHedge(0, row, 1);
+        if (!openEdges.has('east')) stampHedge(cols - 1, row, 1);
       }
     }
 
@@ -1339,19 +1371,33 @@ export class LocationScene extends Phaser.Scene {
     for (const exit of this.exits) {
       targets.push({ x: exit.x + exit.width / 2, y: exit.y + exit.height / 2 });
     }
-    const mark = (px: number, py: number): void => {
-      const c = Math.min(cols - 1, Math.max(0, Math.floor(px / tile)));
-      const r = Math.min(rows - 1, Math.max(0, Math.floor(py / tile)));
-      mask[r * cols + c] = true;
+    const markCell = (c: number, r: number): void => {
+      const cc = Math.min(cols - 1, Math.max(0, c));
+      const rr = Math.min(rows - 1, Math.max(0, r));
+      mask[rr * cols + cc] = true;
     };
+    const cellOf = (px: number, py: number): { c: number; r: number } => ({
+      c: Math.min(cols - 1, Math.max(0, Math.floor(px / tile))),
+      r: Math.min(rows - 1, Math.max(0, Math.floor(py / tile))),
+    });
+    // Route each target from the centre as an orthogonal L (horizontal leg, then
+    // vertical leg). Marking every cell along the two axis-aligned legs keeps the
+    // path 4-connected — no diagonal staircase, so the auto-tiler never emits a
+    // mid-route dead-end cap (the old floating-blob / abrupt-squiggle artifacts).
+    const origin = cellOf(center.x, center.y);
     for (const target of targets) {
-      const distance = Math.hypot(target.x - center.x, target.y - center.y);
-      const steps = Math.max(2, Math.round(distance / (tile * 0.4)));
-      for (let i = 0; i <= steps; i += 1) {
-        const t = i / steps;
-        mark(center.x + (target.x - center.x) * t, center.y + (target.y - center.y) * t);
+      const end = cellOf(target.x, target.y);
+      const stepC = Math.sign(end.c - origin.c);
+      for (let c = origin.c; c !== end.c; c += stepC) {
+        markCell(c, origin.r);
       }
+      const stepR = Math.sign(end.r - origin.r);
+      for (let r = origin.r; r !== end.r; r += stepR) {
+        markCell(end.c, r);
+      }
+      markCell(end.c, end.r);
     }
+    markCell(origin.c, origin.r);
     return mask;
   }
 
@@ -2251,7 +2297,14 @@ export class LocationScene extends Phaser.Scene {
       }
     }
 
+    // The signpost hotspot now has a diegetic prop; its "E - Read the signpost"
+    // proximity prompt is guidance enough, so skip the translucent debug rect
+    // (unless the collider-debug overlay is on).
+    const signpostId = getSignpost(this.location.id)?.interactionId;
     for (const interaction of this.interactions) {
+      if (interaction.id === signpostId && !this.showColliderDebug) {
+        continue;
+      }
       this.createWorldMarker(interaction, 0xf1d79a, this.getObjectLabel(interaction));
     }
   }
@@ -2291,6 +2344,505 @@ export class LocationScene extends Phaser.Scene {
       .setOrigin(0.5, 1)
       .setScale(scale)
       .setDepth(anchor.y);
+  }
+
+  // Renders the decoration prop pack for an outdoor area: painted cutouts placed
+  // bottom-anchored and y-sorted so ____ walks behind standing props; flat props
+  // (flower patches) bake below her; overhead pieces hang above. File-first
+  // (prop-<name> PNG) with a painted procedural fallback so areas are dressed
+  // before the art lands. Returns solid base footprints (map px) to collide.
+  private renderOutdoorProps(tilemap: Phaser.Tilemaps.Tilemap): PropColliderRect[] {
+    const openEdges = new Set((this.location.edgeExits ?? []).map((exit) => exit.edge));
+    const corridor = this.buildCorridorMask(tilemap, openEdges);
+    const colliders: PropColliderRect[] = [];
+    for (const placement of getOutdoorProps(this.location.id)) {
+      const kind = PROP_KINDS[placement.name];
+      if (!kind) {
+        continue;
+      }
+      const collider = this.renderProp(kind, placement, corridor);
+      if (collider) {
+        colliders.push(collider);
+      }
+    }
+    return colliders;
+  }
+
+  // A boolean cell grid of every place the player must be able to walk: the worn
+  // paths, a full row+column through each spawn (players walk any cardinal from a
+  // spawn), a vertical approach to each door, and a band along every open edge.
+  // Decoration colliders that fall on it are dropped (the sprite still draws), so
+  // scenery never blocks a route the game or a smoke walk relies on.
+  private buildCorridorMask(
+    tilemap: Phaser.Tilemaps.Tilemap,
+    openEdges: Set<string>,
+  ): { grid: boolean[]; cols: number; rows: number; tile: number } {
+    const cols = tilemap.width;
+    const rows = tilemap.height;
+    const tile = tilemap.tileWidth;
+    const grid = this.rasterizePathCells(
+      cols,
+      rows,
+      tile,
+      tilemap.widthInPixels,
+      tilemap.heightInPixels,
+      openEdges,
+    );
+    const markRow = (yPx: number): void => {
+      const r = Math.floor(yPx / tile);
+      if (r >= 0 && r < rows) {
+        for (let c = 0; c < cols; c += 1) grid[r * cols + c] = true;
+      }
+    };
+    const markCol = (xPx: number): void => {
+      const c = Math.floor(xPx / tile);
+      if (c >= 0 && c < cols) {
+        for (let r = 0; r < rows; r += 1) grid[r * cols + c] = true;
+      }
+    };
+    for (const spawn of getObjectLayer(this.getMapJson(), 'Spawns')?.objects ?? []) {
+      markRow(spawn.y);
+      markCol(spawn.x);
+    }
+    for (const exit of this.exits) {
+      markCol(exit.x + exit.width / 2);
+    }
+    // Two-cell approach band along each open edge.
+    for (let c = 0; c < cols; c += 1) {
+      if (openEdges.has('north')) grid[0 * cols + c] = grid[1 * cols + c] = true;
+      if (openEdges.has('south'))
+        grid[(rows - 1) * cols + c] = grid[(rows - 2) * cols + c] = true;
+    }
+    for (let r = 0; r < rows; r += 1) {
+      if (openEdges.has('west')) grid[r * cols + 0] = grid[r * cols + 1] = true;
+      if (openEdges.has('east'))
+        grid[r * cols + (cols - 1)] = grid[r * cols + (cols - 2)] = true;
+    }
+    return { grid, cols, rows, tile };
+  }
+
+  private colliderHitsCorridor(
+    rect: PropColliderRect,
+    corridor: { grid: boolean[]; cols: number; rows: number; tile: number },
+  ): boolean {
+    const { grid, cols, rows, tile } = corridor;
+    const c0 = Math.max(0, Math.floor(rect.x / tile));
+    const c1 = Math.min(cols - 1, Math.floor((rect.x + rect.width) / tile));
+    const r0 = Math.max(0, Math.floor(rect.y / tile));
+    const r1 = Math.min(rows - 1, Math.floor((rect.y + rect.height) / tile));
+    for (let r = r0; r <= r1; r += 1) {
+      for (let c = c0; c <= c1; c += 1) {
+        if (grid[r * cols + c]) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  private renderProp(
+    kind: PropKind,
+    placement: PropPlacement,
+    corridor?: { grid: boolean[]; cols: number; rows: number; tile: number },
+  ): PropColliderRect | undefined {
+    const key = this.ensurePropTexture(kind);
+    const anchor = this.getProjection().project(placement.mapX, placement.mapY);
+    const source = this.textures.get(key).getSourceImage() as { width: number };
+    const scale = kind.w / (source.width || kind.w);
+    const image = this.add.image(anchor.x, anchor.y, key).setScale(scale);
+    if (placement.flip) {
+      image.setFlipX(true);
+    }
+    if (kind.flat) {
+      image.setOrigin(0.5, 0.5).setDepth(-14);
+    } else if (kind.overhead) {
+      image.setOrigin(0.5, 0.5).setDepth(5000).setAlpha(0.95);
+    } else {
+      image.setOrigin(0.5, 1).setDepth(anchor.y);
+    }
+
+    if (kind.collider && !kind.flat && !kind.overhead) {
+      const rect: PropColliderRect = {
+        x: placement.mapX - kind.collider.w / 2,
+        y: placement.mapY - kind.collider.h,
+        width: kind.collider.w,
+        height: kind.collider.h,
+      };
+      // Never let a decoration body sit on a walkable corridor.
+      if (corridor && this.colliderHitsCorridor(rect, corridor)) {
+        return undefined;
+      }
+      return rect;
+    }
+    return undefined;
+  }
+
+  // The visible signpost prop for a named area: the blank painted board with the
+  // area name rendered ONTO it in-game (so a drop-in board art needs no baked
+  // text). Bottom-anchored + y-sorted like the other standing props.
+  private renderSignpost(tilemap: Phaser.Tilemaps.Tilemap): PropColliderRect[] {
+    const sign = getSignpost(this.location.id);
+    if (!sign) {
+      return [];
+    }
+    const kind = PROP_KINDS.signpost;
+    const key = this.ensurePropTexture(kind);
+    const anchor = this.getProjection().project(sign.mapX, sign.mapY);
+    const source = this.textures.get(key).getSourceImage() as { width: number };
+    const scale = kind.w / (source.width || kind.w);
+    const image = this.add
+      .image(anchor.x, anchor.y, key)
+      .setOrigin(0.5, 1)
+      .setScale(scale)
+      .setDepth(anchor.y);
+    if (sign.flip) {
+      image.setFlipX(true);
+    }
+    // Caption centred on the board (upper ~72% of the sprite). Depth just above
+    // the board so the player still occludes it when standing in front.
+    const boardY = anchor.y - kind.h * scale * 0.72;
+    this.add
+      .text(anchor.x, boardY, sign.label, {
+        color: '#3c2a17',
+        fontSize: '16px',
+        fontStyle: '800',
+        fontFamily: 'Georgia, "Times New Roman", serif',
+      })
+      .setOrigin(0.5, 0.5)
+      .setScale(scale)
+      .setDepth(anchor.y + 0.1);
+
+    if (!kind.collider) {
+      return [];
+    }
+    const rect: PropColliderRect = {
+      x: sign.mapX - kind.collider.w / 2,
+      y: sign.mapY - kind.collider.h,
+      width: kind.collider.w,
+      height: kind.collider.h,
+    };
+    const openEdges = new Set((this.location.edgeExits ?? []).map((exit) => exit.edge));
+    const corridor = this.buildCorridorMask(tilemap, openEdges);
+    return this.colliderHitsCorridor(rect, corridor) ? [] : [rect];
+  }
+
+  // Resolves a prop's texture key: the loaded PNG when present, else a painted
+  // procedural fallback baked once into a same-sized canvas texture.
+  private ensurePropTexture(kind: PropKind): string {
+    const loaded = propTextureKey(kind.name);
+    if (this.textures.exists(loaded)) {
+      return loaded;
+    }
+    const fallback = `${loaded}-fallback`;
+    if (this.textures.exists(fallback)) {
+      return fallback;
+    }
+    const canvas = this.textures.createCanvas(fallback, kind.w, kind.h);
+    if (!canvas) {
+      return this.textures.exists(fallback) ? fallback : loaded;
+    }
+    this.paintPropFallback(canvas.getContext(), kind);
+    canvas.refresh();
+    return fallback;
+  }
+
+  // Painterly storybook fallbacks (soft flat shapes, gentle shading) matching the
+  // exterior/prop art style. Canvas is kind.w×kind.h, feet at bottom-centre.
+  private paintPropFallback(ctx: CanvasRenderingContext2D, kind: PropKind): void {
+    const w = kind.w;
+    const h = kind.h;
+    const cx = w / 2;
+    ctx.clearRect(0, 0, w, h);
+    const ell = (x: number, y: number, rx: number, ry: number, fill: string): void => {
+      ctx.beginPath();
+      ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
+      ctx.fillStyle = fill;
+      ctx.fill();
+    };
+    const rrect = (x: number, y: number, rw: number, rh: number, r: number, fill: string): void => {
+      const rad = Math.min(r, rw / 2, rh / 2);
+      ctx.beginPath();
+      ctx.moveTo(x + rad, y);
+      ctx.arcTo(x + rw, y, x + rw, y + rh, rad);
+      ctx.arcTo(x + rw, y + rh, x, y + rh, rad);
+      ctx.arcTo(x, y + rh, x, y, rad);
+      ctx.arcTo(x, y, x + rw, y, rad);
+      ctx.closePath();
+      ctx.fillStyle = fill;
+      ctx.fill();
+    };
+    // Soft contact shadow under standing props.
+    if (!kind.flat && !kind.overhead) {
+      ell(cx, h - 6, w * 0.32, h * 0.03, 'rgba(20,24,18,0.28)');
+    }
+
+    switch (kind.style) {
+      case 'tree-a':
+      case 'tree-b': {
+        const b = kind.style === 'tree-a'
+          ? { trunk: '#6b4a2c', dark: '#31562f', mid: '#3f6f3a', light: '#5c9247' }
+          : { trunk: '#5f4630', dark: '#2c4a3a', mid: '#3a6350', light: '#579072' };
+        const trunkW = w * 0.16;
+        rrect(cx - trunkW / 2, h * 0.55, trunkW, h * 0.45, trunkW * 0.4, b.trunk);
+        ell(cx - trunkW * 0.18, h * 0.72, trunkW * 0.12, h * 0.18, 'rgba(0,0,0,0.15)');
+        const cy = h * 0.36;
+        ell(cx, cy + h * 0.1, w * 0.44, h * 0.3, b.dark);
+        ell(cx - w * 0.2, cy, w * 0.3, h * 0.24, b.dark);
+        ell(cx + w * 0.2, cy, w * 0.3, h * 0.24, b.mid);
+        ell(cx, cy - h * 0.08, w * 0.34, h * 0.26, b.mid);
+        ell(cx - w * 0.12, cy - h * 0.06, w * 0.2, h * 0.16, b.light);
+        ell(cx + w * 0.14, cy - h * 0.02, w * 0.16, h * 0.13, b.light);
+        break;
+      }
+      case 'bush': {
+        ell(cx, h * 0.68, w * 0.46, h * 0.34, '#33562f');
+        ell(cx - w * 0.22, h * 0.6, w * 0.24, h * 0.24, '#3c6a38');
+        ell(cx + w * 0.2, h * 0.6, w * 0.24, h * 0.24, '#3c6a38');
+        ell(cx, h * 0.5, w * 0.26, h * 0.24, '#508a45');
+        ell(cx - w * 0.08, h * 0.46, w * 0.14, h * 0.12, '#6aa557');
+        break;
+      }
+      case 'flowers-a':
+      case 'flowers-b': {
+        // Flat ground patch: low green base + scattered blooms.
+        ell(cx, h * 0.62, w * 0.46, h * 0.34, 'rgba(60,104,54,0.55)');
+        ell(cx, h * 0.66, w * 0.34, h * 0.24, 'rgba(80,132,66,0.5)');
+        const petals = kind.style === 'flowers-a'
+          ? ['#f4f1e4', '#f6d873', '#ffffff']
+          : ['#eaa6c4', '#c98fd6', '#f4c4da'];
+        const seed = kind.style === 'flowers-a' ? 11 : 29;
+        const rng = mulberry32(fnv1a(`${kind.name}:${seed}`));
+        for (let i = 0; i < 14; i += 1) {
+          const px = w * 0.16 + rng() * w * 0.68;
+          const py = h * 0.42 + rng() * h * 0.42;
+          const col = petals[Math.floor(rng() * petals.length)];
+          ell(px, py + 2, 4, 2.4, 'rgba(40,70,36,0.5)');
+          for (let p = 0; p < 5; p += 1) {
+            const a = (p / 5) * Math.PI * 2;
+            ell(px + Math.cos(a) * 3.2, py + Math.sin(a) * 3.2, 2.4, 2.4, col);
+          }
+          ell(px, py, 1.8, 1.8, '#f7c948');
+        }
+        break;
+      }
+      case 'fence': {
+        const railY1 = h * 0.42;
+        const railY2 = h * 0.66;
+        const railH = h * 0.12;
+        rrect(0, railY1, w, railH, railH * 0.4, '#b98a52');
+        rrect(0, railY2, w, railH, railH * 0.4, '#a97b45');
+        const posts = 3;
+        for (let i = 0; i < posts; i += 1) {
+          const px = (i + 0.5) * (w / posts);
+          rrect(px - w * 0.05, h * 0.3, w * 0.1, h * 0.62, w * 0.03, '#c99a60');
+          ell(px, h * 0.3, w * 0.06, h * 0.03, '#d8ac72');
+        }
+        break;
+      }
+      case 'rock': {
+        ell(cx, h * 0.62, w * 0.42, h * 0.32, '#7c7f86');
+        ell(cx - w * 0.1, h * 0.52, w * 0.26, h * 0.22, '#95979d');
+        ell(cx + w * 0.12, h * 0.58, w * 0.2, h * 0.16, '#6b6e75');
+        ell(cx - w * 0.06, h * 0.44, w * 0.16, h * 0.06, '#6f9758');
+        break;
+      }
+      case 'lamp':
+      case 'lantern-post': {
+        const dusk = kind.style === 'lantern-post';
+        const post = dusk ? '#3b3350' : '#454b52';
+        const glow = dusk ? '#ffd9a0' : '#ffe6a8';
+        rrect(cx - w * 0.07, h * 0.16, w * 0.14, h * 0.82, w * 0.05, post);
+        rrect(cx - w * 0.22, h * 0.94, w * 0.44, h * 0.05, w * 0.02, post);
+        // Warm globe / paper lantern near the top.
+        ell(cx, h * 0.2, w * 0.34, h * 0.09, 'rgba(255,225,150,0.28)');
+        if (dusk) {
+          rrect(cx - w * 0.16, h * 0.1, w * 0.32, h * 0.16, w * 0.06, glow);
+          ctx.strokeStyle = 'rgba(120,80,40,0.5)';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(cx, h * 0.1);
+          ctx.lineTo(cx, h * 0.26);
+          ctx.stroke();
+        } else {
+          ell(cx, h * 0.17, w * 0.16, h * 0.06, glow);
+          rrect(cx - w * 0.14, h * 0.12, w * 0.28, h * 0.1, w * 0.04, glow);
+        }
+        break;
+      }
+      case 'mailbox': {
+        rrect(cx - w * 0.08, h * 0.45, w * 0.16, h * 0.55, w * 0.05, '#6b5638');
+        rrect(cx - w * 0.36, h * 0.2, w * 0.72, h * 0.3, w * 0.14, '#5a86b0');
+        ell(cx, h * 0.35, w * 0.3, h * 0.12, '#6f9bc4');
+        rrect(cx + w * 0.24, h * 0.1, w * 0.06, h * 0.14, 2, '#c8503f');
+        break;
+      }
+      case 'bench': {
+        const seatY = h * 0.5;
+        rrect(w * 0.08, seatY, w * 0.84, h * 0.12, 6, '#a9773f');
+        rrect(w * 0.08, h * 0.24, w * 0.84, h * 0.1, 6, '#b98a52');
+        rrect(w * 0.12, seatY, w * 0.06, h * 0.42, 3, '#8a6033');
+        rrect(w * 0.82, seatY, w * 0.06, h * 0.42, 3, '#8a6033');
+        rrect(w * 0.12, h * 0.24, w * 0.05, h * 0.28, 3, '#8a6033');
+        rrect(w * 0.83, h * 0.24, w * 0.05, h * 0.28, 3, '#8a6033');
+        break;
+      }
+      case 'signpost': {
+        const postW = w * 0.14;
+        rrect(cx - postW / 2, h * 0.4, postW, h * 0.6, postW * 0.35, '#7a5a34');
+        // Blank board (light wood) — the area name is drawn over this in-game.
+        rrect(w * 0.08, h * 0.14, w * 0.84, h * 0.34, 8, '#d8b57e');
+        rrect(w * 0.08, h * 0.14, w * 0.84, h * 0.06, 8, '#e6c891');
+        ctx.strokeStyle = 'rgba(90,64,34,0.55)';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(w * 0.1, h * 0.16, w * 0.8, h * 0.3);
+        // Little pointing arrow tip.
+        ctx.beginPath();
+        ctx.moveTo(w * 0.92, h * 0.2);
+        ctx.lineTo(w * 1.0, h * 0.31);
+        ctx.lineTo(w * 0.92, h * 0.42);
+        ctx.closePath();
+        ctx.fillStyle = '#c9a56e';
+        ctx.fill();
+        break;
+      }
+      case 'lantern-string': {
+        // A swagged cord of warm paper lanterns, transparent elsewhere.
+        ctx.strokeStyle = 'rgba(40,30,50,0.7)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(0, h * 0.2);
+        ctx.quadraticCurveTo(cx, h * 0.5, w, h * 0.2);
+        ctx.stroke();
+        const lamps = 7;
+        for (let i = 0; i < lamps; i += 1) {
+          const t = (i + 0.5) / lamps;
+          const lx = t * w;
+          const ly = h * 0.2 + Math.sin(t * Math.PI) * (h * 0.3);
+          ell(lx, ly + h * 0.02, w * 0.02, h * 0.16, 'rgba(255,210,140,0.25)');
+          rrect(lx - w * 0.022, ly, w * 0.044, h * 0.2, w * 0.02, i % 2 ? '#f4c98a' : '#f0b0c0');
+        }
+        break;
+      }
+      case 'paper-boat': {
+        // A folded paper boat, cream with crease lines.
+        ctx.beginPath();
+        ctx.moveTo(w * 0.1, h * 0.55);
+        ctx.lineTo(w * 0.9, h * 0.55);
+        ctx.lineTo(w * 0.72, h * 0.85);
+        ctx.lineTo(w * 0.28, h * 0.85);
+        ctx.closePath();
+        ctx.fillStyle = '#efe7d4';
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(w * 0.5, h * 0.18);
+        ctx.lineTo(w * 0.5, h * 0.55);
+        ctx.lineTo(w * 0.16, h * 0.55);
+        ctx.closePath();
+        ctx.fillStyle = '#e2d7bf';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(120,104,72,0.5)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(w * 0.5, h * 0.2);
+        ctx.lineTo(w * 0.5, h * 0.85);
+        ctx.stroke();
+        break;
+      }
+      case 'cranes': {
+        // Two small origami cranes drifting.
+        const crane = (ox: number, oy: number, s: number, col: string): void => {
+          ctx.save();
+          ctx.translate(ox, oy);
+          ctx.scale(s, s);
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.lineTo(38, -14);
+          ctx.lineTo(20, 6);
+          ctx.lineTo(44, 20);
+          ctx.lineTo(6, 14);
+          ctx.closePath();
+          ctx.fillStyle = col;
+          ctx.fill();
+          ctx.beginPath();
+          ctx.moveTo(6, 2);
+          ctx.lineTo(-14, -10);
+          ctx.lineTo(2, 8);
+          ctx.closePath();
+          ctx.fillStyle = col;
+          ctx.fill();
+          ctx.restore();
+        };
+        crane(w * 0.14, h * 0.4, 1.0, '#f2c3d5');
+        crane(w * 0.5, h * 0.62, 0.82, '#e9dccb');
+        break;
+      }
+      default: {
+        rrect(w * 0.2, h * 0.4, w * 0.6, h * 0.5, 8, '#7f8a6a');
+      }
+    }
+  }
+
+  // Brings the origami / fold-the-letters twilight into the clearing: an indigo→
+  // rose sky wash, a faint star field, drifting sakura petals on the ground, and
+  // distant pine silhouettes at the treeline — so it reads as the same dusk world
+  // the letters sail out into. Layered under the shore band and props.
+  private decorateClearing(width: number, height: number, tile: number): void {
+    const rng = mulberry32(fnv1a(`${this.location.id}:origami`));
+
+    // Sky wash: deep indigo up top warming to rose toward the water horizon.
+    const grad = this.add.graphics().setDepth(-19.4).setAlpha(0.5);
+    const top = 0x1a1440;
+    const horizon = 0x743f5b;
+    const strips = 40;
+    for (let i = 0; i < strips; i += 1) {
+      const t = i / (strips - 1);
+      grad.fillStyle(mixColor(top, horizon, Math.pow(t, 1.25)), 1);
+      grad.fillRect(0, (t * height) - 1, width, height / strips + 2);
+    }
+
+    // Star field across the upper reaches.
+    const stars = this.add.graphics().setDepth(-19.2);
+    for (let i = 0; i < 46; i += 1) {
+      const sx = rng() * width;
+      const sy = rng() * height * 0.52;
+      stars.fillStyle(0xfdf3d6, 0.3 + rng() * 0.6);
+      stars.fillCircle(sx, sy, 0.6 + rng() * 1.4);
+    }
+
+    // Distant pine silhouettes at the north corners (the fold-the-letters
+    // treeline), fading into the dusk.
+    const pines = this.add.graphics().setDepth(-19).setAlpha(0.85);
+    const drawPine = (bx: number, by: number, ph: number): void => {
+      pines.fillStyle(0x241d3c, 1);
+      const pw = ph * 0.5;
+      pines.beginPath();
+      pines.moveTo(bx, by - ph);
+      pines.lineTo(bx - pw / 2, by);
+      pines.lineTo(bx + pw / 2, by);
+      pines.closePath();
+      pines.fillPath();
+    };
+    for (let i = 0; i < 6; i += 1) {
+      drawPine(20 + i * 34 + rng() * 12, tile * (1.0 + rng() * 0.4), tile * (1.4 + rng() * 1.1));
+      drawPine(width - 20 - i * 34 - rng() * 12, tile * (1.0 + rng() * 0.4), tile * (1.4 + rng() * 1.1));
+    }
+
+    // Sakura petals drifting over the grass (not on the path lane or the shore).
+    const petals = this.add.graphics().setDepth(-18);
+    const pinks = [0xf4c2d4, 0xecaac4, 0xf6ccdb, 0xd79ec8];
+    const shoreTop = height - tile * 2;
+    const pathXMin = width / 2 - tile * 0.7;
+    const pathXMax = width / 2 + tile * 0.7;
+    for (let i = 0; i < 90; i += 1) {
+      const px = rng() * width;
+      const py = tile * 0.6 + rng() * (shoreTop - tile * 0.6);
+      if (px > pathXMin && px < pathXMax) {
+        continue;
+      }
+      petals.fillStyle(pinks[Math.floor(rng() * pinks.length)], 0.55 + rng() * 0.35);
+      const r = 1.6 + rng() * 2.4;
+      petals.fillEllipse(px, py, r * 1.8, r);
+    }
   }
 
   // A soft pulsing glow doormat, laid flat in the floor plane at each door exit

@@ -11,6 +11,7 @@ import {
   SHORE_WATER_KEY,
   FRIEND_TWO_SPRITE,
 } from '../content/galaxyScene';
+import { HOME_HOST_NPCS } from '../content/homeNpcs';
 import {
   RECIPIENT_ANIMATION_SOURCE_FACING,
   RECIPIENT_FLIP_X_BY_FACING,
@@ -418,6 +419,7 @@ export class LocationScene extends Phaser.Scene {
     this.applyWarmLightingTint();
     this.applyOutdoorAwakening();
     this.createGalaxyScenery();
+    this.createHomeHostNpc();
     // Statically awaken a dressed interior already entered post-violin (later
     // room entries); the completion seam applies it dynamically the first time.
     this.applyInteriorAwakening({ animate: false });
@@ -1717,6 +1719,42 @@ export class LocationScene extends Phaser.Scene {
       frameRate: FRIEND_TWO_SPRITE.idleFrameRate,
       repeat: -1,
     });
+  }
+
+  // The friend who lives here, standing idle at their host dialogue hotspot so
+  // the person you talk to is actually visible in the room (____ in friend-a,
+  // ____ in friend-b). Decorative only: no collider, no trigger. The existing
+  // Interactables rect (friendone-host / friendtwo-host) still owns the interaction, so
+  // the host dialogue fires exactly once — the character and the hotspot are the
+  // same beat. Depth-sorts by projected feet Y like every other room billboard,
+  // so props in front of the character (the tea table, the desk) occlude them.
+  private createHomeHostNpc(): void {
+    const npc = HOME_HOST_NPCS[this.location.id];
+    if (!npc || !this.textures.exists(npc.sprite.key)) {
+      return;
+    }
+    const cfg = npc.sprite;
+    if (!this.anims.exists(cfg.idleAnimationKey)) {
+      this.anims.create({
+        key: cfg.idleAnimationKey,
+        frames: this.anims.generateFrameNumbers(cfg.key, {
+          start: cfg.idleDownStartFrame,
+          end: cfg.idleDownStartFrame + cfg.idleDownFrameCount - 1,
+        }),
+        frameRate: cfg.idleFrameRate,
+        repeat: -1,
+      });
+    }
+
+    const point = this.getProjection().project(npc.mapX, npc.mapY);
+    const sprite = this.add
+      .sprite(point.x, point.y, cfg.key, cfg.idleDownStartFrame)
+      .setOrigin(cfg.origin.x, cfg.origin.y)
+      .setScale(cfg.scale)
+      .setDepth(point.y);
+    if (this.anims.exists(cfg.idleAnimationKey)) {
+      sprite.play(cfg.idleAnimationKey);
+    }
   }
 
   // Once every letter is held the outdoor world subtly awakens: a warm golden

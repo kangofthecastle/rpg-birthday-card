@@ -32,6 +32,7 @@ import {
   SHORE_WATER_KEY,
   SHORE_WATER_URL,
 } from '../content/galaxyScene';
+import { FRIEND_ONE_SPRITE } from '../content/homeNpcs';
 
 const DOORMAT_DROP_URL = '/assets/doormat.png';
 
@@ -71,10 +72,17 @@ export class BootScene extends Phaser.Scene {
     });
     this.load.image('friendtwo-room-props', '/assets/props/friendtwo-room-props.png');
 
-    // ____, the NPC who waits at the galaxy water for the final conversation.
+    // ____, the NPC who waits at the galaxy water for the final conversation
+    // (and who also stands in his own home, friend-b).
     this.load.spritesheet(FRIEND_TWO_SPRITE.key, FRIEND_TWO_SPRITE.url, {
       frameWidth: FRIEND_TWO_SPRITE.frameWidth,
       frameHeight: FRIEND_TWO_SPRITE.frameHeight,
+    });
+
+    // ____, standing idle in her home (friend-a) at her tea table.
+    this.load.spritesheet(FRIEND_ONE_SPRITE.key, FRIEND_ONE_SPRITE.url, {
+      frameWidth: FRIEND_ONE_SPRITE.frameWidth,
+      frameHeight: FRIEND_ONE_SPRITE.frameHeight,
     });
 
     // The galaxy sky + starlit water paintings, reused to compose the final-spot

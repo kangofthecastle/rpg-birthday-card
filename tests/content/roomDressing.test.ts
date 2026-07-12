@@ -6,11 +6,13 @@ import {
   computeRemovedTombstones,
   getPropColliders,
   getRoomDressing,
+  getRoomLayoutRemoved,
   isSinglesOnlyProp,
   isValidRoomLayoutFile,
   listPropOverrideCandidates,
   propOverrideTextureKey,
   propOverrideUrl,
+  type RoomDressing,
 } from '../../src/content/roomDressing';
 
 const SHEET_SIZE = 1024;
@@ -202,23 +204,36 @@ describe('room layout overrides', () => {
   });
 
   it('merges TS-declared singles-only props not yet in the saved JSON layout', () => {
-    // These new standalone-art props are registered in TS but absent from the
-    // saved JSON; the merge appends them so they appear without a Save first.
-    const expected: Record<string, readonly string[]> = {
-      'recipient-house': ['bedside-table', 'armchair'],
-      'friend-a': ['plant-1', 'plant-2', 'fishbowl-table'],
-      'friend-b': ['plant-1', 'plant-2', 'bookshelf', 'floor-lamp', 'game-stack'],
-    };
-    for (const [locationId, frames] of Object.entries(expected)) {
+    // The saved JSON props render verbatim as the leading run of the layout; any
+    // prop merged in BEYOND them is a TS-declared singles-only slot the author
+    // has not yet arranged + Saved (the auto-merge that makes newly-registered
+    // standalone art appear without a Save first).
+    //
+    // This asserts the merge INVARIANT rather than a hardcoded roster of frame
+    // ids: whatever those merged props turn out to be, they must be valid
+    // standalone decor — singles-only, player-sized, and free of an authored
+    // collider — and a frame the author has tombstoned must never be among them.
+    // Deriving the set from the actual layout + tombstone list keeps this correct
+    // across ANY future dressEdit Save (which freely changes which props are
+    // saved vs. tombstoned vs. merged).
+    for (const locationId of roomsWithLayouts) {
+      const layout = loadLayout(locationId);
       const dressing = getRoomDressing(locationId)!;
-      for (const frame of frames) {
-        const prop = dressing.props.find((p) => p.frame === frame);
-        expect(prop, `${locationId} ${frame}`).toBeDefined();
-        expect(isSinglesOnlyProp(dressing, prop!), `${locationId} ${frame}`).toBe(true);
-        expect(prop!.heightRatio, `${locationId} ${frame}`).toBeGreaterThan(0);
+
+      // Props merged in from TS = the tail past the saved layout's own props.
+      const mergedIn = dressing.props.slice(layout.props.length);
+      for (const prop of mergedIn) {
+        expect(isSinglesOnlyProp(dressing, prop), `${locationId} ${prop.frame}`).toBe(true);
+        expect(prop.heightRatio, `${locationId} ${prop.frame}`).toBeGreaterThan(0);
         // No footprint: placeholder decor, so an absent art file leaves no
         // invisible collider (and dressEdit cannot author footprints anyway).
-        expect(prop!.footprint, `${locationId} ${frame}`).toBeUndefined();
+        expect(prop.footprint, `${locationId} ${prop.frame}`).toBeUndefined();
+      }
+
+      // A tombstoned frame is a deliberate deletion: never re-merged into play.
+      const mergedFrames = new Set(mergedIn.map((p) => p.frame));
+      for (const frame of getRoomLayoutRemoved(locationId)) {
+        expect(mergedFrames.has(frame), `${locationId} re-merged tombstoned ${frame}`).toBe(false);
       }
     }
   });
@@ -253,24 +268,54 @@ describe('room layout overrides', () => {
 });
 
 describe('singles-only tombstones', () => {
-  // The recipient dressing carries two singles-only props (armchair, bedside-table)
-  // that the merge appends unless the saved layout deletes them.
-  const dressing = getRoomDressing('recipient-house')!;
+  // Exercise the merge/tombstone behavior against a small synthetic dressing so
+  // the assertions test the INVARIANT — un-tombstoned singles re-merge, a
+  // tombstoned single stays gone — rather than whichever specific props the
+  // author currently has saved or tombstoned in the canon room JSONs (which he
+  // edits freely in-game via dressEdit). A prop is singles-only when its `frame`
+  // has no crop in `frames`; `sheetProp` has one, `single-a`/`single-b` do not.
+  function makeFixture(): RoomDressing {
+    return {
+      locationId: 'test-room',
+      tilesTextureKey: 'test-tiles',
+      floorFrame: 0,
+      wallFrame: 1,
+      propsTextureKey: 'test-props',
+      frames: { sheetProp: { x: 0, y: 0, w: 32, h: 32 } },
+      floorInsetTiles: 1,
+      wallHeight: 96,
+      backgroundColor: '#000000',
+      props: [
+        { frame: 'sheetProp', mapX: 100, mapY: 100, heightRatio: 1 },
+        { frame: 'single-a', mapX: 200, mapY: 200, heightRatio: 0.8 },
+        { frame: 'single-b', mapX: 300, mapY: 300, heightRatio: 0.6 },
+      ],
+    };
+  }
 
   it('re-merges singles-only props absent from the layout, but NOT tombstoned ones', () => {
+    const dressing = makeFixture();
+    // Sanity-check the fixture's singles-only classification the merge relies on.
+    const bySheet = dressing.props.find((p) => p.frame === 'sheetProp')!;
+    const bySingle = dressing.props.find((p) => p.frame === 'single-a')!;
+    expect(isSinglesOnlyProp(dressing, bySheet)).toBe(false);
+    expect(isSinglesOnlyProp(dressing, bySingle)).toBe(true);
+
     // With an empty saved layout and no tombstones, every singles-only prop is
-    // re-appended (the auto-merge that makes newly-registered art appear).
+    // re-appended (the auto-merge that makes newly-registered art appear). The
+    // sheet-backed prop is NOT re-merged — sheet props must be explicitly saved.
     const merged = applyRoomLayout(dressing, { props: [], removed: [] });
     const frames = merged.props.map((p) => p.frame);
-    expect(frames).toContain('armchair');
-    expect(frames).toContain('bedside-table');
+    expect(frames).toContain('single-a');
+    expect(frames).toContain('single-b');
+    expect(frames).not.toContain('sheetProp');
 
-    // Tombstoning `armchair` keeps it gone across the reload (the bug fix): it is
-    // not re-merged, while the untombstoned bedside-table still is.
-    const withTombstone = applyRoomLayout(dressing, { props: [], removed: ['armchair'] });
+    // Tombstoning `single-a` keeps it gone across the reload (the bug fix): it is
+    // not re-merged, while the untombstoned single-b still is.
+    const withTombstone = applyRoomLayout(dressing, { props: [], removed: ['single-a'] });
     const tombstonedFrames = withTombstone.props.map((p) => p.frame);
-    expect(tombstonedFrames).not.toContain('armchair');
-    expect(tombstonedFrames).toContain('bedside-table');
+    expect(tombstonedFrames).not.toContain('single-a');
+    expect(tombstonedFrames).toContain('single-b');
   });
 
   it('computes the tombstone set from previous + session removals, minus present', () => {

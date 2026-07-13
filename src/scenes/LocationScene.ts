@@ -228,15 +228,26 @@ interface SignpostBoardGeometry {
 }
 
 /**
+ * How much bigger than the base-font display size (`scale`) a caption may render
+ * when the plank has spare width. The measured signpost art is far wider than a
+ * short destination name needs, so at 1.0 the words sat small and lost on the
+ * board; 1.3 lets the type grow ~30% into that headroom. The width auto-fit below
+ * (`budget / captionWidth`) is still the hard cap, so a long name never overflows
+ * the plank's alpha bounds no matter how high this ceiling is raised.
+ */
+const SIGNPOST_CAPTION_FILL = 1.3;
+
+/**
  * Place a fingerpost's destination caption from measured board geometry. Returns
  * the world position + scale for the (never-flipped, upright) Text so it sits
  * centred on the arrow SHAFT, vertically on the plank, and auto-shrinks until it
  * fits the shaft's usable width. `scale` is the board's world-px-per-texture-px
  * (placementScale folded in, texture-size normalised), so it converts every
- * measured texture length straight to world units and stays the caption's ceiling
- * (a short name is never enlarged past the base font × scale). `anchor` is the
- * board's feet (origin 0.5,1). Shared by renderSignposts and the dressEdit
- * reposition path so a hand-resized board re-fits identically.
+ * measured texture length straight to world units; the caption's ceiling is
+ * `scale × SIGNPOST_CAPTION_FILL` (a name is never enlarged past that, and a long
+ * one is shrunk below it to fit the shaft width). `anchor` is the board's feet
+ * (origin 0.5,1). Shared by renderSignposts and the dressEdit reposition path so a
+ * hand-resized board re-fits identically.
  */
 function placeSignpostCaption(
   geom: SignpostBoardGeometry,
@@ -252,7 +263,11 @@ function placeSignpostCaption(
   const dx = (geom.shaftCenterX - geom.texW / 2) * scale;
   const x = anchorX + (flip ? -dx : dx);
   const budget = geom.shaftUsableWidth * scale;
-  const capScale = captionWidth > 0 ? Math.min(scale, budget / captionWidth) : scale;
+  // Grow into the plank's spare width up to the fill ceiling, but never past the
+  // width the shaft can hold (the auto-fit contract: no overflow past the alpha
+  // bounds, at any dressEdit scale).
+  const ceiling = scale * SIGNPOST_CAPTION_FILL;
+  const capScale = captionWidth > 0 ? Math.min(ceiling, budget / captionWidth) : ceiling;
   return { x, y, scale: capScale };
 }
 

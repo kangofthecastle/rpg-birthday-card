@@ -1113,8 +1113,10 @@ body {
   width: 100%;
   min-height: 180px;
   /* The standard viewport: RETAKE.EXE's 16:9 box. The panel width drives it on
-     wide viewports; the height cap keeps title + controls on screen. */
-  max-height: min(calc(100% - 108px), calc((100% - 16px) * 0.5625));
+     wide viewports; the height cap keeps title + controls on screen. The 118px
+     budgets for the title row, the controls strip, and the 24px of breathing
+     room between the viewport and the strip. */
+  max-height: min(calc(100% - 118px), calc((100% - 16px) * 0.5625));
   aspect-ratio: 16 / 9;
   overflow: hidden;
   border: 2px solid rgba(241, 215, 154, 0.58);
@@ -1127,25 +1129,37 @@ body {
   max-height: 100%;
 }
 
-/* Per-game viewport backdrops (shown behind any letterbox bars). */
+/* Per-game viewport frames + backdrops. Each border is tinted to a shade drawn
+   from that game's own art so the frame reads as part of the scene rather than
+   generic gold chrome (the title + controls text shift to match — see below). */
 .activity-shell--fishing .activity-shell__viewport {
+  /* Pond teal-green, pulled from the water and reed tones. */
+  border-color: rgba(96, 158, 150, 0.6);
   background: #102a3a;
 }
 
+.activity-shell--valorant-split .activity-shell__viewport {
+  /* Restrained HUD neon cyan over the gunmetal site. */
+  border-color: rgba(96, 182, 194, 0.52);
+}
+
 .activity-shell--violin .activity-shell__viewport {
-  border-color: rgba(241, 200, 138, 0.55);
+  /* Warm varnish brown — the lamplit room's edges, not bright gold. */
+  border-color: rgba(150, 98, 58, 0.62);
   background: linear-gradient(160deg, #3a2a20, #241a20);
 }
 
 .activity-shell--fold .activity-shell__viewport {
-  /* Pure black pillarbox bars around the contain-fit 16:10 fold canvas. */
+  /* Twilight indigo, framing the pure-black pillarbox bars around the
+     contain-fit 16:10 fold canvas. */
+  border-color: rgba(128, 110, 180, 0.5);
   background: #000;
 }
 
 .activity-shell__controls {
   flex: none;
-  /* A breath of space between the viewport's bottom edge and the hints. */
-  margin: 14px 0 0;
+  /* A clear breath of space between the viewport's bottom edge and the hints. */
+  margin: 24px 0 0;
   padding: 0 6px;
   color: rgba(255, 247, 232, 0.62);
   font-size: 14px;
@@ -1164,6 +1178,14 @@ body {
   font-family: Georgia, "Times New Roman", serif;
 }
 
+.activity-shell--fishing .activity-shell__title {
+  color: #dcefe6;
+}
+
+.activity-shell--fishing .activity-shell__controls {
+  color: rgba(206, 230, 222, 0.66);
+}
+
 /* RETAKE.EXE: the mono family of its own in-game HUD (ammo/round counters). */
 .activity-shell--valorant-split .activity-shell__title,
 .activity-shell--valorant-split .activity-shell__controls {
@@ -1172,6 +1194,11 @@ body {
 
 .activity-shell--valorant-split .activity-shell__title {
   letter-spacing: 0.08em;
+  color: #bfe9ee;
+}
+
+.activity-shell--valorant-split .activity-shell__controls {
+  color: rgba(150, 202, 208, 0.66);
 }
 
 /* The piece on the stand: the sheet's own voice — the Georgia italic of the
@@ -1188,6 +1215,10 @@ body {
   text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5);
 }
 
+.activity-shell--violin .activity-shell__controls {
+  color: rgba(238, 210, 172, 0.66);
+}
+
 /* Boatigami: the typewriter voice of the letters being folded (letters screen
    + letter modals). */
 .activity-shell--fold .activity-shell__title,
@@ -1197,6 +1228,11 @@ body {
 
 .activity-shell--fold .activity-shell__title {
   letter-spacing: 0.06em;
+  color: #d7c4ec;
+}
+
+.activity-shell--fold .activity-shell__controls {
+  color: rgba(206, 188, 220, 0.66);
 }
 
 .activity-shell__actions {
@@ -1224,6 +1260,25 @@ body {
   color: #f1d79a;
   cursor: pointer;
   pointer-events: auto;
+}
+
+/* Per-game tint for the PROCEDURAL fallback X (the close-x.png art, when present,
+   paints over this and is left untouched). Keeps the fallback ring in each game's
+   frame family instead of the old shared gold. */
+.activity-shell--fishing .activity-close {
+  color: #7fc0b6;
+}
+
+.activity-shell--valorant-split .activity-close {
+  color: #7fd6e0;
+}
+
+.activity-shell--violin .activity-close {
+  color: #e6b478;
+}
+
+.activity-shell--fold .activity-close {
+  color: #b6a4e0;
 }
 
 .activity-close:hover {

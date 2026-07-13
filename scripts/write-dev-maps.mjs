@@ -31,13 +31,15 @@ const maps = [
     width: MAIN_W,
     height: MAIN_H,
     openEdges: ['west', 'east', 'south'],
-    // ____'s home sits at the north edge (door center 704,192); the signpost
-    // and start spawn read down the middle toward the open south road.
+    // ____'s home sits at the north edge (door center 736,192 — nudged +32 from
+    // the tile boundary so the door lands on the tile-column CENTRE the worn path
+    // already runs up); the signpost and start spawn read down the middle toward
+    // the open south road.
     spawns: [
       point(1, 'start', 704, 640),
-      point(2, 'from-recipient-house', 704, 300),
+      point(2, 'from-recipient-house', 736, 300),
     ],
-    exits: [rect(3, 'to-recipient-house', 'exit', 640, 148, 128, 88)],
+    exits: [rect(3, 'to-recipient-house', 'exit', 672, 148, 128, 88)],
     interactables: [rect(4, 'main-signpost', 'dialogue', 640, 430, 128, 88)],
   },
   {
@@ -45,11 +47,14 @@ const maps = [
     width: YARD_W,
     height: YARD_H,
     openEdges: ['east'],
-    // House composed at the top-center of the yard (door center 512,192); the
-    // open east edge is the road back to the neighbourhood. No signpost here —
-    // the directional fingerposts live only in Guildford (main-outside).
-    spawns: [point(1, 'start', 512, 460), point(2, 'from-friend-b', 512, 320)],
-    exits: [rect(3, 'to-friend-b', 'exit', 448, 150, 128, 84)],
+    // House composed at the top-center of the yard (door center 480,192 — nudged
+    // -32 onto the tile-column CENTRE of col 7, the door leg's new column: the
+    // east road is drawn one tile LONGER at its interior end (see the col-7 path
+    // origin in PATH_ORIGIN_COL_OFFSET), so the corner + door leg sit at col 7 and
+    // the door lands dead-centre on that leg). The open east edge is the road back
+    // to the neighbourhood. No signpost here — fingerposts live only in Guildford.
+    spawns: [point(1, 'start', 512, 460), point(2, 'from-friend-b', 480, 320)],
+    exits: [rect(3, 'to-friend-b', 'exit', 416, 150, 128, 84)],
     interactables: [],
   },
   {
@@ -57,10 +62,14 @@ const maps = [
     width: YARD_W,
     height: YARD_H,
     openEdges: ['west'],
-    // Mirror of ____'s yard: house top-center, open west edge back to the road.
-    // No signpost here — the directional fingerposts live only in Guildford.
-    spawns: [point(1, 'start', 512, 460), point(2, 'from-friend-a', 512, 320)],
-    exits: [rect(3, 'to-friend-a', 'exit', 448, 150, 128, 84)],
+    // Mirror of ____'s yard: house top-center (door center 480,192 — nudged -32
+    // onto the tile-column CENTRE of col 7, the door leg's new column). The west
+    // road is drawn one tile SHORTER at its interior end (col-7 path origin in
+    // PATH_ORIGIN_COL_OFFSET), so the corner + door leg sit at col 7 and the door
+    // lands dead-centre on that leg. Open west edge back to the road. No signpost
+    // here — the directional fingerposts live only in Guildford.
+    spawns: [point(1, 'start', 512, 460), point(2, 'from-friend-a', 480, 320)],
+    exits: [rect(3, 'to-friend-a', 'exit', 416, 150, 128, 84)],
     interactables: [],
   },
   {

@@ -68,6 +68,7 @@ import {
   exteriorTextureKey,
   propTextureKey,
   PROP_KINDS,
+  PATH_ORIGIN_COL_OFFSET,
   SIGNPOST_PROP_NAME,
   type ExteriorPlacement,
   type OutdoorPalette,
@@ -1308,7 +1309,12 @@ export class LocationScene extends Phaser.Scene {
     // vertical leg). Marking every cell along the two axis-aligned legs keeps the
     // path 4-connected — no diagonal staircase, so the auto-tiler never emits a
     // mid-route dead-end cap (the old floating-blob / abrupt-squiggle artifacts).
+    // A per-area horizontal origin nudge (PATH_ORIGIN_COL_OFFSET) lets a yard's
+    // edge road run a tile longer/shorter at its interior end while its door leg
+    // stays a clean vertical on the door's column (see the const's rationale).
     const origin = cellOf(center.x, center.y);
+    const colOffset = PATH_ORIGIN_COL_OFFSET[this.location.id] ?? 0;
+    origin.c = Math.min(cols - 1, Math.max(0, origin.c + colOffset));
     for (const target of targets) {
       const end = cellOf(target.x, target.y);
       const stepC = Math.sign(end.c - origin.c);

@@ -645,7 +645,7 @@
           "id": 2,
           "name": "from-recipient-house",
           "type": "spawn",
-          "x": 704,
+          "x": 736,
           "y": 300,
           "point": true
         }
@@ -660,7 +660,7 @@
           "id": 3,
           "name": "to-recipient-house",
           "type": "exit",
-          "x": 640,
+          "x": 672,
           "y": 148,
           "width": 128,
           "height": 88

@@ -19,16 +19,18 @@ test('shows an interaction prompt when the player reaches the signpost', async (
 
   await canvas.click();
 
-  // The signpost stands north of the spawn. Up+two-Rights nets straight world-
-  // north (x steady); press E each step until the signpost dialogue fires.
-  const pattern = ['ArrowUp', 'ArrowRight', 'ArrowRight'] as const;
+  // The signpost dialogue rect sits due north of the spawn on the central path
+  // (main-outside is FLAT projection: ArrowUp is straight world-north, x steady).
+  // The old Up+Right+Right pattern predates the flat switch — Rights now drift
+  // east, and it only connected because the pre-fingerpost signs south of the
+  // road happened to funnel the walk. Walk straight north; press E each step
+  // until the junction signpost dialogue fires.
   const signpost = page.getByText('Arrows point every way');
   let shown = false;
   for (let step = 0; step < 24 && !shown; step += 1) {
-    const key = pattern[step % pattern.length];
-    await page.keyboard.down(key);
+    await page.keyboard.down('ArrowUp');
     await page.waitForTimeout(110);
-    await page.keyboard.up(key);
+    await page.keyboard.up('ArrowUp');
     await page.keyboard.press('E', { delay: 30 });
     await page.waitForTimeout(80);
     shown = await signpost.isVisible().catch(() => false);

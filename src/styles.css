@@ -1212,7 +1212,7 @@ body.minigame-active .collection-panel {
   right: 20px;
   /* Box-fit knobs (____'s "tight" pick — the box hugs its content; art size
      and font sizes are NOT controlled here). */
-  --panel-w: 196px; /* outer box width (border-box) */
+  --panel-w: 160px; /* outer box width (border-box) */
   --panel-pad: 8px; /* outer padding all round */
   --head-gap: 3px; /* gap under the "Letters" heading */
   --stack-h: 72px; /* height of the letter-stack row */

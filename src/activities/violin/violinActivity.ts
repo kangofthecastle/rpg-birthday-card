@@ -2,6 +2,7 @@ import type { ActivityModule } from '../activityTypes';
 import { addKeyboardActivation } from '../activityDom';
 import { createActivityCloseButton } from '../activityShell';
 import type { ViolinSceneCallbacks } from './ViolinScene';
+import { createViolinModes, type ViolinModes } from './violinModes';
 import './violin.css';
 
 const CLOSE_ART_URL = '/assets/activities/violin/close-x.png';
@@ -13,11 +14,13 @@ interface ViolinGameHandle {
 type CreateViolinGame = (
   parent: HTMLElement,
   callbacks: ViolinSceneCallbacks,
+  modes: ViolinModes,
 ) => ViolinGameHandle | Promise<ViolinGameHandle>;
 
 async function createDefaultViolinGame(
   parent: HTMLElement,
   callbacks: ViolinSceneCallbacks,
+  modes: ViolinModes,
 ): Promise<ViolinGameHandle> {
   const [Phaser, { ViolinScene }] = await Promise.all([
     import('phaser'),
@@ -36,7 +39,7 @@ async function createDefaultViolinGame(
       autoCenter: Phaser.Scale.CENTER_BOTH,
       mode: Phaser.Scale.FIT,
     },
-    scene: new ViolinScene(callbacks),
+    scene: new ViolinScene(callbacks, modes),
     type: Phaser.AUTO,
     width: 1280,
   });
@@ -61,11 +64,18 @@ export function createViolinActivity(
 
       mount.innerHTML = `
         <section class="activity-panel activity-shell activity-shell--violin" role="dialog" aria-label="the piece on the stand">
-          <h2 class="activity-shell__title">The piece on the stand</h2>
+          <div class="violin-header">
+            <h2 class="activity-shell__title">The piece on the stand</h2>
+            <div class="violin-modes" role="group" aria-label="Game modes">
+              <button type="button" class="violin-mode-btn" data-violin-advanced aria-pressed="false" title="Read pitch as a sound graph instead of notation">Advanced</button>
+              <button type="button" class="violin-mode-btn" data-violin-practice aria-pressed="false" title="Free play — try the keys with no song or scoring">Practice</button>
+              <button type="button" class="violin-mode-btn" data-violin-mistakes aria-pressed="false" title="Forgive one wrong note per note — recover by playing the right one">Mistakes allowed</button>
+            </div>
+          </div>
           <div class="activity-shell__viewport">
             <div class="violin-game__host" data-violin-host></div>
           </div>
-          <p class="activity-shell__controls">Echo the melody back on A S D F G H · Esc to leave</p>
+          <p class="activity-shell__controls">Echo the melody back on A S D F G H · modes at the top · Esc to leave</p>
           ${
             testMode
               ? '<div class="activity-shell__actions"><button type="button" data-violin-test-complete>Finish the piece</button></div>'
@@ -80,6 +90,49 @@ export function createViolinActivity(
       if (!section || !host) {
         throw new Error('Unable to mount the violin activity.');
       }
+
+      // Live mode/setting flags, mutated in place by the header cluster and read
+      // by the scene each frame. Fresh per mount — leaving and re-entering the
+      // activity resets to normal mode (the simplest sensible reset).
+      const modes = createViolinModes();
+
+      const advancedButton = mount.querySelector<HTMLButtonElement>('[data-violin-advanced]');
+      const practiceButton = mount.querySelector<HTMLButtonElement>('[data-violin-practice]');
+      const mistakesButton = mount.querySelector<HTMLButtonElement>('[data-violin-mistakes]');
+
+      if (!advancedButton || !practiceButton || !mistakesButton) {
+        throw new Error('Unable to mount the violin activity.');
+      }
+
+      const syncModeButtons = (): void => {
+        advancedButton.setAttribute('aria-pressed', String(modes.advanced));
+        practiceButton.setAttribute('aria-pressed', String(modes.practice));
+        mistakesButton.setAttribute('aria-pressed', String(modes.mistakesAllowed));
+        // Advanced (the graph is forced) and Mistakes (no scoring) are moot while
+        // practising — dim them so the cluster reads honestly.
+        advancedButton.disabled = modes.practice;
+        mistakesButton.disabled = modes.practice;
+      };
+
+      const toggleMode = (button: HTMLButtonElement, apply: () => void): void => {
+        const handler = (): void => {
+          apply();
+          syncModeButtons();
+        };
+        button.addEventListener('click', handler);
+        addKeyboardActivation(button, handler);
+      };
+
+      toggleMode(advancedButton, () => {
+        modes.advanced = !modes.advanced;
+      });
+      toggleMode(practiceButton, () => {
+        modes.practice = !modes.practice;
+      });
+      toggleMode(mistakesButton, () => {
+        modes.mistakesAllowed = !modes.mistakesAllowed;
+      });
+      syncModeButtons();
 
       let finished = false;
       let game: ViolinGameHandle | null = null;
@@ -132,7 +185,7 @@ export function createViolinActivity(
       }
 
       try {
-        const createdGame = await createViolinGame(host, sceneCallbacks);
+        const createdGame = await createViolinGame(host, sceneCallbacks, modes);
 
         if (finished) {
           createdGame.destroy();

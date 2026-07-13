@@ -1201,8 +1201,8 @@ body {
   color: rgba(150, 202, 208, 0.66);
 }
 
-/* The piece on the stand: the sheet's own voice — the Georgia italic of the
-   in-canvas "dolce" caption (and the pre-shell panel's lamplit title). */
+/* The piece on the stand: the sheet's own voice — a warm Georgia italic
+   (matching the pre-shell panel's lamplit title). */
 .activity-shell--violin .activity-shell__title,
 .activity-shell--violin .activity-shell__controls {
   font-family: Georgia, "Times New Roman", serif;

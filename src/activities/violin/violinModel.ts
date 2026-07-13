@@ -66,6 +66,12 @@ export interface ViolinState {
   readonly lastResult: ViolinResult;
   /** True once the piece is finished. */
   readonly finished: boolean;
+  /** "Mistakes allowed" state: true once ONE wrong key has been pressed on the
+   * CURRENT expected note and the song is now waiting for that same note to be
+   * played correctly to recover. A second wrong press while recovering is a
+   * normal miss. Always false when the "mistakes allowed" setting is off, since
+   * the first wrong press is then handled as a normal miss immediately. */
+  readonly recovering: boolean;
 }
 
 export function createViolinState(): ViolinState {
@@ -77,6 +83,7 @@ export function createViolinState(): ViolinState {
     tempoScale: 1,
     lastResult: 'none',
     finished: false,
+    recovering: false,
   };
 }
 
@@ -244,7 +251,14 @@ export function advanceViolin(state: ViolinState, deltaMs: number): ViolinState 
     const elapsedMs = state.elapsedMs + deltaMs;
     if (elapsedMs >= playbackDurationMs(phrase, state.tempoScale)) {
       // Playback finished; open the echo.
-      return { ...state, phase: 'echo', elapsedMs: 0, echoIndex: 0, lastResult: 'none' };
+      return {
+        ...state,
+        phase: 'echo',
+        elapsedMs: 0,
+        echoIndex: 0,
+        lastResult: 'none',
+        recovering: false,
+      };
     }
     return { ...state, elapsedMs };
   }
@@ -261,6 +275,7 @@ export function advanceViolin(state: ViolinState, deltaMs: number): ViolinState 
         echoIndex: 0,
         tempoScale: 1,
         lastResult: 'none',
+        recovering: false,
       };
     }
     return { ...state, elapsedMs };
@@ -286,12 +301,24 @@ export function advanceViolin(state: ViolinState, deltaMs: number): ViolinState 
 
 /** Resolves a key press. Only meaningful during an echo:
  * - Unmapped key → ignored (returns the same state).
- * - Correct pitch → it rings; advance the echo. Landing a mid-song phrase's last
- *   note opens the handoff beat (then the next phrase plays itself); landing the
- *   FINAL phrase's last note opens the finale — the whole piece pours back.
+ * - Correct pitch → it rings; advance the echo (clearing any recovery). Landing a
+ *   mid-song phrase's last note opens the handoff beat (then the next phrase plays
+ *   itself); landing the FINAL phrase's last note opens the finale — the whole
+ *   piece pours back.
  * - Wrong (but mapped) pitch → a gentle waver: reset the echo and replay the
- *   phrase a little slower. */
-export function pressViolinKey(state: ViolinState, key: string): ViolinState {
+ *   phrase a little slower.
+ *
+ * `mistakesAllowed` grants ONE forgiven slip per note: the first wrong press on a
+ * note does NOT reset the phrase — it wavers and the song waits (`recovering`),
+ * and playing the correct note once recovers and continues normally. A SECOND
+ * wrong press while recovering is handled as a normal miss (phrase resets). With
+ * the setting off (default) the first wrong press is a normal miss, exactly as
+ * before. */
+export function pressViolinKey(
+  state: ViolinState,
+  key: string,
+  mistakesAllowed = false,
+): ViolinState {
   if (state.phase !== 'echo' || state.finished) {
     return state;
   }
@@ -314,13 +341,36 @@ export function pressViolinKey(state: ViolinState, key: string): ViolinState {
       // She landed the phrase's last note herself.
       if (isFinalPhrase(state)) {
         // The whole piece pours back through as the finale.
-        return { ...state, echoIndex: nextEcho, phase: 'finale', elapsedMs: 0, lastResult: 'ring' };
+        return {
+          ...state,
+          echoIndex: nextEcho,
+          phase: 'finale',
+          elapsedMs: 0,
+          lastResult: 'ring',
+          recovering: false,
+        };
       }
       // A short beat (the ring), then the next phrase plays itself.
-      return { ...state, echoIndex: nextEcho, phase: 'handoff', elapsedMs: 0, lastResult: 'ring' };
+      return {
+        ...state,
+        echoIndex: nextEcho,
+        phase: 'handoff',
+        elapsedMs: 0,
+        lastResult: 'ring',
+        recovering: false,
+      };
     }
 
-    return { ...state, echoIndex: nextEcho, lastResult: 'ring' };
+    // A correct note always clears the note's forgiven-slip flag: the next note
+    // gets its own fresh grace.
+    return { ...state, echoIndex: nextEcho, lastResult: 'ring', recovering: false };
+  }
+
+  // Wrong (mapped) note. With mistakes allowed and no slip spent yet on this
+  // note, the song simply waits — same phrase, same cursor — for the correct
+  // note. Otherwise it's a normal miss: reset the phrase and replay slower.
+  if (mistakesAllowed && !state.recovering) {
+    return { ...state, recovering: true, lastResult: 'waver' };
   }
 
   return {
@@ -330,6 +380,7 @@ export function pressViolinKey(state: ViolinState, key: string): ViolinState {
     echoIndex: 0,
     tempoScale: Math.max(MIN_TEMPO_SCALE, state.tempoScale * MISS_SLOWDOWN_FACTOR),
     lastResult: 'waver',
+    recovering: false,
   };
 }
 

@@ -6,6 +6,7 @@ import {
   VIOLIN_PHRASES,
   VIOLIN_PITCHES,
   getPitch,
+  getPitchByKey,
   type ViolinPhrase,
 } from './melody';
 import {
@@ -18,6 +19,10 @@ import {
   pressViolinKey,
   type ViolinState,
 } from './violinModel';
+import { createViolinModes, type ViolinModes } from './violinModes';
+
+// Re-exported so existing importers of ViolinScene keep working.
+export { createViolinModes, type ViolinModes };
 
 export interface ViolinSceneCallbacks {
   readonly onComplete: () => void;
@@ -28,6 +33,14 @@ const DEFAULT_CALLBACKS: ViolinSceneCallbacks = {
   onComplete: () => undefined,
   onCancel: () => undefined,
 };
+
+const DEFAULT_MODES: ViolinModes = createViolinModes();
+
+/** One freely-played note in the practice-mode scrolling graph. */
+interface PracticeHit {
+  readonly step: number;
+  readonly t: number;
+}
 
 // The scene is authored in this 640x360 logical space (16:9); the whole world is
 // rendered into a RENDER_SCALE-times larger backing buffer for crisp upscaling
@@ -84,6 +97,23 @@ const CLEF_LOCAL_X = -176;
 const NOTE_LEFT_LOCAL = -150;
 const NOTE_RIGHT_LOCAL = 198;
 
+// ---------------------------------------------------------------------------
+// Advanced/practice "sound graph" geometry (paper-local). The graph reuses the
+// same parchment sheet as the staff, but drops the five staff lines, the clef
+// and every note letter: pitch is read purely as HEIGHT on the page. Higher
+// pitch sits higher; a faint time axis runs along the bottom. Steps span the
+// hexachord D4(-1)..B4(4).
+const GRAPH_TOP_LOCAL = -52; // paper-local Y of the highest pitch (B4).
+const GRAPH_BOTTOM_LOCAL = 30; // paper-local Y of the lowest pitch (D4).
+const GRAPH_AXIS_LOCAL = 52; // the time axis, just below the lowest pitch.
+const GRAPH_STEP_MIN = -1;
+const GRAPH_STEP_MAX = 4;
+// Practice scroll speed (paper-local px per ms) and how long a played note
+// lingers before it scrolls off the left edge and fades out.
+const PRACTICE_SCROLL_PX_PER_MS = 0.075;
+const PRACTICE_TRAIL_MS =
+  (NOTE_RIGHT_LOCAL - NOTE_LEFT_LOCAL + 24) / PRACTICE_SCROLL_PX_PER_MS;
+
 // Window in the left margin — the dusk sky, and the source of the finale flood.
 const WINDOW = { x: 14, y: 52, w: 66, h: 150 } as const;
 const WINDOW_LIGHT = { x: WINDOW.x + WINDOW.w / 2, y: WINDOW.y + WINDOW.h * 0.62 };
@@ -124,7 +154,19 @@ function mixHex(a: number, b: number, t: number): number {
 
 export class ViolinScene extends Phaser.Scene {
   private readonly callbacks: ViolinSceneCallbacks;
+  private readonly modes: ViolinModes;
   private modelState: ViolinState = createViolinState();
+
+  // Mirror of the mode flags as the scene last saw them, so it can react to a
+  // change (enter/exit practice, swap the visualization) exactly once.
+  private prevPractice = false;
+  private prevGraphView = false;
+  // Freely-played notes for the practice-mode scrolling graph, timestamped on a
+  // clamped clock so a stalled frame can't teleport them off the graph.
+  private practiceHits: PracticeHit[] = [];
+  private practiceClock = 0;
+  // Gentle amber pulse when a forgiven slip is being recovered (mistakes-allowed).
+  private recoverFlash = 0;
 
   private roomBase!: Phaser.GameObjects.Graphics; // baked once, warm dusk room
   private windowFallback?: Phaser.GameObjects.Graphics; // vector dusk window, hidden if backdrop art loads
@@ -132,8 +174,10 @@ export class ViolinScene extends Phaser.Scene {
   private roomLight!: Phaser.GameObjects.Graphics; // per-frame dim / warmth / vignette
   private beamFx!: Phaser.GameObjects.Graphics; // additive finale flood
   private sheet!: Phaser.GameObjects.Container; // tilted paper + staff + notes
-  private staff!: Phaser.GameObjects.Graphics; // (child of sheet) live note layer
+  private staff!: Phaser.GameObjects.Graphics; // (child of sheet) live note/graph layer
+  private staffRuling!: Phaser.GameObjects.Graphics; // static 5-line ruling + bars (staff view only)
   private clefFallback?: Phaser.GameObjects.Graphics; // vector clef, hidden if art loads
+  private clefArt?: Phaser.GameObjects.Image; // drop-in clef image, when present
   private legendGfx!: Phaser.GameObjects.Graphics;
   private titleText!: Phaser.GameObjects.Text;
   private helperText!: Phaser.GameObjects.Text;
@@ -163,9 +207,13 @@ export class ViolinScene extends Phaser.Scene {
   private emberLevels: number[] = [];
   private litShown = 0;
 
-  constructor(callbacks: ViolinSceneCallbacks = DEFAULT_CALLBACKS) {
+  constructor(
+    callbacks: ViolinSceneCallbacks = DEFAULT_CALLBACKS,
+    modes: ViolinModes = DEFAULT_MODES,
+  ) {
     super('ViolinScene');
     this.callbacks = callbacks;
+    this.modes = modes;
   }
 
   preload(): void {
@@ -270,13 +318,25 @@ export class ViolinScene extends Phaser.Scene {
       return;
     }
 
+    // React to any mode/setting change the DOM cluster made since last frame.
+    this.syncModes();
+
     // Drive the model from real elapsed wall-clock time, not Phaser's smoothed
     // per-frame delta — so playback tempo is right even when the render loop is
     // running slow (e.g. a heavy scene drawing behind the modal). Clamped so a
     // resumed background tab can't jump the model forward.
     const modelDelta = Math.min(MAX_MODEL_STEP_MS, this.game.loop.rawDelta);
+    // Monotonic clamped clock for the practice scroll (same guard as the model).
+    this.practiceClock += modelDelta;
 
-    if (!this.isFinalizing) {
+    const practice = this.modes.practice;
+    const graphView = this.modes.advanced || practice;
+
+    if (practice) {
+      // Free play: no song, no scoring, no progression — just sound + draw the
+      // keys as they are pressed. The model is frozen.
+      this.handlePracticeInput();
+    } else if (!this.isFinalizing) {
       this.handleKeyPresses();
       const before = this.modelState;
       const after = advanceViolin(before, modelDelta);
@@ -287,27 +347,108 @@ export class ViolinScene extends Phaser.Scene {
     // Ease transient effects.
     this.glowStrength = Math.max(0, this.glowStrength - modelDelta / 320);
     this.wrongFlash = Math.max(0, this.wrongFlash - modelDelta / 260);
+    this.recoverFlash = Math.max(0, this.recoverFlash - modelDelta / 300);
     for (let i = 0; i < this.emberLevels.length; i += 1) {
       this.emberLevels[i] = Math.max(0, this.emberLevels[i] - modelDelta / 1100);
     }
-    if (this.finaleStarted) {
+    if (this.finaleStarted && !practice) {
       this.goldenPour = Math.min(1, this.goldenPour + modelDelta / 2400);
     }
-    // Ease the room's focus toward the current phase's target.
-    const focusTarget = this.isFinalizing
-      ? 0
-      : this.modelState.phase === 'echo'
-        ? 0.4
-        : this.modelState.phase === 'finale'
-          ? 0
-          : 1;
+    // Ease the room's focus toward the current phase's target. Practice keeps the
+    // page bright and centred (it IS the whole activity there).
+    const focusTarget = practice
+      ? 1
+      : this.isFinalizing
+        ? 0
+        : this.modelState.phase === 'echo'
+          ? 0.4
+          : this.modelState.phase === 'finale'
+            ? 0
+            : 1;
     this.sheetFocus += (focusTarget - this.sheetFocus) * Math.min(1, modelDelta / 240);
 
     this.drawRoomLight();
     this.updateHud();
-    this.drawStaff(time);
+    if (graphView) {
+      this.drawGraph(time);
+    } else {
+      this.drawStaff(time);
+    }
     this.updateLegend(time);
     this.updateObservability();
+  }
+
+  // ------------------------------------------------------------------
+  // Mode cluster reactions (advanced graph / practice / mistakes-allowed)
+  // ------------------------------------------------------------------
+
+  private syncModes(): void {
+    const practice = this.modes.practice;
+    if (practice !== this.prevPractice) {
+      // Entering OR leaving practice restarts the song from the top — the
+      // simplest sensible reset (per spec).
+      this.resetSong();
+      this.practiceHits = [];
+      this.prevPractice = practice;
+    }
+    const graphView = this.modes.advanced || practice;
+    if (graphView !== this.prevGraphView) {
+      this.applyViewMode(graphView);
+      this.prevGraphView = graphView;
+    }
+  }
+
+  // Re-initialise the song + all transient choreography to a fresh start. Used
+  // when toggling practice on/off. Leaves finalize/completion latches alone.
+  private resetSong(): void {
+    this.modelState = createViolinState();
+    this.prevLitCount = 0;
+    this.litShown = 0;
+    this.emberLevels = [];
+    this.warmStage = 0;
+    this.glowStrength = 0;
+    this.wrongFlash = 0;
+    this.recoverFlash = 0;
+    this.goldenPour = 0;
+    this.finaleStarted = false;
+    this.sheetFocus = 1;
+  }
+
+  // Swap the sheet between the notation staff and the pitch-over-time graph.
+  // The graph drops the ruled lines, the clef and every note letter — pitch is
+  // read as height. The live layer (this.staff) is redrawn per-frame either way.
+  private applyViewMode(graph: boolean): void {
+    this.staffRuling?.setVisible(!graph);
+    this.clefArt?.setVisible(!graph);
+    this.clefFallback?.setVisible(!graph && !this.clefArt);
+    if (graph) {
+      this.noteKeyLabels.forEach((label) => label.setVisible(false));
+    }
+  }
+
+  private graphY(step: number): number {
+    const t = (step - GRAPH_STEP_MIN) / (GRAPH_STEP_MAX - GRAPH_STEP_MIN);
+    return GRAPH_BOTTOM_LOCAL + t * (GRAPH_TOP_LOCAL - GRAPH_BOTTOM_LOCAL);
+  }
+
+  private handlePracticeInput(): void {
+    if (!this.input.keyboard) {
+      return;
+    }
+    for (const [keyName, key] of this.noteKeys) {
+      if (Phaser.Input.Keyboard.JustDown(key)) {
+        const pitch = getPitchByKey(keyName);
+        if (pitch) {
+          playViolinNote(pitch.frequency, 640);
+          this.glowStrength = 1;
+          // Timestamp on the clamped practice clock so the scroll math matches.
+          this.practiceHits.push({ step: pitch.staffStep, t: this.practiceClock });
+          if (this.practiceHits.length > 240) {
+            this.practiceHits.shift();
+          }
+        }
+      }
+    }
   }
 
   // Mirrors the scene's model state onto the panel DOM so smoke tests can wait on
@@ -369,7 +510,7 @@ export class ViolinScene extends Phaser.Scene {
   private resolvePress(keyName: string): void {
     const before = this.modelState;
     const echoedIndex = before.echoIndex;
-    const after = pressViolinKey(before, keyName);
+    const after = pressViolinKey(before, keyName, this.modes.mistakesAllowed);
     this.modelState = after;
 
     if (after.lastResult === 'ring') {
@@ -382,7 +523,13 @@ export class ViolinScene extends Phaser.Scene {
       this.glowStrength = 1;
     } else if (after.lastResult === 'waver') {
       playSfx('sfx-violin-waver');
-      this.wrongFlash = 1;
+      // A forgiven slip (mistakes-allowed) keeps the phrase — a gentle amber
+      // pulse and a wait for the right note. A real miss flushes the page red.
+      if (after.recovering && after.phase === 'echo') {
+        this.recoverFlash = 1;
+      } else {
+        this.wrongFlash = 1;
+      }
     }
 
     this.reactToTransitions(before, after);
@@ -849,9 +996,12 @@ export class ViolinScene extends Phaser.Scene {
     this.sheet.add(paper);
 
     // Static staff ruling + time-signature + heading, drawn once into the sheet.
+    // Hidden in the graph (advanced/practice) view — pitch is read as height,
+    // not from ruled lines.
     const ruling = this.add.graphics();
     this.drawStaffRuling(ruling);
     this.sheet.add(ruling);
+    this.staffRuling = ruling;
 
     // The treble clef lives in its own layer so a drop-in art asset can replace
     // it. Draw the vector fallback now; maybeLoadClef swaps in the PNG if present.
@@ -899,7 +1049,10 @@ export class ViolinScene extends Phaser.Scene {
     if (clef.height > 0) {
       clef.setScale(CLEF_DISPLAY_HEIGHT / clef.height);
     }
+    // The graph view has no clef; keep it hidden if we swapped in while there.
+    clef.setVisible(!(this.modes.advanced || this.modes.practice));
     this.sheet.add(clef);
+    this.clefArt = clef;
   }
 
   private staffLineLocalY(lineIndex: number): number {
@@ -931,20 +1084,6 @@ export class ViolinScene extends Phaser.Scene {
     g.lineBetween(STAFF_RIGHT_LOCAL - 6, barTop, STAFF_RIGHT_LOCAL - 6, barBottom);
     g.lineStyle(3, INK, 0.7);
     g.lineBetween(STAFF_RIGHT_LOCAL - 1.5, barTop, STAFF_RIGHT_LOCAL - 1.5, barBottom);
-
-    // A soft tempo word in warm ink.
-
-    const tempo = this.add
-      .text(0, -SHEET_HEIGHT / 2 + 18, 'dolce — for you', {
-        color: '#8a6a3e',
-        fontFamily: 'Georgia, "Times New Roman", serif',
-        fontSize: '12px',
-        fontStyle: 'italic',
-        resolution: RENDER_SCALE,
-      })
-      .setOrigin(0.5, 0.5)
-      .setAlpha(0.7);
-    this.sheet.add(tempo);
   }
 
   // Hand-drawn treble-clef flourish (a spiral-ish stroke + vertical stem), the
@@ -1057,21 +1196,202 @@ export class ViolinScene extends Phaser.Scene {
 
     this.updateNoteLabels(phrase, marks, lit, echoing);
 
-    // A gentle waver wash on a wrong note: the whole page flushes softly warm-red
-    // for a beat (the model has already flipped back to replay, so this is keyed
-    // on the fading flash rather than the — now cleared — expected note).
+    this.drawSheetOverlays(g);
+  }
+
+  // Shared page-edge feedback washes, drawn on top of either the staff or the
+  // graph: a soft warm-red flush on a real miss, a gentler amber pulse while a
+  // forgiven slip waits to be recovered, and the fresh-ring glow on a landed note.
+  private drawSheetOverlays(g: Phaser.GameObjects.Graphics): void {
+    const l = -SHEET_WIDTH / 2;
+    const t = -SHEET_HEIGHT / 2;
+
     if (this.wrongFlash > 0) {
       g.fillStyle(0xc9603e, 0.16 * this.wrongFlash);
-      g.fillRoundedRect(-SHEET_WIDTH / 2, -SHEET_HEIGHT / 2, SHEET_WIDTH, SHEET_HEIGHT, 12);
+      g.fillRoundedRect(l, t, SHEET_WIDTH, SHEET_HEIGHT, 12);
       g.lineStyle(3, 0xd06a4a, 0.5 * this.wrongFlash);
-      g.strokeRoundedRect(-SHEET_WIDTH / 2, -SHEET_HEIGHT / 2, SHEET_WIDTH, SHEET_HEIGHT, 12);
+      g.strokeRoundedRect(l, t, SHEET_WIDTH, SHEET_HEIGHT, 12);
     }
 
-    // Fresh-ring glow tracing the page edge.
+    if (this.recoverFlash > 0) {
+      g.fillStyle(0xe0a94a, 0.08 * this.recoverFlash);
+      g.fillRoundedRect(l, t, SHEET_WIDTH, SHEET_HEIGHT, 12);
+      g.lineStyle(2.5, 0xdca24a, 0.45 * this.recoverFlash);
+      g.strokeRoundedRect(l, t, SHEET_WIDTH, SHEET_HEIGHT, 12);
+    }
+
     if (this.glowStrength > 0) {
       g.lineStyle(3, 0xffedbe, 0.35 * this.glowStrength);
-      g.strokeRoundedRect(-SHEET_WIDTH / 2, -SHEET_HEIGHT / 2, SHEET_WIDTH, SHEET_HEIGHT, 12);
+      g.strokeRoundedRect(l, t, SHEET_WIDTH, SHEET_HEIGHT, 12);
     }
+  }
+
+  // ==================================================================
+  // The "sound graph" — advanced + practice views. Pitch is read as HEIGHT on
+  // the parchment (higher note = higher mark); a faint time axis runs along the
+  // bottom. No staff lines, no clef, no note letters — that IS the challenge.
+  // ==================================================================
+
+  private drawGraph(time: number): void {
+    const g = this.staff;
+    g.clear();
+    if (this.modes.practice) {
+      this.drawPracticeGraph(g);
+    } else {
+      this.drawSongGraph(g, time);
+    }
+    this.drawSheetOverlays(g);
+  }
+
+  private diamondPoints(x: number, y: number, r: number): Phaser.Geom.Point[] {
+    return [
+      new Phaser.Geom.Point(x, y - r),
+      new Phaser.Geom.Point(x + r, y),
+      new Phaser.Geom.Point(x, y + r),
+      new Phaser.Geom.Point(x - r, y),
+    ];
+  }
+
+  private fillDiamond(g: Phaser.GameObjects.Graphics, x: number, y: number, r: number): void {
+    g.fillPoints(this.diamondPoints(x, y, r), true);
+  }
+
+  // A faint time axis + end caps, shared by both graph views.
+  private drawGraphAxis(g: Phaser.GameObjects.Graphics): void {
+    g.lineStyle(1.4, INK, 0.28);
+    g.lineBetween(
+      NOTE_LEFT_LOCAL - 10,
+      GRAPH_AXIS_LOCAL,
+      NOTE_RIGHT_LOCAL + 10,
+      GRAPH_AXIS_LOCAL,
+    );
+    g.lineStyle(1.2, INK, 0.22);
+    g.lineBetween(NOTE_LEFT_LOCAL - 10, GRAPH_AXIS_LOCAL - 4, NOTE_LEFT_LOCAL - 10, GRAPH_AXIS_LOCAL + 4);
+    g.lineBetween(NOTE_RIGHT_LOCAL + 10, GRAPH_AXIS_LOCAL - 4, NOTE_RIGHT_LOCAL + 10, GRAPH_AXIS_LOCAL + 4);
+  }
+
+  private drawGraphMark(
+    g: Phaser.GameObjects.Graphics,
+    x: number,
+    y: number,
+    time: number,
+    seed: number,
+    isLit: boolean,
+    isExpected: boolean,
+    recovering: boolean,
+  ): void {
+    if (isLit) {
+      const pulse = 0.5 + Math.sin(time / 230 + seed) * 0.18;
+      g.fillStyle(NOTE_HALO, 0.12);
+      g.fillCircle(x, y, 16);
+      g.fillStyle(NOTE_GLOW, 0.22 + pulse * 0.14);
+      g.fillCircle(x, y, 9);
+      g.fillStyle(NOTE_LIT, 1);
+      this.fillDiamond(g, x, y, 7);
+      g.lineStyle(1.4, 0xfff0c6, 0.9);
+      g.strokePoints(this.diamondPoints(x, y, 7), true, true);
+      return;
+    }
+
+    const col = isExpected ? mixHex(0xc98a2f, NOTE_GLOW, 0.4) : INK;
+    g.fillStyle(col, isExpected ? 0.85 : 0.5);
+    this.fillDiamond(g, x, y, 6);
+    if (isExpected) {
+      const ring = 11 + Math.sin(time / 200) * 2.4;
+      const breathe = 0.75 + Math.sin(time / 260) * 0.25;
+      const ringCol = recovering ? 0xe0a94a : mixHex(0xc98a2f, NOTE_GLOW, 0.5);
+      g.lineStyle(2, ringCol, 0.85 * breathe);
+      g.strokeCircle(x, y, ring);
+    }
+  }
+
+  private drawSongGraph(g: Phaser.GameObjects.Graphics, time: number): void {
+    const phrase = getPhrase(this.modelState);
+    if (!phrase) {
+      return;
+    }
+    const count = phrase.notes.length;
+    const span = NOTE_RIGHT_LOCAL - NOTE_LEFT_LOCAL;
+    const lit = litNoteCount(this.modelState);
+    const echoing = this.modelState.phase === 'echo';
+    const recovering = this.modelState.recovering;
+    const expectedIdx = this.modelState.echoIndex;
+
+    const pts = phrase.notes.map((note, i) => {
+      const pitch = getPitch(note.pitchId);
+      const x = NOTE_LEFT_LOCAL + (span * (i + 0.5)) / count;
+      return { x, y: this.graphY(pitch ? pitch.staffStep : 0) };
+    });
+
+    this.drawGraphAxis(g);
+
+    // Drop lines from the axis to each point — reads as a bar/graph reading.
+    pts.forEach((p) => {
+      g.lineStyle(1, INK, 0.12);
+      g.lineBetween(p.x, GRAPH_AXIS_LOCAL, p.x, p.y + 4);
+    });
+
+    // The contour connecting the notes; the already-played run glows gold.
+    for (let i = 0; i < count - 1; i += 1) {
+      const a = pts[i];
+      const b = pts[i + 1];
+      g.lineStyle(2, INK, 0.4);
+      g.lineBetween(a.x, a.y, b.x, b.y);
+      if (i + 1 < lit) {
+        g.lineStyle(2.4, mixHex(NOTE_LIT, 0xffe6a6, 0.3), 0.9);
+        g.lineBetween(a.x, a.y, b.x, b.y);
+      }
+    }
+
+    pts.forEach((p, i) => {
+      const isLit = i < lit;
+      const isExpected = echoing && i === expectedIdx;
+      this.drawGraphMark(g, p.x, p.y, time, i, isLit, isExpected, recovering);
+    });
+  }
+
+  private drawPracticeGraph(g: Phaser.GameObjects.Graphics): void {
+    // Scroll is driven by the CLAMPED practice clock, not raw loop time, so a
+    // stalled / backgrounded frame can't teleport the played notes off the left
+    // edge (mirrors the model's MAX_MODEL_STEP_MS guard).
+    const now = this.practiceClock;
+    // Age off notes that have scrolled past the left edge.
+    const cutoff = now - PRACTICE_TRAIL_MS;
+    while (this.practiceHits.length > 0 && this.practiceHits[0].t < cutoff) {
+      this.practiceHits.shift();
+    }
+
+    this.drawGraphAxis(g);
+
+    const nowX = NOTE_RIGHT_LOCAL;
+    // The "now" playhead the freshly played notes emerge from, at the right edge.
+    g.lineStyle(1.4, mixHex(INK, NOTE_GLOW, 0.4), 0.5);
+    g.lineBetween(nowX, GRAPH_TOP_LOCAL - 6, nowX, GRAPH_AXIS_LOCAL);
+
+    const pts = this.practiceHits.map((hit) => ({
+      x: nowX - (now - hit.t) * PRACTICE_SCROLL_PX_PER_MS,
+      y: this.graphY(hit.step),
+      age: now - hit.t,
+    }));
+
+    for (let i = 0; i < pts.length - 1; i += 1) {
+      const a = pts[i];
+      const b = pts[i + 1];
+      const alpha = Math.max(0, 1 - b.age / PRACTICE_TRAIL_MS);
+      g.lineStyle(2.2, mixHex(NOTE_LIT, 0xffe6a6, 0.25), 0.7 * alpha);
+      g.lineBetween(a.x, a.y, b.x, b.y);
+    }
+
+    pts.forEach((p) => {
+      const alpha = Math.max(0, 1 - p.age / PRACTICE_TRAIL_MS);
+      const fresh = p.age < 180;
+      g.fillStyle(NOTE_HALO, 0.12 * alpha);
+      g.fillCircle(p.x, p.y, fresh ? 15 : 12);
+      g.fillStyle(NOTE_GLOW, 0.4 * alpha);
+      g.fillCircle(p.x, p.y, fresh ? 6 : 4.5);
+      g.fillStyle(NOTE_LIT, alpha);
+      this.fillDiamond(g, p.x, p.y, fresh ? 6.5 : 5);
+    });
   }
 
   // A small pool of key-letter labels, one shown under each staff mark so the
@@ -1221,8 +1541,10 @@ export class ViolinScene extends Phaser.Scene {
     const capW = 46;
     const capH = 34;
     const capY = ViolinScene.LEGEND_CAP_Y;
-    const expected = expectedPitchId(this.modelState);
-    const echoing = this.modelState.phase === 'echo';
+    // In practice there is no expected note — the caps just react to real key
+    // presses (the held-key depress below), never a song cursor.
+    const expected = this.modes.practice ? undefined : expectedPitchId(this.modelState);
+    const echoing = !this.modes.practice && this.modelState.phase === 'echo';
 
     VIOLIN_PITCHES.forEach((pitch, index) => {
       const cx = this.legendCapX(index);
@@ -1268,6 +1590,12 @@ export class ViolinScene extends Phaser.Scene {
       return;
     }
 
+    if (this.modes.practice) {
+      this.titleText.setText('practice — play freely');
+      this.helperText.setText('Press any key to sound a note · turn off Practice to return');
+      return;
+    }
+
     const phase = this.modelState.phase;
     if (phase === 'playback' || phase === 'handoff') {
       // Handoff flows straight into the next listen, so it wears the same prompt
@@ -1276,7 +1604,11 @@ export class ViolinScene extends Phaser.Scene {
       this.helperText.setText('The piece plays itself through.');
     } else if (phase === 'echo') {
       this.titleText.setText('now you — play it back');
-      this.helperText.setText('A wrong note just waits, then plays again.');
+      this.helperText.setText(
+        this.modes.mistakesAllowed
+          ? 'One slip is forgiven — play the right note to carry on.'
+          : 'A wrong note just waits, then plays again.',
+      );
     } else if (phase === 'finale') {
       this.titleText.setText('');
       this.helperText.setText('');

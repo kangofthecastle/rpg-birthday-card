@@ -43,6 +43,13 @@ export interface HomeHostSprite {
 }
 
 export interface HomeHostNpc {
+  /**
+   * Stable id for this resident, used as the key under a room layout's optional
+   * `npcs` override section (roomLayouts/<id>.json) so a dressEdit Save can pin a
+   * per-character position. Distinct from the location id (the Record key) since
+   * the JSON names the character, not the room.
+   */
+  readonly id: string;
   readonly sprite: HomeHostSprite;
   /** Feet position in room map (pre-projection) coordinates. */
   readonly mapX: number;
@@ -61,6 +68,24 @@ export interface HomeHostNpc {
  *    he reads as standing at his PC rather than hidden behind a monitor.
  */
 export const HOME_HOST_NPCS: Record<string, HomeHostNpc> = {
-  'friend-a': { sprite: FRIEND_ONE_SPRITE, mapX: 1050, mapY: 582 },
-  'friend-b': { sprite: FRIEND_TWO_SPRITE, mapX: 452, mapY: 430 },
+  'friend-a': { id: 'friendone', sprite: FRIEND_ONE_SPRITE, mapX: 1050, mapY: 582 },
+  'friend-b': { id: 'friendtwo', sprite: FRIEND_TWO_SPRITE, mapX: 452, mapY: 430 },
 };
+
+/**
+ * Resolve a home NPC's feet position: an authored dressEdit override (from the
+ * room layout's `npcs` section, keyed by NPC id) wins over the TS default, and
+ * an absent/partial override falls back to the TS default — the same
+ * JSON-overrides-TS rule the room props follow. Pure so LocationScene and tests
+ * share one source of truth.
+ */
+export function resolveHomeNpcPosition(
+  npc: HomeHostNpc,
+  overrides: Readonly<Record<string, { readonly x: number; readonly y: number }>>,
+): { mapX: number; mapY: number } {
+  const override = overrides[npc.id];
+  return {
+    mapX: override?.x ?? npc.mapX,
+    mapY: override?.y ?? npc.mapY,
+  };
+}

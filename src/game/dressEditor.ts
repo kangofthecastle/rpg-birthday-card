@@ -83,6 +83,30 @@ export interface OutdoorEditorHooks {
 
 type EditableOutdoorPlacement = Writable<OutdoorPropPlacement>;
 
+// --- Home NPCs -----------------------------------------------------------------
+// A room's resident home NPC (____ in friend-a, ____ in friend-b) is a plain
+// decorative billboard placed by LocationScene. In props mode the editor lets the
+// author drag it like a prop — position only: facing, flip and idle animation are
+// untouched. On Save the NPC's map position is written into the room layout's
+// optional `npcs` section, keyed by the NPC's stable id.
+
+/** A home NPC the editor can reposition. `sprite` is the live scene sprite; the
+ *  editor edits a clone of `mapX`/`mapY` and re-projects the sprite as it drags. */
+export interface NpcEditHandle {
+  readonly id: string;
+  readonly sprite: Phaser.GameObjects.Sprite;
+  readonly mapX: number;
+  readonly mapY: number;
+}
+
+// The editor's working NPC entry: its editable feet position + the live sprite.
+interface NpcEntry {
+  readonly id: string;
+  readonly sprite: Phaser.GameObjects.Sprite;
+  mapX: number;
+  mapY: number;
+}
+
 // Dev middleware (vite.config.ts) that writes the posted layout to
 // src/content/roomLayouts/<locationId>.json. The glob in roomDressing.ts picks
 // the file up, so the HMR reload that follows the write shows the saved state.
@@ -107,6 +131,11 @@ interface DressEditorOptions {
   readonly dressing?: RoomDressing;
   readonly propHandles: readonly PropHandle[];
   readonly propDepthOverrides: Readonly<Record<string, number>>;
+  /**
+   * The room's home NPC billboards (0 or 1 in practice), draggable in props mode.
+   * Room mode only; omitted/empty in outdoor mode.
+   */
+  readonly npcHandles?: readonly NpcEditHandle[];
   /** Present when editing an outdoor area's decoration instead of a room. */
   readonly outdoor?: OutdoorEditorHooks;
   /**
@@ -223,6 +252,10 @@ class DressEditor {
   private readonly projection: Projection;
   private readonly graphics: Phaser.GameObjects.Graphics;
   private readonly entries: PropEntry[];
+  // Home NPCs draggable in props mode (position only). Selected via `selectedNpc`
+  // (mutually exclusive with a prop `selected`).
+  private readonly npcEntries: NpcEntry[];
+  private selectedNpc = -1;
 
   private selected = -1;
   private dragging = false;
@@ -302,6 +335,15 @@ class DressEditor {
       }));
     }
 
+    // Home NPCs are room-mode only; clone their feet position so the working edit
+    // never mutates the caller's handle until Save. The sprite itself is shared.
+    this.npcEntries = (options.npcHandles ?? []).map((handle) => ({
+      id: handle.id,
+      sprite: handle.sprite,
+      mapX: handle.mapX,
+      mapY: handle.mapY,
+    }));
+
     this.graphics = scene.add.graphics().setDepth(OVERLAY_DEPTH);
 
     // Detach camera follow so our panning isn't yanked back to the frozen
@@ -348,16 +390,38 @@ class DressEditor {
       return;
     }
 
-    const hit = this.hitProp(pointer.worldX, pointer.worldY);
-    if (hit < 0) {
+    // Props and home NPCs share one billboard depth space, so a click selects
+    // whichever is top-most (highest depth) under the cursor — the same
+    // top-most-wins rule props already use among themselves. NPCs win ties so a
+    // resident standing at a prop's own anchor stays grabbable.
+    const propHit = this.hitProp(pointer.worldX, pointer.worldY);
+    const npcHit = this.hitNpc(pointer.worldX, pointer.worldY);
+    const propDepth = propHit >= 0 ? this.entries[propHit].image.depth : -Infinity;
+    const npcDepth = npcHit >= 0 ? this.npcEntries[npcHit].sprite.depth : -Infinity;
+
+    if (npcHit >= 0 && npcDepth >= propDepth) {
+      this.selectedNpc = npcHit;
       this.selected = -1;
+      const map = this.projection.unproject(pointer.worldX, pointer.worldY);
+      const npc = this.npcEntries[npcHit];
+      this.grabDX = npc.mapX - map.x;
+      this.grabDY = npc.mapY - map.y;
+      this.dragging = true;
       this.updateReadout();
       return;
     }
 
-    this.selected = hit;
+    if (propHit < 0) {
+      this.selected = -1;
+      this.selectedNpc = -1;
+      this.updateReadout();
+      return;
+    }
+
+    this.selected = propHit;
+    this.selectedNpc = -1;
     const map = this.projection.unproject(pointer.worldX, pointer.worldY);
-    const placement = this.entries[hit].placement;
+    const placement = this.entries[propHit].placement;
     // Grab offset so the prop doesn't jump its anchor to the cursor.
     this.grabDX = placement.mapX - map.x;
     this.grabDY = placement.mapY - map.y;
@@ -374,6 +438,15 @@ class DressEditor {
     }
     if (this.mode === 'interactables') {
       this.onRectPointerMove(pointer);
+      return;
+    }
+    if (this.dragging && pointer.isDown && this.selectedNpc >= 0) {
+      const map = this.projection.unproject(pointer.worldX, pointer.worldY);
+      const npc = this.npcEntries[this.selectedNpc];
+      npc.mapX = Math.round(map.x + this.grabDX);
+      npc.mapY = Math.round(map.y + this.grabDY);
+      this.repositionNpc(this.selectedNpc);
+      this.updateReadout();
       return;
     }
     if (!this.dragging || !pointer.isDown || this.selected < 0) {
@@ -428,6 +501,7 @@ class DressEditor {
     if (event.code === 'Escape') {
       this.selected = -1;
       this.selectedRect = -1;
+      this.selectedNpc = -1;
       this.updateReadout();
       return;
     }
@@ -449,6 +523,11 @@ class DressEditor {
     if (event.code === 'Delete' || event.code === 'Backspace') {
       event.preventDefault();
       this.removeSelected();
+      return;
+    }
+    // A selected NPC nudges by arrow keys (position only — no resize/delete).
+    if (this.selectedNpc >= 0) {
+      this.nudgeNpc(event);
       return;
     }
     if (this.selected < 0) {
@@ -610,6 +689,61 @@ class DressEditor {
     return best;
   }
 
+  // --- home NPCs -----------------------------------------------------------
+
+  // Top-most home NPC whose sprite bounds contain the point (props are hit-tested
+  // first; NPCs are only checked where no prop covers the cursor).
+  private hitNpc(worldX: number, worldY: number): number {
+    let best = -1;
+    let bestDepth = -Infinity;
+    for (let i = 0; i < this.npcEntries.length; i += 1) {
+      const sprite = this.npcEntries[i].sprite;
+      if (sprite.getBounds().contains(worldX, worldY) && sprite.depth >= bestDepth) {
+        best = i;
+        bestDepth = sprite.depth;
+      }
+    }
+    return best;
+  }
+
+  // Re-project a moved NPC's feet position to screen and re-depth it, mirroring
+  // how LocationScene originally placed it (setPosition + setDepth = projected Y).
+  // Facing, flip, scale and idle animation are all left untouched.
+  private repositionNpc(index: number): void {
+    const npc = this.npcEntries[index];
+    const point = this.projection.project(npc.mapX, npc.mapY);
+    npc.sprite.setPosition(point.x, point.y);
+    npc.sprite.setDepth(point.y);
+  }
+
+  // Arrow-key nudge for a selected NPC (Shift = 8 map px), position only.
+  private nudgeNpc(event: KeyboardEvent): void {
+    const step = event.shiftKey ? 8 : 1;
+    const npc = this.npcEntries[this.selectedNpc];
+    switch (event.code) {
+      case 'ArrowLeft':
+        event.preventDefault();
+        npc.mapX -= step;
+        break;
+      case 'ArrowRight':
+        event.preventDefault();
+        npc.mapX += step;
+        break;
+      case 'ArrowUp':
+        event.preventDefault();
+        npc.mapY -= step;
+        break;
+      case 'ArrowDown':
+        event.preventDefault();
+        npc.mapY += step;
+        break;
+      default:
+        return;
+    }
+    this.repositionNpc(this.selectedNpc);
+    this.updateReadout();
+  }
+
   // --- rendering -----------------------------------------------------------
 
   private redraw(): void {
@@ -617,6 +751,10 @@ class DressEditor {
     g.clear();
     if (this.mode === 'interactables') {
       this.drawInteractables(g);
+      return;
+    }
+    if (this.selectedNpc >= 0) {
+      this.drawNpcSelection(g);
       return;
     }
     if (this.selected < 0) {
@@ -654,6 +792,22 @@ class DressEditor {
     }
   }
 
+  // Outline the selected NPC's sprite and mark its projected feet point, matching
+  // the prop-selection visuals (green bounds + amber floor crosshair).
+  private drawNpcSelection(g: Phaser.GameObjects.Graphics): void {
+    const npc = this.npcEntries[this.selectedNpc];
+    const b = npc.sprite.getBounds();
+    g.lineStyle(2, 0x34d399, 1);
+    g.strokeRect(b.x, b.y, b.width, b.height);
+
+    const anchor = this.projection.project(npc.mapX, npc.mapY);
+    g.lineStyle(2, 0xf59e0b, 1);
+    g.lineBetween(anchor.x - 9, anchor.y, anchor.x + 9, anchor.y);
+    g.lineBetween(anchor.x, anchor.y - 9, anchor.x, anchor.y + 9);
+    g.fillStyle(0xf59e0b, 1);
+    g.fillCircle(anchor.x, anchor.y, 3);
+  }
+
   // --- interactables mode --------------------------------------------------
 
   // Toggle between the props layout editor and the interactable-hotspot editor.
@@ -665,6 +819,7 @@ class DressEditor {
         this.buildInteractables();
       }
       this.selected = -1;
+      this.selectedNpc = -1;
       this.setInteractableLabelsVisible(true);
     } else {
       this.selectedRect = -1;
@@ -1260,6 +1415,11 @@ class DressEditor {
         `${r.name}\nx ${r.x}  y ${r.y}\nw ${r.width}  h ${r.height}`;
       return;
     }
+    if (this.selectedNpc >= 0) {
+      const npc = this.npcEntries[this.selectedNpc];
+      this.readoutEl.textContent = `NPC ${npc.id}\nmapX ${npc.mapX}  mapY ${npc.mapY}`;
+      return;
+    }
     if (this.selected < 0) {
       this.readoutEl.textContent = '(no prop selected)';
       return;
@@ -1305,9 +1465,9 @@ class DressEditor {
         ? 'M switches back to props · drag a rect to move · drag a corner handle to resize · ' +
           'arrows nudge 1px (Shift 8) · wheel or +/- resize · pan: Space-drag or wheel with nothing selected · ' +
           'exits (blue) and spawns (pink) are read-only reference · Save writes the tmj · Esc deselects'
-        : 'Drag a prop to move · arrows nudge 1px (Shift 8) · wheel or +/- resize a selected prop · ' +
+        : 'Drag a prop (or home NPC) to move · arrows nudge 1px (Shift 8) · wheel or +/- resize a selected prop · ' +
           'pan: Space-drag or wheel with nothing selected · Del/Backspace removes · Cmd/Ctrl+Z undo · ' +
-          'M edits interactable rects · Save writes the layout · E exports · Esc deselects';
+          'M edits interactable rects · Save writes the layout (+ NPC positions) · E exports · Esc deselects';
   }
 
   private updateRemovedCount(): void {
@@ -1345,11 +1505,27 @@ class DressEditor {
   // `removed` tombstones stop singles-only props re-merging on the next reload.
   private buildLayoutFile(): RoomLayoutFile {
     const removed = this.tombstonedFrames();
+    const npcs = this.buildNpcsSection();
     return {
       locationId: this.options.locationId,
       props: this.entries.map((entry) => entry.placement as EditablePlacement),
       ...(removed.length > 0 ? { removed } : {}),
+      ...(npcs ? { npcs } : {}),
     };
+  }
+
+  // The `npcs` override section: each edited home NPC's feet position keyed by its
+  // id. Undefined when the room has no NPCs, so the field is omitted entirely
+  // (older saved layouts stay npcs-free until a room with an NPC is Saved).
+  private buildNpcsSection(): Record<string, { x: number; y: number }> | undefined {
+    if (this.npcEntries.length === 0) {
+      return undefined;
+    }
+    const npcs: Record<string, { x: number; y: number }> = {};
+    for (const npc of this.npcEntries) {
+      npcs[npc.id] = { x: npc.mapX, y: npc.mapY };
+    }
+    return npcs;
   }
 
   // The working layout as an OutdoorLayoutFile payload. Props are trimmed to the

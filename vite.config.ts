@@ -94,6 +94,7 @@ interface RoomLayoutPayload {
   locationId: string;
   props: Array<Record<string, unknown>>;
   removed?: string[];
+  npcs?: Record<string, { x: number; y: number }>;
 }
 
 function isValidLayoutPayload(value: unknown): value is RoomLayoutPayload {
@@ -113,6 +114,18 @@ function isValidLayoutPayload(value: unknown): value is RoomLayoutPayload {
   if (file.removed !== undefined) {
     if (!Array.isArray(file.removed) || file.removed.some((id) => typeof id !== 'string')) {
       return false;
+    }
+  }
+  // Optional home NPC position overrides, keyed by NPC id -> { x, y }. Written by
+  // the dressEdit editor when a room's resident is dragged.
+  if (file.npcs !== undefined) {
+    if (typeof file.npcs !== 'object' || file.npcs === null || Array.isArray(file.npcs)) {
+      return false;
+    }
+    for (const pos of Object.values(file.npcs as Record<string, unknown>)) {
+      if (typeof pos !== 'object' || pos === null) return false;
+      const p = pos as Record<string, unknown>;
+      if (typeof p.x !== 'number' || typeof p.y !== 'number') return false;
     }
   }
   return true;

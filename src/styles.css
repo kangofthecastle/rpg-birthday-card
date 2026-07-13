@@ -1165,17 +1165,14 @@ body {
   position: absolute;
   left: 50%;
   top: 12px;
-  width: 52px;
-  height: 66px;
-  margin: 0 0 0 -26px;
+  /* Square to match the keepsake art's 1:1 aspect — the raw art IS the card,
+     so no envelope chrome sits behind it. */
+  width: 58px;
+  height: 58px;
+  margin: 0 0 0 -29px;
   padding: 0;
-  border: 2px solid #6f3d27;
-  /* Warm aged-paper envelope, echoing the letter-modal's paper. */
-  background:
-    linear-gradient(#efd7a6, #e3c594 62%, #d8b884);
-  box-shadow:
-    2px 3px 0 rgba(67, 39, 27, 0.55),
-    inset 0 0 0 1px rgba(255, 244, 214, 0.5);
+  border: 0;
+  background: none;
   cursor: pointer;
   transform-origin: 50% 100%;
   /* Idle: a barely-there pile, nudged + tilted around the centre. */
@@ -1185,36 +1182,27 @@ body {
     rotate(calc((var(--i) - (var(--n) - 1) / 2) * 1.4deg));
   transition:
     transform 240ms cubic-bezier(0.22, 0.7, 0.28, 1),
-    box-shadow 180ms ease;
+    filter 180ms ease;
   z-index: calc(var(--i) + 1);
-}
-
-/* The envelope flap — a folded-paper triangle across the top. */
-.letter-stack__item::before {
-  content: '';
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 26px;
-  background: linear-gradient(#e9cf98, #dcbe86);
-  border-bottom: 1px solid rgba(111, 61, 39, 0.5);
-  clip-path: polygon(0 0, 100% 0, 50% 100%);
 }
 
 .letter-stack__face {
   position: absolute;
   inset: 0;
-  display: grid;
-  place-items: center;
+  display: block;
   z-index: 1;
 }
 
 .letter-stack__icon {
-  width: 30px;
-  height: 30px;
+  /* Fill the card at the art's own aspect (contain never stretches). The soft
+     drop-shadow hugs the art's alpha silhouette — the only treatment, for
+     legibility against the game behind; no border, frame, or envelope. */
+  width: 100%;
+  height: 100%;
   display: block;
   object-fit: contain;
   image-rendering: pixelated;
-  filter: drop-shadow(0 1px 0 rgba(67, 39, 27, 0.35));
+  filter: drop-shadow(1px 2px 1.5px rgba(30, 18, 10, 0.5));
 }
 
 /* Label stays in the DOM (accessible name + smoke-test text); the visible
@@ -1244,11 +1232,13 @@ body {
 .letter-stack__item:hover,
 .letter-stack__item:focus-visible {
   z-index: 30;
-  box-shadow:
-    3px 5px 0 rgba(67, 39, 27, 0.5),
-    0 8px 18px rgba(0, 0, 0, 0.32),
-    inset 0 0 0 1px rgba(255, 244, 214, 0.7);
   outline: none;
+}
+
+/* Deeper shadow on the lifted art — hugs the silhouette, no rectangular frame. */
+.letter-stack__item:hover .letter-stack__icon,
+.letter-stack__item:focus-visible .letter-stack__icon {
+  filter: drop-shadow(2px 5px 5px rgba(0, 0, 0, 0.45));
 }
 
 .letter-stack:hover .letter-stack__item:hover,
@@ -1260,8 +1250,12 @@ body {
     scale(1.07);
 }
 
+/* Keyboard focus ring only — an accessibility affordance, not decorative
+   chrome (the item itself is now frameless raw art). */
 .letter-stack__item:focus-visible {
-  border-color: #f1d79a;
+  outline: 2px solid #f1d79a;
+  outline-offset: 2px;
+  border-radius: 3px;
 }
 
 .collection-panel__caption {

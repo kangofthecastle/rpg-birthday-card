@@ -1,0 +1,26 @@
+{
+  "status": "partial-complete",
+  "character": "friendtwo",
+  "cellWidth": 256,
+  "cellHeight": 256,
+  "framesPerRow": 6,
+  "baselineY": 247,
+  "normalizedCharacterHeight": 216,
+  "completeRows": [
+    "idle-south",
+    "idle-west",
+    "idle-east",
+    "idle-north",
+    "walk-south"
+  ],
+  "intentionallyNotGenerated": [
+    "walk-west",
+    "walk-east",
+    "walk-north"
+  ],
+  "outputs": {
+    "frames": "frames/<row>/00.png through 05.png",
+    "rowStrips": "rows/<row>.png"
+  },
+  "fullAtlasReplacement": false
+}

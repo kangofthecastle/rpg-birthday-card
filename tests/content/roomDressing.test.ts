@@ -359,19 +359,31 @@ describe('home NPC position overrides', () => {
   });
 
   it('falls back to the TS default when no override is present', () => {
-    const friendtwo = HOME_HOST_NPCS['friend-b'];
-    expect(resolveHomeNpcPosition(friendtwo, {})).toEqual({
-      mapX: friendtwo.mapX,
-      mapY: friendtwo.mapY,
-    });
-    // The shipped layouts carry no npcs section yet, so the loader returns {} and
-    // every resident keeps its TS-default feet position.
+    // Purely synthetic override maps — never the live layout JSON, whose npcs
+    // section is author-owned (a dressEdit Save may add/change it at any time).
+    for (const npc of Object.values(HOME_HOST_NPCS)) {
+      const expected = { mapX: npc.mapX, mapY: npc.mapY };
+      // Empty override map: TS default.
+      expect(resolveHomeNpcPosition(npc, {})).toEqual(expected);
+      // Overrides present for OTHER ids only: still the TS default for this one.
+      expect(resolveHomeNpcPosition(npc, { [`not-${npc.id}`]: { x: 1, y: 2 } })).toEqual(expected);
+    }
+  });
+
+  it('resolves each live room layout consistently: override when present, TS default otherwise', () => {
+    // The live layouts are author-owned working files; whether a room's JSON
+    // carries an npcs override is not for tests to assume. Assert only the
+    // resolution INVARIANT against whatever state the layout is in: an existing
+    // override wins verbatim, an absent one leaves the TS default.
     for (const [locationId, npc] of Object.entries(HOME_HOST_NPCS)) {
       const overrides = getRoomLayoutNpcs(locationId);
-      expect(resolveHomeNpcPosition(npc, overrides)).toEqual({
-        mapX: npc.mapX,
-        mapY: npc.mapY,
-      });
+      const resolved = resolveHomeNpcPosition(npc, overrides);
+      const override = overrides[npc.id];
+      if (override) {
+        expect(resolved, `${locationId}/${npc.id}`).toEqual({ mapX: override.x, mapY: override.y });
+      } else {
+        expect(resolved, `${locationId}/${npc.id}`).toEqual({ mapX: npc.mapX, mapY: npc.mapY });
+      }
     }
   });
 });

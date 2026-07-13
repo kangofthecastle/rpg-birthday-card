@@ -1350,7 +1350,7 @@ body.minigame-active .collection-panel {
    nudged down (--art-lower) to sit level with them. */
 .letter-stack__item[data-keepsake-id='golden-hour-photo'] {
   --art-rotate: 18deg;
-  --art-lower: 10px;
+  --art-lower: 9px;
 }
 
 /* Label stays in the DOM (accessible name + smoke-test text); the visible

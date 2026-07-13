@@ -2411,7 +2411,11 @@ export class LocationScene extends Phaser.Scene {
     this.player.setDepth(10);
     this.player.setCollideWorldBounds(true);
     this.player.body?.setSize(36, 32);
-    this.player.body?.setOffset(30, 86);
+    // Center the 36x32 body on the character's feet point (player.x, player.y).
+    // The player-temp frame is 96x128 with origin 0.5/0.5, so the frame top-left
+    // sits at (x-48, y-64); offset (30, 48) puts the body center at
+    // (x-48+30+18, y-64+48+16) = (x, y) — symmetric blocking north and south.
+    this.player.body?.setOffset(30, 48);
     this.playerVisual = this.add
       .sprite(0, 0, RECIPIENT_SPRITE.key, RECIPIENT_IDLE_ROW_START_FRAME.down)
       .setOrigin(RECIPIENT_SPRITE.origin.x, RECIPIENT_SPRITE.origin.y)

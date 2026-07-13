@@ -48,7 +48,11 @@ import {
 // (its startDressEditor is loaded via dynamic import only under ?dressEdit=1).
 import type { NpcEditHandle, OutdoorEditHandle } from '../game/dressEditor';
 import { getCollisionZones, type CollisionZonesFile } from '../content/collisionZones';
-import { rasterizePolygonsToRects, type Polygon } from '../game/collisionGeometry';
+import {
+  combineOutdoorColliders,
+  rasterizePolygonsToRects,
+  type Polygon,
+} from '../game/collisionGeometry';
 import type {
   DialogueLine,
   LocationDefinition,
@@ -965,16 +969,21 @@ export class LocationScene extends Phaser.Scene {
       // dark void, since flat camera bounds are the exact map rect.
       this.cameras.main.setBackgroundColor(colorToHex(palette?.floorB ?? 0x7fa46b));
       this.createFlatGround(tilemap, palette);
-      this.propColliders = [...this.propColliders, ...this.renderOutdoorExteriors()];
-      this.propColliders = [...this.propColliders, ...this.renderOutdoorProps(tilemap)];
-      this.propColliders = [...this.propColliders, ...this.renderSignposts(tilemap)];
+      const scenery = [
+        ...this.renderOutdoorExteriors(),
+        ...this.renderOutdoorProps(tilemap),
+        ...this.renderSignposts(tilemap),
+      ];
+      // Hand-drawn polygon zones ADD to the scenery colliders outdoors (unlike
+      // interiors, where they replace footprint colliders).
+      this.propColliders = this.addOutdoorZoneColliders(scenery);
     } else {
       const palette = getOutdoorPalette(this.location.id);
       this.cameras.main.setBackgroundColor(
         palette ? colorToHex(palette.background) : '#17211b',
       );
       this.createDevBackdrop(tilemap, palette);
-      this.propColliders = [...this.propColliders, ...this.renderOutdoorExteriors()];
+      this.propColliders = this.addOutdoorZoneColliders(this.renderOutdoorExteriors());
     }
 
     const ground = tilemap.createLayer('Ground', [floorTileset, wallTileset], 0, 0);
@@ -1102,6 +1111,19 @@ export class LocationScene extends Phaser.Scene {
         }
       }
     }
+  }
+
+  // Outdoor collider assembly: appends any hand-drawn zone rects to the
+  // scenery-derived colliders (additive), leaving scenery untouched when there
+  // is no zones file. Interiors use rasterizeZones directly (replace semantics).
+  private addOutdoorZoneColliders(sceneryRects: PropColliderRect[]): PropColliderRect[] {
+    if (!this.zonesFile) {
+      return sceneryRects;
+    }
+    const polygons: Polygon[] = this.zonesFile.zones
+      .filter((zone) => zone.points.length >= 3)
+      .map((zone) => zone.points);
+    return combineOutdoorColliders(sceneryRects, polygons, LocationScene.ZONE_CELL_SIZE);
   }
 
   // Rasterises polygon collision zones into map-space strip rectangles.

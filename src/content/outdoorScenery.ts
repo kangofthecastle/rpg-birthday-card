@@ -216,7 +216,7 @@ export const PROP_KINDS: Readonly<Record<string, PropKind>> = {
   'lamp-post': { name: 'lamp-post', dir: 'outdoor', w: 112, h: 288, collider: { w: 34, h: 22 }, style: 'lamp' },
   mailbox: { name: 'mailbox', dir: 'outdoor', w: 96, h: 176, collider: { w: 44, h: 22 }, style: 'mailbox' },
   bench: { name: 'bench', dir: 'outdoor', w: 224, h: 144, collider: { w: 196, h: 30 }, style: 'bench' },
-  signpost: { name: 'signpost', dir: 'outdoor', w: 144, h: 224, collider: { w: 44, h: 22 }, style: 'signpost' },
+  'signpost-arrow': { name: 'signpost-arrow', dir: 'outdoor', w: 192, h: 224, collider: { w: 40, h: 20 }, style: 'signpost-arrow' },
   'clearing-lantern-post': { name: 'clearing-lantern-post', dir: 'clearing', w: 128, h: 320, collider: { w: 34, h: 22 }, style: 'lantern-post' },
   'clearing-lantern-string': { name: 'clearing-lantern-string', dir: 'clearing', w: 512, h: 160, overhead: true, style: 'lantern-string' },
   // Three colour variants of a single origami crane sitting on the water
@@ -350,10 +350,11 @@ export function outdoorPlacementId(name: string, occurrence: number): string {
   return `${name}#${occurrence}`;
 }
 
-/** The signpost is persisted in the same layout file as the props (so its
- * hand-placed position survives a reload), under this fixed id. It is rendered
- * separately by LocationScene.renderSignpost, not among the OUTDOOR_PROPS. */
-export const SIGNPOST_PLACEMENT_ID = 'signpost#0';
+/** The prop-kind name shared by every directional fingerpost. Its placements are
+ * persisted in the same layout file as the decoration props (so a hand-moved
+ * fingerpost survives a reload) under ids `signpost-arrow#0`, `#1`, … — but they
+ * are rendered separately by LocationScene.renderSignposts, not among OUTDOOR_PROPS. */
+export const SIGNPOST_PROP_NAME = 'signpost-arrow';
 
 /** Stamp deterministic ids onto a TS-declared placement list (see above). */
 export function withOutdoorIds(placements: readonly PropPlacement[]): PropPlacement[] {
@@ -424,14 +425,14 @@ export function getOutdoorLayoutRemoved(locationId: string): readonly string[] {
 
 /**
  * The decoration placements for an area: the TS fallback overridden by the
- * authored layout JSON (if present), id-stamped. The signpost is excluded — it
- * lives in the same layout but is rendered separately (see getOutdoorSignpost).
+ * authored layout JSON (if present), id-stamped. Fingerposts are excluded — they
+ * live in the same layout but are rendered separately (see getOutdoorSignposts).
  */
 export function getOutdoorProps(locationId: string): readonly PropPlacement[] {
   const base = withOutdoorIds(OUTDOOR_PROPS[locationId] ?? []);
   const layout = OUTDOOR_LAYOUTS_BY_LOCATION[locationId];
   const merged = layout ? applyOutdoorLayout(base, layout) : base;
-  return merged.filter((placement) => placement.name !== 'signpost');
+  return merged.filter((placement) => placement.name !== SIGNPOST_PROP_NAME);
 }
 
 /**
@@ -468,58 +469,89 @@ export function isValidOutdoorLayoutFile(value: unknown): value is OutdoorLayout
   return true;
 }
 
-// ── Signposts ───────────────────────────────────────────────────────────────
-// The visible signpost prop for each named area. The board is blank art; the
-// area name is rendered onto it in-game (SignpostPlacement.label). Anchored to
-// the same hotspot rect the "Read the signpost" dialogue interaction uses. Base
-// anchor is nudged to the roadside so the post never sits in the path lane.
+// ── Directional fingerposts ─────────────────────────────────────────────────
+// Flat, front-facing fingerposts: a straight-on post with ONE arrow-shaped board
+// pointing the way to a named area. The board is blank art; the destination name
+// is rendered onto its shaft in-game (SignpostPlacement.label). `flip` mirrors the
+// sprite so the arrow points LEFT (west) instead of its native RIGHT (east); the
+// caption is drawn separately and always stays upright/unflipped.
+//
+// They live only in Guildford (main-outside) now — the junction with ____'s
+// house — one pointing west to Kerrisdale, one east to Aldergrove. Both share the
+// single "main-signpost" dialogue rect (the "Arrows point every way" line reads as
+// the whole junction, so one interaction covers both signs). Anchors flank the
+// central junction below the east/west corridor lanes; fine-tune in dressEdit.
 export interface SignpostPlacement {
-  /** Interaction / hotspot id this signpost belongs to. */
+  /** Interaction / hotspot id this fingerpost's "read" dialogue belongs to. */
   readonly interactionId: string;
+  /** Persisted-layout id (`signpost-arrow#<n>`) so a hand-moved post survives reload. */
+  readonly id: string;
   /** Bottom-centre floor-contact anchor (feet), map px. */
   readonly mapX: number;
   readonly mapY: number;
-  /** Board caption drawn in-game. */
+  /** Caption drawn onto the arrow shaft in-game. */
   readonly label: string;
+  /** Mirror the sprite so the arrow points LEFT/west (native art points right/east). */
   readonly flip?: boolean;
   /** Per-placement display-scale multiplier (default 1); set via dressEdit. */
   readonly scale?: number;
 }
 
-export const SIGNPOSTS: Readonly<Record<string, SignpostPlacement>> = {
-  'main-outside': { interactionId: 'main-signpost', mapX: 628, mapY: 512, label: 'GUILDFORD', flip: true },
-  'friendtwo-yard': { interactionId: 'friendtwo-signpost', mapX: 690, mapY: 492, label: 'KERRISDALE' },
-  'friendone-yard': { interactionId: 'friendone-signpost', mapX: 334, mapY: 492, label: 'ALDERGROVE', flip: true },
+export const SIGNPOSTS: Readonly<Record<string, readonly SignpostPlacement[]>> = {
+  'main-outside': [
+    // Points WEST toward the west-edge road to Kerrisdale (____'s yard).
+    { interactionId: 'main-signpost', id: 'signpost-arrow#0', mapX: 496, mapY: 556, label: 'KERRISDALE', flip: true },
+    // Points EAST toward the east-edge road to Aldergrove (____'s yard).
+    { interactionId: 'main-signpost', id: 'signpost-arrow#1', mapX: 912, mapY: 556, label: 'ALDERGROVE' },
+  ],
 };
 
-export function getSignpost(locationId: string): SignpostPlacement | undefined {
-  return SIGNPOSTS[locationId];
+export function getSignposts(locationId: string): readonly SignpostPlacement[] {
+  return SIGNPOSTS[locationId] ?? [];
 }
 
 /**
- * The signpost placement for an area, with its position/flip/scale overridden by
- * the authored outdoor layout when the author has hand-moved it in dressEdit. The
- * interactionId and label always stay in TS. Used by LocationScene.renderSignpost
- * so the board renders where it was hand-placed (its dialogue rect is edited
- * separately in the editor's Interactables mode).
+ * The writable region of an arrow board — the rectangular SHAFT, excluding the
+ * triangular arrowhead — as a fraction of the sprite width. The in-game caption
+ * auto-fit measures the label against this (not the whole board), so text never
+ * rides onto the arrowhead. Both the drop-in art and the procedural fallback are
+ * authored so the shaft matches this width.
  */
-export function getOutdoorSignpost(locationId: string): SignpostPlacement | undefined {
-  const sign = SIGNPOSTS[locationId];
-  if (!sign) {
-    return undefined;
+export const SIGNPOST_ARROW_WRITABLE_FRACTION = 0.6;
+
+/**
+ * Horizontal centre of that shaft, as a fraction from the sprite's LEFT edge, for
+ * the native (unflipped) art whose arrow points right — the head sits to the
+ * right so the shaft's centre is left of the board's centre. Mirrored about 0.5
+ * when the sprite is flipped (arrow pointing left). The caption is positioned here
+ * so it sits centred on the shaft in either direction while staying upright.
+ */
+export const SIGNPOST_ARROW_SHAFT_CENTER_FRACTION = 0.44;
+
+/**
+ * The fingerpost placements for an area, each with its position/flip/scale
+ * overridden by the authored outdoor layout when the author has hand-moved it in
+ * dressEdit (matched by its stable `id`). The interactionId and label always stay
+ * in TS. Used by LocationScene.renderSignposts so a board renders where it was
+ * hand-placed (its dialogue rect is edited separately in Interactables mode).
+ */
+export function getOutdoorSignposts(locationId: string): SignpostPlacement[] {
+  const signs = SIGNPOSTS[locationId];
+  if (!signs) {
+    return [];
   }
   const layout = OUTDOOR_LAYOUTS_BY_LOCATION[locationId];
-  const override = layout?.props.find(
-    (prop) => prop.id === SIGNPOST_PLACEMENT_ID || prop.name === 'signpost',
-  );
-  if (!override) {
-    return sign;
-  }
-  return {
-    ...sign,
-    mapX: override.mapX,
-    mapY: override.mapY,
-    flip: override.flip ?? sign.flip,
-    scale: override.scale ?? sign.scale,
-  };
+  return signs.map((sign) => {
+    const override = layout?.props.find((prop) => prop.id === sign.id);
+    if (!override) {
+      return sign;
+    }
+    return {
+      ...sign,
+      mapX: override.mapX,
+      mapY: override.mapY,
+      flip: override.flip ?? sign.flip,
+      scale: override.scale ?? sign.scale,
+    };
+  });
 }

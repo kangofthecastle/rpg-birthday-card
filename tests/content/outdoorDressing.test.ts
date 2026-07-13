@@ -4,11 +4,11 @@ import {
   getOutdoorLayout,
   getOutdoorLayoutRemoved,
   getOutdoorProps,
-  getOutdoorSignpost,
-  getSignpost,
+  getOutdoorSignposts,
+  getSignposts,
   isValidOutdoorLayoutFile,
   outdoorPlacementId,
-  SIGNPOST_PLACEMENT_ID,
+  SIGNPOST_PROP_NAME,
   withOutdoorIds,
   type PropPlacement,
 } from '../../src/content/outdoorScenery';
@@ -119,43 +119,53 @@ describe('real area layout overrides', () => {
     }
   });
 
-  it('excludes the signpost from the decoration props (it renders separately)', () => {
+  it('excludes fingerposts from the decoration props (they render separately)', () => {
     for (const area of OUTDOOR_AREAS) {
-      expect(getOutdoorProps(area).some((p) => p.name === 'signpost'), area).toBe(false);
+      expect(getOutdoorProps(area).some((p) => p.name === SIGNPOST_PROP_NAME), area).toBe(false);
     }
   });
 });
 
-describe('signpost placement override', () => {
-  it('returns the TS signpost verbatim when no layout override exists', () => {
-    for (const area of ['main-outside', 'friendtwo-yard', 'friendone-yard'] as const) {
-      const base = getSignpost(area)!;
-      const resolved = getOutdoorSignpost(area)!;
-      // With no saved override the resolved signpost matches the TS definition.
-      if (!getOutdoorLayout(area)) {
-        expect(resolved.mapX, area).toBe(base.mapX);
-        expect(resolved.mapY, area).toBe(base.mapY);
-        expect(resolved.interactionId, area).toBe(base.interactionId);
-        expect(resolved.label, area).toBe(base.label);
-      }
-    }
+describe('directional fingerposts', () => {
+  it('gives Guildford two fingerposts (west→Kerrisdale, east→Aldergrove), yards none', () => {
+    const guildford = getSignposts('main-outside');
+    expect(guildford.map((s) => s.label)).toEqual(['KERRISDALE', 'ALDERGROVE']);
+    // The Kerrisdale sign points west (flipped); Aldergrove points east (native).
+    expect(guildford.find((s) => s.label === 'KERRISDALE')!.flip).toBe(true);
+    expect(guildford.find((s) => s.label === 'ALDERGROVE')!.flip).toBeFalsy();
+    // Both share the single main-signpost dialogue; ids are the persisted prop ids.
+    expect(guildford.every((s) => s.interactionId === 'main-signpost')).toBe(true);
+    expect(new Set(guildford.map((s) => s.id)).size).toBe(guildford.length);
+    // The yards no longer carry any signs.
+    expect(getSignposts('friendtwo-yard')).toEqual([]);
+    expect(getSignposts('friendone-yard')).toEqual([]);
   });
 
-  it('applies a saved signpost position override while keeping id/label from TS', () => {
-    // Simulate the merge a saved layout would drive: the signpost entry is keyed
-    // by SIGNPOST_PLACEMENT_ID and only carries position/flip/scale.
-    const sign = getSignpost('main-outside')!;
+  it('returns the TS fingerposts verbatim when no layout override exists', () => {
+    if (getOutdoorLayout('main-outside')) {
+      return; // A saved layout would legitimately move them; nothing to assert.
+    }
+    const base = getSignposts('main-outside');
+    const resolved = getOutdoorSignposts('main-outside');
+    expect(resolved.map((s) => ({ x: s.mapX, y: s.mapY, id: s.id, label: s.label }))).toEqual(
+      base.map((s) => ({ x: s.mapX, y: s.mapY, id: s.id, label: s.label })),
+    );
+  });
+
+  it('applies a saved fingerpost position override while keeping id/label from TS', () => {
+    // Simulate the merge a saved layout would drive: a fingerpost entry is keyed
+    // by its stable id and only carries position/flip/scale.
+    const [kerrisdale] = getSignposts('main-outside');
     const override: PropPlacement = {
-      id: SIGNPOST_PLACEMENT_ID,
-      name: 'signpost',
-      mapX: sign.mapX + 40,
-      mapY: sign.mapY + 12,
+      id: kerrisdale.id,
+      name: SIGNPOST_PROP_NAME,
+      mapX: kerrisdale.mapX + 40,
+      mapY: kerrisdale.mapY + 12,
       scale: 1.25,
     };
-    // The merge helper keeps the override entry as a saved prop.
     const merged = applyOutdoorLayout(withOutdoorIds([]), { props: [override], removed: [] });
-    const found = merged.find((p) => p.id === SIGNPOST_PLACEMENT_ID)!;
-    expect(found.mapX).toBe(sign.mapX + 40);
+    const found = merged.find((p) => p.id === kerrisdale.id)!;
+    expect(found.mapX).toBe(kerrisdale.mapX + 40);
     expect(found.scale).toBe(1.25);
   });
 });

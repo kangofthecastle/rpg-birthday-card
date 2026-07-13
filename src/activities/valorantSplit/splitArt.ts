@@ -33,6 +33,31 @@ export const ART_KEYS = {
   ui: 'split-art-ui',
 } as const;
 
+// Top-bar portrait tiles (Valorant scoreboard style). Each is an optional
+// drop-in 128x128 transparent PNG displayed at HUD_PORTRAIT_DISPLAY px; absent
+// by default, the scene draws a procedural head-and-shoulders silhouette (cyan
+// for allies, red for enemies). Two ally tiles (player + partner) and five
+// enemy tiles (the full 3 + 2 roster). Keys are exposed in order for the scene.
+export const HUD_PORTRAIT_DISPLAY = 30;
+export const HUD_ALLY_KEYS: readonly string[] = ['split-hud-ally-1', 'split-hud-ally-2'];
+export const HUD_ENEMY_KEYS: readonly string[] = [
+  'split-hud-enemy-1',
+  'split-hud-enemy-2',
+  'split-hud-enemy-3',
+  'split-hud-enemy-4',
+  'split-hud-enemy-5',
+];
+
+const HUD_PORTRAIT_FILES: ReadonlyArray<{ readonly key: string; readonly file: string }> = [
+  { key: HUD_ALLY_KEYS[0], file: 'hud-ally-1.png' },
+  { key: HUD_ALLY_KEYS[1], file: 'hud-ally-2.png' },
+  { key: HUD_ENEMY_KEYS[0], file: 'hud-enemy-1.png' },
+  { key: HUD_ENEMY_KEYS[1], file: 'hud-enemy-2.png' },
+  { key: HUD_ENEMY_KEYS[2], file: 'hud-enemy-3.png' },
+  { key: HUD_ENEMY_KEYS[3], file: 'hud-enemy-4.png' },
+  { key: HUD_ENEMY_KEYS[4], file: 'hud-enemy-5.png' },
+];
+
 export const ART_FILES: ReadonlyArray<{ readonly key: string; readonly file: string }> = [
   { key: ART_KEYS.floor, file: 'arena-floor.png' },
   { key: ART_KEYS.props, file: 'props.png' },
@@ -46,6 +71,7 @@ export const ART_FILES: ReadonlyArray<{ readonly key: string; readonly file: str
   { key: ART_KEYS.gun, file: 'gun.png' },
   { key: ART_KEYS.spike, file: 'spike.png' },
   { key: ART_KEYS.ui, file: 'ui.png' },
+  ...HUD_PORTRAIT_FILES,
 ];
 
 // props.png (512x256): five cover props, measured content boxes + 1px pad.

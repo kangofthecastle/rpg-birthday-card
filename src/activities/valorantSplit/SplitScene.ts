@@ -21,7 +21,9 @@ import {
   COVER_PROP_ORDER,
   CROSSHAIR_SCALE,
   HEART_SCALE,
-  MEDAL_SCALE,
+  HUD_ALLY_KEYS,
+  HUD_ENEMY_KEYS,
+  HUD_PORTRAIT_DISPLAY,
   PROP_FRAMES,
   SPIKE_BASE_SCALE,
   SPIKE_FRAMES,
@@ -77,20 +79,41 @@ const DEATH_FADE_MS = 260;
 const COVER_OVERHANG = 1.08;
 
 // HUD geometry (arena is 960x540). The bottom bar carries health on the left and
-// the ammo counter on the right; a slim top strip carries the fuse and the live
-// enemy count. Colors reuse the game palette: teal 0x2ee6c4, gold 0xffd15c, red
-// 0xff5470 on a near-black panel.
+// the ammo counter on the right. The top bar is a Valorant-style scoreboard:
+// the player's team (green-tinted, ally portraits + alive count) on the left,
+// the fuse timer dead-center, and the enemy team (red-tinted, alive count + five
+// enemy portraits) on the right. Colors reuse the CRT/terminal palette: cyan
+// accent 0x60b6c2, teal 0x2ee6c4, gold 0xffd15c, red 0xff5470 on a dark navy panel.
 const HUD = {
   panel: 0x0c1220,
+  navy: 0x0a1524,
+  cyan: 0x60b6c2,
   teal: 0x2ee6c4,
   gold: 0xffd15c,
   red: 0xff5470,
   edge: 0x2b3a52,
+  // Team tints for the top bar backgrounds.
+  allyTint: 0x2fae6b,
+  enemyTint: 0xff5470,
   barBottomY: 486,
   barHeight: 54,
-  topStripY: 6,
-  topStripH: 40,
 } as const;
+
+// Top scoreboard bar geometry. Two ally tiles on the left, five enemy tiles on
+// the right, timer centered.
+const TOPBAR = {
+  h: 46,
+  tile: 30,
+  gap: 5,
+  pad: 12,
+} as const;
+
+// The full per-round enemy roster (opening three + the two-bot defuse ambush).
+// The right-hand count reads this at round start — the yet-to-spawn ambush pair
+// is shown as "alive" — and decrements one tile per kill.
+const ENEMY_ROSTER =
+  SPLIT_CONFIG.reinforcements.reduce((n, wave) => n + wave.spawns.length, 0) +
+  SPLIT_CONFIG.defuseAmbush.spawns.length;
 
 // Every combatant carries a Vandal-silhouette rifle that rotates toward its
 // aim/target. It's anchored in the character's hands (see gunHandY) and muzzle
@@ -216,13 +239,16 @@ export class SplitScene extends Phaser.Scene {
   private spikeBaseScale = 1;
   private enemyViews = new Map<number, EnemyView>();
   private heartImages: Phaser.GameObjects.Image[] = [];
-  private medalImage?: Phaser.GameObjects.Image;
-  // Bottom-bar + top-strip HUD (Valorant-flavored, drawn in-canvas so the
+  // Bottom-bar + top-scoreboard HUD (Valorant-flavored, drawn in-canvas so the
   // generic .activity-panel CSS can't out-specify it).
   private healthNumberText!: Phaser.GameObjects.Text;
   private ammoMagText!: Phaser.GameObjects.Text;
   private ammoReserveText!: Phaser.GameObjects.Text;
-  private enemiesText!: Phaser.GameObjects.Text;
+  // Top scoreboard: ally/enemy portrait tiles + per-team alive counts.
+  private allyTiles: Phaser.GameObjects.Image[] = [];
+  private enemyTiles: Phaser.GameObjects.Image[] = [];
+  private allyCountText!: Phaser.GameObjects.Text;
+  private enemyCountText!: Phaser.GameObjects.Text;
   private roundText!: Phaser.GameObjects.Text;
   private statusText!: Phaser.GameObjects.Text;
   private barkText!: Phaser.GameObjects.Text;
@@ -232,7 +258,6 @@ export class SplitScene extends Phaser.Scene {
 
   private tracers: Tracer[] = [];
   private muzzles: MuzzleFlash[] = [];
-  private muzzleUntil = 0;
   private nextBeepAt = 0;
   private nextDefuseTickAt = 0;
   private nextDefuseLoopAt = 0;
@@ -301,17 +326,19 @@ export class SplitScene extends Phaser.Scene {
     this.hudGraphics = this.add.graphics().setDepth(800).setScrollFactor(0);
     this.createHud();
 
+    // Fuse timer, dead-center in the top scoreboard bar.
     this.roundText = this.add
-      .text(ARENA.width / 2, 16, '1', {
+      .text(ARENA.width / 2, TOPBAR.h / 2, '1', {
         color: '#ffd15c',
-        fontFamily: 'Arial, sans-serif',
-        fontSize: '38px',
-        fontStyle: '700',
-        stroke: '#141414',
-        strokeThickness: 6,
+        fontFamily: 'Consolas, "Courier New", monospace',
+        fontSize: '30px',
+        fontStyle: '800',
+        stroke: '#04121f',
+        strokeThickness: 5,
       })
-      .setOrigin(0.5, 0)
-      .setDepth(810);
+      .setOrigin(0.5, 0.5)
+      .setDepth(813)
+      .setScrollFactor(0);
     this.statusText = this.add
       .text(ARENA.width / 2, HUD.barBottomY - 16, '', {
         align: 'center',
@@ -497,7 +524,6 @@ export class SplitScene extends Phaser.Scene {
       switch (event.type) {
         case 'player-shot':
           this.tracers.push({ from: event.from, to: event.to, color: 0x8affc1, bornAt: now });
-          this.muzzleUntil = now + 70;
           this.addMuzzle(this.playerView, event.from, event.to, MUZZLE_COLOR.player, now);
           this.playSfx('shot');
           if (event.hitEnemyId !== null) {
@@ -606,7 +632,7 @@ export class SplitScene extends Phaser.Scene {
   // ------------------------------------------------------------------
 
   private render(now: number): void {
-    const { player, teammate } = this.state;
+    const { teammate } = this.state;
 
     this.renderPlayer(now);
     this.renderTeammate(now, teammate.pos);
@@ -614,7 +640,6 @@ export class SplitScene extends Phaser.Scene {
 
     this.dynamic.clear();
     this.groundFx.clear();
-    this.drawAimLine(player.pos, now);
     this.drawTelegraphs(now);
     this.drawTracers(now);
     this.drawMuzzles(now);
@@ -846,25 +871,6 @@ export class SplitScene extends Phaser.Scene {
     });
   }
 
-  private drawAimLine(player: { x: number; y: number }, now: number): void {
-    const angle = Math.atan2(this.pointer.y - player.y, this.pointer.x - player.x);
-    const muzzleOn = now < this.muzzleUntil;
-    const length = muzzleOn ? 26 : 18;
-
-    this.dynamic.lineStyle(muzzleOn ? 4 : 2, muzzleOn ? 0xfff2a8 : 0x8affc1, muzzleOn ? 0.95 : 0.5);
-    this.dynamic.lineBetween(
-      player.x,
-      player.y,
-      player.x + Math.cos(angle) * length,
-      player.y + Math.sin(angle) * length,
-    );
-
-    if (muzzleOn) {
-      this.dynamic.fillStyle(0xfff2a8, 0.9);
-      this.dynamic.fillCircle(player.x + Math.cos(angle) * length, player.y + Math.sin(angle) * length, 5);
-    }
-  }
-
   private drawTelegraphs(now: number): void {
     for (const enemy of this.state.enemies) {
       if (!enemy.alive || enemy.ai !== 'telegraphing') {
@@ -976,27 +982,8 @@ export class SplitScene extends Phaser.Scene {
     const midY = barTop + HUD.barHeight / 2;
     const uiArt = this.hasArt(ART_KEYS.ui);
 
-    // --- Top strip: fuse medallion (center) + live enemy count (right) ---
-    if (uiArt) {
-      this.medalImage = this.add
-        .image(ARENA.width / 2, 40, ART_KEYS.ui, 'medal')
-        .setScale(MEDAL_SCALE)
-        .setDepth(808)
-        .setScrollFactor(0);
-    }
-
-    this.enemiesText = this.add
-      .text(ARENA.width - 20, HUD.topStripY + HUD.topStripH / 2, '', {
-        color: '#ff9aa8',
-        fontFamily: 'Consolas, "Courier New", monospace',
-        fontSize: '18px',
-        fontStyle: '700',
-        stroke: '#0c1220',
-        strokeThickness: 4,
-      })
-      .setOrigin(1, 0.5)
-      .setDepth(811)
-      .setScrollFactor(0);
+    // --- Top scoreboard bar: ally team (left) / fuse (center) / enemy team (right) ---
+    this.createTopBar();
 
     // --- Bottom-left: health number + heart pips ---
     this.add
@@ -1071,6 +1058,143 @@ export class SplitScene extends Phaser.Scene {
       .setScrollFactor(0);
   }
 
+  // Build the top scoreboard bar: two ally portrait tiles + alive count on the
+  // left, five enemy portrait tiles + alive count on the right. Tiles are art
+  // drop-ins when present (hud-ally-N / hud-enemy-N) and procedural silhouettes
+  // otherwise. The tinted backgrounds and tile bezels are drawn each frame in
+  // drawTopBar(); only the images/texts are created here.
+  private createTopBar(): void {
+    const cy = TOPBAR.h / 2;
+    const step = TOPBAR.tile + TOPBAR.gap;
+    const nAlly = HUD_ALLY_KEYS.length;
+    const nEnemy = HUD_ENEMY_KEYS.length;
+
+    // Ally tiles: left-aligned from the pad, count to the right of the group.
+    for (let i = 0; i < nAlly; i += 1) {
+      const x = TOPBAR.pad + TOPBAR.tile / 2 + i * step;
+      this.allyTiles.push(this.makePortraitTile(x, cy, 'ally', i));
+    }
+    const allyGroupRight = TOPBAR.pad + nAlly * step - TOPBAR.gap;
+    this.allyCountText = this.add
+      .text(allyGroupRight + 12, cy, String(nAlly), {
+        color: '#7dffd0',
+        fontFamily: 'Consolas, "Courier New", monospace',
+        fontSize: '26px',
+        fontStyle: '800',
+        stroke: '#04121f',
+        strokeThickness: 5,
+      })
+      .setOrigin(0, 0.5)
+      .setDepth(813)
+      .setScrollFactor(0);
+
+    // Enemy tiles: right-aligned, stored left→right so kills dim from the inner
+    // (center-side) tile outward. Count sits to the left of the group.
+    const rightmostCenter = ARENA.width - TOPBAR.pad - TOPBAR.tile / 2;
+    const leftmostCenter = rightmostCenter - (nEnemy - 1) * step;
+    for (let j = 0; j < nEnemy; j += 1) {
+      const x = leftmostCenter + j * step;
+      this.enemyTiles.push(this.makePortraitTile(x, cy, 'enemy', j));
+    }
+    this.enemyCountText = this.add
+      .text(leftmostCenter - TOPBAR.tile / 2 - 12, cy, String(ENEMY_ROSTER), {
+        color: '#ff9aa8',
+        fontFamily: 'Consolas, "Courier New", monospace',
+        fontSize: '26px',
+        fontStyle: '800',
+        stroke: '#04121f',
+        strokeThickness: 5,
+      })
+      .setOrigin(1, 0.5)
+      .setDepth(813)
+      .setScrollFactor(0);
+  }
+
+  private makePortraitTile(
+    x: number,
+    y: number,
+    team: 'ally' | 'enemy',
+    index: number,
+  ): Phaser.GameObjects.Image {
+    const artKey = team === 'ally' ? HUD_ALLY_KEYS[index] : HUD_ENEMY_KEYS[index];
+    const fallback = team === 'ally' ? 'split-hud-ally' : 'split-hud-enemy';
+    const key = this.hasArt(artKey) ? artKey : fallback;
+
+    return this.add
+      .image(x, y, key)
+      .setDisplaySize(HUD_PORTRAIT_DISPLAY, HUD_PORTRAIT_DISPLAY)
+      .setDepth(812)
+      .setScrollFactor(0);
+  }
+
+  // Live scoreboard values. Enemy count starts at the full roster (5) — the not-
+  // yet-spawned defuse-ambush pair counts as alive — and decrements one tile per
+  // kill (killed bots stay in enemies[] as alive:false, so their count is the
+  // true per-round tally). Ally count is 2 while the player is up; the player
+  // tile dims during the death overlay. The teammate (____) has no death
+  // mechanic in the model, so his tile is always lit.
+  private updateTopBar(): void {
+    const killed = this.state.enemies.filter((enemy) => !enemy.alive).length;
+    const enemiesRemaining = Math.max(0, ENEMY_ROSTER - killed);
+    this.enemyCountText.setText(String(enemiesRemaining));
+    this.enemyTiles.forEach((tile, j) => this.styleTile(tile, j < killed));
+
+    const playerDown = this.state.phase === 'dead';
+    const alliesUp = playerDown ? HUD_ALLY_KEYS.length - 1 : HUD_ALLY_KEYS.length;
+    this.allyCountText.setText(String(Math.max(0, alliesUp)));
+    // Tile 0 is the player (Viper); tile 1 is ____ (Omen), who never dies.
+    this.allyTiles.forEach((tile, i) => this.styleTile(tile, i === 0 && playerDown));
+  }
+
+  private styleTile(tile: Phaser.GameObjects.Image, dead: boolean): void {
+    if (dead) {
+      tile.setTint(0x55606b);
+      tile.setAlpha(0.4);
+    } else {
+      tile.clearTint();
+      tile.setAlpha(1);
+    }
+  }
+
+  // Backgrounds + bezels for the top scoreboard, redrawn each frame into the
+  // shared HUD graphics. Green team band on the left, red on the right, a slim
+  // cyan accent along the bottom edge. No yellow highlight borders.
+  private drawTopBar(g: Phaser.GameObjects.Graphics): void {
+    const h = TOPBAR.h;
+    const allyW = 210;
+    const enemyW = 262;
+
+    g.fillStyle(HUD.navy, 0.92);
+    g.fillRect(0, 0, ARENA.width, h);
+    g.fillStyle(HUD.allyTint, 0.2);
+    g.fillRect(0, 0, allyW, h);
+    g.fillStyle(HUD.enemyTint, 0.2);
+    g.fillRect(ARENA.width - enemyW, 0, enemyW, h);
+
+    // Team side accents + bottom cyan rule.
+    g.fillStyle(HUD.allyTint, 0.95);
+    g.fillRect(0, 0, 4, h);
+    g.fillStyle(HUD.enemyTint, 0.95);
+    g.fillRect(ARENA.width - 4, 0, 4, h);
+    g.fillStyle(HUD.cyan, 0.85);
+    g.fillRect(0, h - 2, ARENA.width, 2);
+
+    // Portrait bezels (dark tile with a thin cyan edge).
+    const s = TOPBAR.tile;
+    for (const tile of this.allyTiles) {
+      g.fillStyle(HUD.panel, 0.85);
+      g.fillRect(tile.x - s / 2 - 1, tile.y - s / 2 - 1, s + 2, s + 2);
+      g.lineStyle(1, HUD.allyTint, 0.6);
+      g.strokeRect(tile.x - s / 2 - 1, tile.y - s / 2 - 1, s + 2, s + 2);
+    }
+    for (const tile of this.enemyTiles) {
+      g.fillStyle(HUD.panel, 0.85);
+      g.fillRect(tile.x - s / 2 - 1, tile.y - s / 2 - 1, s + 2, s + 2);
+      g.lineStyle(1, HUD.enemyTint, 0.6);
+      g.strokeRect(tile.x - s / 2 - 1, tile.y - s / 2 - 1, s + 2, s + 2);
+    }
+  }
+
   private drawHud(): void {
     const player = this.state.player;
     const maxHearts = SPLIT_CONFIG.player.maxHearts;
@@ -1092,9 +1216,8 @@ export class SplitScene extends Phaser.Scene {
     graphics.fillStyle(HUD.gold, 0.9);
     graphics.fillRect(ARENA.width - 4, barY, 4, barH);
 
-    // Top strip backing.
-    graphics.fillStyle(HUD.panel, 0.55);
-    graphics.fillRect(0, HUD.topStripY, ARENA.width, HUD.topStripH);
+    // Top scoreboard bar (backgrounds + bezels).
+    this.drawTopBar(graphics);
 
     // --- Health ---
     const low = hearts <= 1;
@@ -1146,8 +1269,8 @@ export class SplitScene extends Phaser.Scene {
     graphics.lineStyle(1, HUD.edge, 0.8);
     graphics.strokeRect(bx, by, barW, segH);
 
-    // --- Enemies remaining (top-right) ---
-    this.enemiesText.setText(`ENEMIES ${aliveEnemyCount(this.state)}`);
+    // --- Top scoreboard values (ally / enemy alive counts + tile dimming) ---
+    this.updateTopBar();
   }
 
   private updateStatusText(): void {
@@ -1176,26 +1299,23 @@ export class SplitScene extends Phaser.Scene {
     );
   }
 
-  // The prominent top-center fuse countdown. Reuses the gold medallion as a
-  // backdrop; turns red and blinks under 15s.
+  // The fuse countdown, centered in the top scoreboard bar. Turns red and blinks
+  // under 15s.
   private updateTimerText(now: number): void {
     if (this.finalizing || this.state.phase === 'won') {
       this.roundText.setText('');
-      this.medalImage?.setVisible(false);
       return;
     }
 
     if (this.state.phase === 'detonated') {
       this.roundText.setText('0');
       this.roundText.setColor('#ff5470');
-      this.medalImage?.setVisible(true);
       return;
     }
 
     if (this.state.phase === 'dead') {
       this.roundText.setText(String(Math.ceil(spikeTimeRemainingMs(this.state) / 1000)));
       this.roundText.setColor('#ff5470');
-      this.medalImage?.setVisible(true);
       return;
     }
 
@@ -1204,7 +1324,6 @@ export class SplitScene extends Phaser.Scene {
     const low = remaining <= 15000;
     const blink = low && Math.floor(now / 300) % 2 === 0;
     this.roundText.setColor(low && !blink ? '#ff5470' : '#ffd15c');
-    this.medalImage?.setVisible(true);
   }
 
   private updatePrompt(): void {
@@ -1438,6 +1557,25 @@ export class SplitScene extends Phaser.Scene {
     this.makeTexture(TEX.cover, 1, 1, (g) => {
       g.fillStyle(0xffffff, 1);
       g.fillRect(0, 0, 1, 1);
+    });
+    // Procedural top-bar portrait fallbacks (used until hud-ally-N / hud-enemy-N
+    // drop-ins exist): a head-and-shoulders silhouette, cyan for allies, red for
+    // enemies.
+    this.makePortrait('split-hud-ally', 0x60b6c2);
+    this.makePortrait('split-hud-enemy', 0xff6b7d);
+  }
+
+  // A simple head-and-shoulders bust on a transparent tile, tinted per team.
+  private makePortrait(key: string, color: number): void {
+    this.makeTexture(key, 32, 32, (g) => {
+      // Faint backing wash so the bust reads on any tile bezel.
+      g.fillStyle(color, 0.16);
+      g.fillRect(0, 0, 32, 32);
+      // Shoulders.
+      g.fillStyle(color, 1);
+      g.fillRoundedRect(4, 21, 24, 12, 5);
+      // Head.
+      g.fillCircle(16, 13, 7);
     });
   }
 

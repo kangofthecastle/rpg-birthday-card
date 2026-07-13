@@ -2155,11 +2155,13 @@ export class LocationScene extends Phaser.Scene {
   // loop's snap-back never shows.
   //
   // In `ribbon` mode (post-boost) the bulbs concentrate into a loose vertical
-  // band down the central path — where the signpost and the south exit sit — and
-  // spawn across the full height, so the whole flow reads as an unmistakable
-  // ribbon of light you'd follow toward the clearing. They glow ADDITIVELY so
-  // they pop as warm bulbs even over the brightened ground. In base mode they
-  // stay a sparse, full-width, normal-blend field (the original ambient look).
+  // band down the central path — where the signpost and the south exit sit.
+  // Every bulb ENTERS at the map's south edge and runs the whole path north,
+  // so the stream visibly pours in from the bottom of the map (no mid-path
+  // pop-in); initial delays are staggered across a full cycle so the ribbon
+  // reads as a continuous flow. They glow ADDITIVELY so they pop as warm bulbs
+  // even over the brightened ground. In base mode they stay a sparse,
+  // full-width, normal-blend field (the original ambient look).
   private spawnBeckoningMote(rng: () => number, tune: OutdoorAwakenTune): void {
     const width = this.mapDims.width;
     const height = this.mapDims.height;
@@ -2167,22 +2169,30 @@ export class LocationScene extends Phaser.Scene {
     let startY: number;
     let travel: number;
     let scale: number;
+    let runMs: number;
     if (tune.ribbon) {
       // Loose central ribbon: clustered around mid-x (the path) with a soft
-      // spread, flowing from just below the player all the way to the exit.
+      // spread. Each bulb starts just off the SOUTH edge and runs north to
+      // near the top of the map.
       const spread = (rng() + rng() - 1) * 0.26; // triangular ~[-0.26,0.26], centre-weighted
       x = width * (0.5 + spread);
-      startY = height * (0.1 + rng() * 0.8);
-      travel = height * (0.24 + rng() * 0.16);
+      startY = height + 8 + rng() * 16; // just below the south edge, staggered
+      const endY = height * (0.06 + rng() * 0.14); // north end of the run
+      travel = startY - endY;
+      // Keep the approved drift SPEED: draw from the previous travel/duration
+      // joint distribution, then stretch the duration so the same px/ms now
+      // covers the longer edge-to-edge run.
+      const speed = (height * (0.24 + rng() * 0.16)) / (6400 + rng() * 3600);
+      runMs = travel / speed;
       scale = 0.7 + rng() * 1.0;
     } else {
       x = rng() * width;
       startY = height * (0.3 + rng() * 0.55);
       travel = height * (0.22 + rng() * 0.16);
       scale = 0.5 + rng() * 0.9;
+      runMs = 6400 + rng() * 3600;
     }
     const sway = 12 + rng() * 20;
-    const runMs = 6400 + rng() * 3600;
     const delay = rng() * runMs;
     const mote = this.add
       .image(x, startY, 'awaken-mote')
@@ -2212,18 +2222,19 @@ export class LocationScene extends Phaser.Scene {
       delay,
       ease: 'Sine.easeInOut',
     });
-    // Alpha cycle synced to one ascent: fade up, (in ribbon mode) HOLD near peak
-    // so the bulb stays lit through most of its run, then fade back to zero before
-    // the loop snaps back down. The hold is what makes the ribbon read as a solid,
-    // sustained flow rather than a sparse twinkle — at any instant most bulbs are
-    // near peak, so the stream is always dense. Base mode keeps the plain triangle.
+    // Alpha cycle synced to one ascent: a QUICK fade-up while the bulb is still
+    // in the bottom stretch of its run (so entry reads as light pouring in from
+    // the south edge, never a mid-path pop), then a long HOLD near peak through
+    // the climb, fading back to zero toward the north end before the loop snaps
+    // back down. The hold is what makes the ribbon read as a solid, sustained
+    // flow rather than a sparse twinkle. Base mode keeps the plain triangle.
     const peak = tune.motePeakAlpha + rng() * 0.25;
     if (tune.ribbon) {
       this.tweens.add({
         targets: mote,
         alpha: { from: 0, to: peak },
-        duration: runMs * 0.32,
-        hold: runMs * 0.36,
+        duration: runMs * 0.12,
+        hold: runMs * 0.76,
         yoyo: true,
         repeat: -1,
         delay,

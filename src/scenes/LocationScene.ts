@@ -69,8 +69,6 @@ import {
   propTextureKey,
   PROP_KINDS,
   SIGNPOST_PROP_NAME,
-  SIGNPOST_ARROW_WRITABLE_FRACTION,
-  SIGNPOST_ARROW_SHAFT_CENTER_FRACTION,
   type ExteriorPlacement,
   type OutdoorPalette,
   type PropKind,
@@ -203,32 +201,53 @@ function colorToHex(color: number): string {
 }
 
 /**
- * Caption scale that keeps a fingerpost's destination name on the arrow SHAFT.
- * The board displays kind.w * placementScale world-units wide and the writable
- * shaft (excluding the arrowhead) spans SIGNPOST_ARROW_WRITABLE_FRACTION of that;
- * long names (KERRISDALE, ALDERGROVE) overflow at the base font size, so shrink
- * until they fit. `imageScale` (the board's sprite scale, placementScale included)
- * stays the ceiling so a short name is never enlarged. `captionWidth` is the Text
- * object's unscaled width. Shared by renderSignposts and the dressEdit reposition
- * path so a hand-resized board re-fits identically.
+ * Alpha-measured geometry of a fingerpost's arrow board, in TEXTURE pixels (the
+ * fit derives from the texture; the display derives from the kind/placement scale,
+ * and `scale` — world px per texture px — bridges the two). Measured once per
+ * texture (see LocationScene.measureSignpostBoard) so it adapts to any drop-in art
+ * size with no baked constants.
  */
-function signpostCaptionFit(
-  captionWidth: number,
-  kind: PropKind,
-  imageScale: number,
-  placementScale: number,
-): number {
-  const budget = kind.w * placementScale * SIGNPOST_ARROW_WRITABLE_FRACTION;
-  return captionWidth > 0 ? Math.min(imageScale, budget / captionWidth) : imageScale;
+interface SignpostBoardGeometry {
+  /** Source texture dimensions the px fields are measured against. */
+  readonly texW: number;
+  readonly texH: number;
+  /** Vertical centre of the plank (px from the texture's top). */
+  readonly boardCenterY: number;
+  /** Horizontal centre of the rectangular shaft (px from the texture's left), for
+   * the native art whose arrowhead points right — so it sits left of the board's
+   * centre. Mirrored about the texture centre when the sprite is flipped. */
+  readonly shaftCenterX: number;
+  /** Margin-inset width of the shaft (px): the caption budget before the arrowhead. */
+  readonly shaftUsableWidth: number;
 }
 
-/** Horizontal offset (world px) from a fingerpost's centre to its arrow SHAFT
- * centre, so the caption sits centred on the shaft rather than the whole board.
- * The native art's head points right (shaft centre left of board centre); a
- * flipped board mirrors that, so the offset flips sign with `flip`. */
-function signpostShaftOffset(kind: PropKind, imageScale: number, flip: boolean): number {
-  const dx = (SIGNPOST_ARROW_SHAFT_CENTER_FRACTION - 0.5) * kind.w * imageScale;
-  return flip ? -dx : dx;
+/**
+ * Place a fingerpost's destination caption from measured board geometry. Returns
+ * the world position + scale for the (never-flipped, upright) Text so it sits
+ * centred on the arrow SHAFT, vertically on the plank, and auto-shrinks until it
+ * fits the shaft's usable width. `scale` is the board's world-px-per-texture-px
+ * (placementScale folded in, texture-size normalised), so it converts every
+ * measured texture length straight to world units and stays the caption's ceiling
+ * (a short name is never enlarged past the base font × scale). `anchor` is the
+ * board's feet (origin 0.5,1). Shared by renderSignposts and the dressEdit
+ * reposition path so a hand-resized board re-fits identically.
+ */
+function placeSignpostCaption(
+  geom: SignpostBoardGeometry,
+  scale: number,
+  anchorX: number,
+  anchorY: number,
+  flip: boolean,
+  captionWidth: number,
+): { x: number; y: number; scale: number } {
+  // Board is bottom-anchored: the shaft centre sits (texH - boardCenterY) texture
+  // px above the feet.
+  const y = anchorY - (geom.texH - geom.boardCenterY) * scale;
+  const dx = (geom.shaftCenterX - geom.texW / 2) * scale;
+  const x = anchorX + (flip ? -dx : dx);
+  const budget = geom.shaftUsableWidth * scale;
+  const capScale = captionWidth > 0 ? Math.min(scale, budget / captionWidth) : scale;
+  return { x, y, scale: capScale };
 }
 
 /** Linear blend of two 0xRRGGBB colours (t=0 -> a, t=1 -> b). */
@@ -420,6 +439,9 @@ export class LocationScene extends Phaser.Scene {
   // props + signpost render; the signpost handle also carries its label + linked
   // interaction id (for the gold-rect pairing hint).
   private outdoorPropHandles: OutdoorEditHandle[] = [];
+  /** Alpha-measured signpost board geometry, cached per texture key (measuring
+   * reads the whole texture once). Keeps caption fit texture-driven. */
+  private signpostGeometryCache = new Map<string, SignpostBoardGeometry>();
   private roomOrigin?: IsoOrigin;
   private dressEditFrozen = false;
   private propColliders: PropColliderRect[] = [];
@@ -2535,14 +2557,19 @@ export class LocationScene extends Phaser.Scene {
       image.setDepth(anchor.y);
     }
     if (label) {
-      const boardY = anchor.y - kind.h * scale * 0.83;
-      const shaftX = anchor.x + signpostShaftOffset(kind, scale, Boolean(placement.flip));
-      // Re-run the caption auto-fit so a resized board keeps the name on the arrow
-      // shaft (same math as renderSignposts; label.width is the unscaled width).
-      label
-        .setPosition(shaftX, boardY)
-        .setScale(signpostCaptionFit(label.width, kind, scale, placement.scale ?? 1))
-        .setDepth(anchor.y + 0.1);
+      // Re-run the caption auto-fit from the board's measured geometry × the
+      // current display scale, so a hand-resized board re-derives the name's
+      // placement/size on the arrow shaft (identical to renderSignposts).
+      const geom = this.measureSignpostBoard(image.texture.key);
+      const placed = placeSignpostCaption(
+        geom,
+        scale,
+        anchor.x,
+        anchor.y,
+        Boolean(placement.flip),
+        label.width,
+      );
+      label.setPosition(placed.x, placed.y).setScale(placed.scale).setDepth(anchor.y + 0.1);
     }
   }
 
@@ -2576,15 +2603,16 @@ export class LocationScene extends Phaser.Scene {
       if (sign.flip) {
         image.setFlipX(true);
       }
-      // Caption centred on the arrow plank (~83% up the sprite from the feet, tuned
-      // to the real signpost-arrow.png plank centre; offset from centre so it clears
-      // the arrowhead). The text is a separate object that is
-      // never flipped, so a left-pointing sign still reads upright. Depth just
-      // above the board so the player occludes it when standing in front.
-      const boardY = anchor.y - kind.h * scale * 0.83;
-      const shaftX = anchor.x + signpostShaftOffset(kind, scale, Boolean(sign.flip));
+      // Caption centred on the arrow plank, its position + size derived from the
+      // board texture's alpha-measured geometry (plank centre, shaft centre, shaft
+      // usable width) × the display scale — so the name sits on the shaft, clears
+      // the arrowhead, and auto-shrinks to fit long names (KERRISDALE, ALDERGROVE)
+      // for ANY art size with no baked constants. The text is a separate object
+      // that is never flipped, so a left-pointing sign still reads upright. Depth
+      // just above the board so the player occludes it when standing in front.
+      const geom = this.measureSignpostBoard(key);
       const caption = this.add
-        .text(shaftX, boardY, sign.label, {
+        .text(anchor.x, anchor.y, sign.label, {
           color: '#3c2a17',
           fontSize: '16px',
           fontStyle: '800',
@@ -2592,12 +2620,15 @@ export class LocationScene extends Phaser.Scene {
         })
         .setOrigin(0.5, 0.5)
         .setDepth(anchor.y + 0.1);
-      // Auto-fit: the board displays at kind.w * placementScale world-units wide,
-      // but the writable arrow shaft (arrowhead excluded) spans only
-      // SIGNPOST_ARROW_WRITABLE_FRACTION of that. Long names (KERRISDALE,
-      // ALDERGROVE) overflow at the base font size, so shrink the caption until it
-      // fits — the base `scale` stays the ceiling, so a short name is never grown.
-      caption.setScale(signpostCaptionFit(caption.width, kind, scale, placementScale));
+      const placed = placeSignpostCaption(
+        geom,
+        scale,
+        anchor.x,
+        anchor.y,
+        Boolean(sign.flip),
+        caption.width,
+      );
+      caption.setPosition(placed.x, placed.y).setScale(placed.scale);
 
       // Handle for the dressEdit editor: dragging moves the board + its caption
       // together; the linked dialogue hotspot is shown as a faint gold outline
@@ -2633,6 +2664,145 @@ export class LocationScene extends Phaser.Scene {
       }
     }
     return colliders;
+  }
+
+  // Alpha-measure a signpost board texture to locate its writable arrow shaft,
+  // cached per texture key. Reads the whole texture once via an offscreen canvas
+  // and derives, in TEXTURE px:
+  //   • the plank band — the contiguous rows whose opaque width is a large
+  //     fraction of the board's max width (isolates the wide arrow board from the
+  //     narrow post + finial);
+  //   • the shaft — the run of columns in that band at (near) full plank height;
+  //     the arrowhead is where that height tapers toward the point, so it's
+  //     excluded automatically for either flip direction;
+  //   • the shaft's vertical centre + a margin-inset usable width for the caption.
+  // Any measurement failure (headless canvas, empty texture) falls back to the
+  // real-art fractions measured offline, so a caption still lands sanely.
+  private measureSignpostBoard(key: string): SignpostBoardGeometry {
+    const cached = this.signpostGeometryCache.get(key);
+    if (cached) {
+      return cached;
+    }
+    const source = this.textures.get(key).getSourceImage() as CanvasImageSource & {
+      width: number;
+      height: number;
+    };
+    const texW = source.width || 1;
+    const texH = source.height || 1;
+    // Offline-measured real-art fractions (192×224 signpost-arrow.png): plank
+    // rows y19–58 (centre 0.172), shaft x40–132 (centre 0.448), usable ~0.42.
+    const fallback: SignpostBoardGeometry = {
+      texW,
+      texH,
+      boardCenterY: texH * 0.172,
+      shaftCenterX: texW * 0.448,
+      shaftUsableWidth: texW * 0.42,
+    };
+    let data: Uint8ClampedArray;
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = texW;
+      canvas.height = texH;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        this.signpostGeometryCache.set(key, fallback);
+        return fallback;
+      }
+      ctx.drawImage(source, 0, 0);
+      data = ctx.getImageData(0, 0, texW, texH).data;
+    } catch {
+      this.signpostGeometryCache.set(key, fallback);
+      return fallback;
+    }
+    const ALPHA = 40; // opaque threshold
+    const alphaAt = (x: number, y: number): number => data[(y * texW + x) * 4 + 3];
+    // Per-row opaque x-extent + width.
+    const rowLeft = new Int32Array(texH).fill(-1);
+    const rowRight = new Int32Array(texH).fill(-1);
+    let maxRowWidth = 0;
+    let maxRowY = 0;
+    for (let y = 0; y < texH; y += 1) {
+      let left = -1;
+      let right = -1;
+      for (let x = 0; x < texW; x += 1) {
+        if (alphaAt(x, y) > ALPHA) {
+          if (left < 0) {
+            left = x;
+          }
+          right = x;
+        }
+      }
+      rowLeft[y] = left;
+      rowRight[y] = right;
+      const width = left < 0 ? 0 : right - left + 1;
+      if (width > maxRowWidth) {
+        maxRowWidth = width;
+        maxRowY = y;
+      }
+    }
+    if (maxRowWidth <= 0) {
+      this.signpostGeometryCache.set(key, fallback);
+      return fallback;
+    }
+    // Plank band: contiguous rows around the widest row whose width is >= half the
+    // max (the post + finial are far narrower, so they drop out).
+    const bandThreshold = maxRowWidth * 0.5;
+    const rowWidth = (y: number): number => (rowLeft[y] < 0 ? 0 : rowRight[y] - rowLeft[y] + 1);
+    let boardTop = maxRowY;
+    let boardBot = maxRowY;
+    while (boardTop - 1 >= 0 && rowWidth(boardTop - 1) >= bandThreshold) {
+      boardTop -= 1;
+    }
+    while (boardBot + 1 < texH && rowWidth(boardBot + 1) >= bandThreshold) {
+      boardBot += 1;
+    }
+    const boardCenterY = (boardTop + boardBot) / 2;
+    // Per-column opaque height WITHIN the plank band; the shaft is the columns at
+    // (near) full band height, the arrowhead the columns where it tapers.
+    let maxColHeight = 0;
+    const colHeight = new Int32Array(texW);
+    for (let x = 0; x < texW; x += 1) {
+      let count = 0;
+      for (let y = boardTop; y <= boardBot; y += 1) {
+        if (alphaAt(x, y) > ALPHA) {
+          count += 1;
+        }
+      }
+      colHeight[x] = count;
+      if (count > maxColHeight) {
+        maxColHeight = count;
+      }
+    }
+    // Shaft columns: >= 92% of the plank's full height (rounded corners + the
+    // arrowhead's tapering base fall away). Take their bounding box.
+    const shaftThreshold = maxColHeight * 0.92;
+    let shaftLeft = -1;
+    let shaftRight = -1;
+    for (let x = 0; x < texW; x += 1) {
+      if (colHeight[x] >= shaftThreshold) {
+        if (shaftLeft < 0) {
+          shaftLeft = x;
+        }
+        shaftRight = x;
+      }
+    }
+    if (shaftLeft < 0) {
+      this.signpostGeometryCache.set(key, fallback);
+      return fallback;
+    }
+    const shaftCenterX = (shaftLeft + shaftRight) / 2;
+    const shaftWidth = shaftRight - shaftLeft + 1;
+    // Inset each edge by 8% so the caption keeps a clear margin off the plank ends.
+    const shaftUsableWidth = shaftWidth * (1 - 2 * 0.08);
+    const geom: SignpostBoardGeometry = {
+      texW,
+      texH,
+      boardCenterY,
+      shaftCenterX,
+      shaftUsableWidth,
+    };
+    this.signpostGeometryCache.set(key, geom);
+    return geom;
   }
 
   // Resolves a prop's texture key: the loaded PNG when present, else a painted
@@ -2799,8 +2969,10 @@ export class LocationScene extends Phaser.Scene {
         // Flat, front-facing fingerpost: a straight-on post with ONE arrow-shaped
         // board pointing RIGHT (the engine flips the whole texture for the
         // left-pointing sign). The blank shaft carries the destination name, drawn
-        // in-game; keep the shaft geometry aligned with the writable-fraction
-        // (0.6) and shaft-centre-fraction (0.44) constants in outdoorScenery.
+        // in-game. The caption fit is measured from this texture's alpha at runtime
+        // (measureSignpostBoard), so the shaft geometry below needs no matching
+        // constant — a clear rectangular plank + a distinct tapering arrowhead is
+        // all the measurement needs.
         const boardTop = h * 0.15;
         const boardBot = h * 0.4;
         const boardMid = (boardTop + boardBot) / 2;

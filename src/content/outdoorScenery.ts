@@ -219,6 +219,14 @@ export const PROP_KINDS: Readonly<Record<string, PropKind>> = {
   'signpost-arrow': { name: 'signpost-arrow', dir: 'outdoor', w: 192, h: 224, collider: { w: 40, h: 20 }, style: 'signpost-arrow' },
   'clearing-lantern-post': { name: 'clearing-lantern-post', dir: 'clearing', w: 128, h: 320, collider: { w: 34, h: 22 }, style: 'lantern-post' },
   'clearing-lantern-string': { name: 'clearing-lantern-string', dir: 'clearing', w: 512, h: 160, overhead: true, style: 'lantern-string' },
+  // Twilight pines framing the clearing — the fold-the-letters treeline made real
+  // GENERATED art (replacing the tiny procedural corner silhouettes, now thinned to
+  // a far horizon line behind these). Two distinct shapes: 1 = tall/narrow spire,
+  // 2 = broader/shorter. Standing props (y-sorted; feet at bottom-centre) with a
+  // modest trunk collider like the neighbourhood trees. Dark indigo foliage with a
+  // faint warm rim on the lantern side — see the pine-a/pine-b fallback painter.
+  'clearing-pine-1': { name: 'clearing-pine-1', dir: 'clearing', w: 256, h: 416, collider: { w: 72, h: 28 }, style: 'pine-a' },
+  'clearing-pine-2': { name: 'clearing-pine-2', dir: 'clearing', w: 240, h: 336, collider: { w: 84, h: 26 }, style: 'pine-b' },
   // Three colour variants of a single origami crane sitting on the water
   // (top-down 3/4): 1 = cream/blush, 2 = pale warm gold, 3 = soft lavender.
   // Not placed via OUTDOOR_PROPS — the clearing scene instantiates one drifting
@@ -327,6 +335,20 @@ export const OUTDOOR_PROPS: Readonly<Record<string, readonly PropPlacement[]>> =
     { name: 'clearing-lantern-post', mapX: 356, mapY: 476 },
     { name: 'clearing-lantern-post', mapX: 684, mapY: 476, flip: true },
     { name: 'clearing-lantern-string', mapX: 512, mapY: 96 },
+    // Framing pines along the west/east edges — a tall spire + broad pines each
+    // side, corner-weighted — clear of the central path lane, the spawn row/col
+    // (512,300), the "Kneel at the water" rect (x 320–704, y 440–568), the shore
+    // water band (y > 512) and the lantern posts. Feet (map px). The fallback's
+    // warm rim-light traces the sprite's LEFT edge, so WEST pines are flipped (rim
+    // → right, toward the central lanterns) and EAST pines are not (rim → left,
+    // toward centre): every pine reads as lit from the lantern string between them.
+    // Obviously-good starting frame; the author rearranges in outdoor dressEdit.
+    { name: 'clearing-pine-1', mapX: 92, mapY: 388, flip: true },
+    { name: 'clearing-pine-2', mapX: 176, mapY: 244, flip: true },
+    { name: 'clearing-pine-2', mapX: 150, mapY: 498, flip: true },
+    { name: 'clearing-pine-1', mapX: 932, mapY: 388 },
+    { name: 'clearing-pine-2', mapX: 848, mapY: 244 },
+    { name: 'clearing-pine-2', mapX: 874, mapY: 498 },
     // The paper cranes are no longer static props here: they drift on the shore
     // water, spawned by LocationScene.spawnClearingCranes. (The paper boat was
     // removed entirely — narratively it doesn't exist until ____ folds it.)

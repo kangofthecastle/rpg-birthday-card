@@ -116,7 +116,7 @@ test('echoes phrase 1 on the mapped keys, recovering from a wrong note', async (
   await walkToViolin(page);
   await dismissContinues(page, 4);
 
-  const panel = page.locator('.activity-panel--violin');
+  const panel = page.locator('.activity-shell--violin');
   await expect(panel).toBeVisible();
 
   // Press a note key with a real hold (a few frames) and retry until the target

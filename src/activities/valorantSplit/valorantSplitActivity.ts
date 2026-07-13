@@ -1,7 +1,10 @@
 import type { ActivityModule } from '../activityTypes';
 import { addKeyboardActivation } from '../activityDom';
+import { createActivityCloseButton } from '../activityShell';
 import { SPLIT_CONFIG } from './splitModel';
 import type { SplitSceneCallbacks } from './SplitScene';
+
+const CLOSE_ART_URL = '/assets/activities/valorant-split/close-x.png';
 
 interface SplitGameHandle {
   destroy(): void;
@@ -53,22 +56,24 @@ export function createValorantSplitActivity(
       const testMode = isTestMode();
 
       mount.innerHTML = `
-        <section class="activity-panel activity-panel--valorant-split" role="dialog" aria-label="RETAKE.EXE">
-          <h2>RETAKE.EXE</h2>
-          <div class="valorant-split-game">
+        <section class="activity-panel activity-shell activity-shell--valorant-split" role="dialog" aria-label="RETAKE.EXE">
+          <h2 class="activity-shell__title">RETAKE.EXE</h2>
+          <div class="activity-shell__viewport">
             <div class="valorant-split-game__host" data-valorant-split-host></div>
           </div>
-          <div class="activity-actions">
-            <button type="button" data-valorant-split-cancel>Cancel</button>
-            ${testMode ? '<button type="button" data-valorant-split-test-complete>Defuse the spike</button>' : ''}
-          </div>
+          <p class="activity-shell__controls">WASD or Arrows to move · Mouse to aim · Click to fire · Hold 4 on the spike to defuse · Esc to leave</p>
+          ${
+            testMode
+              ? '<div class="activity-shell__actions"><button type="button" data-valorant-split-test-complete>Defuse the spike</button></div>'
+              : ''
+          }
         </section>
       `;
 
+      const section = mount.querySelector<HTMLElement>('.activity-shell');
       const host = mount.querySelector<HTMLElement>('[data-valorant-split-host]');
-      const cancelButton = mount.querySelector<HTMLButtonElement>('[data-valorant-split-cancel]');
 
-      if (!host || !cancelButton) {
+      if (!section || !host) {
         throw new Error('Unable to mount SPLIT.EXE activity.');
       }
 
@@ -103,8 +108,13 @@ export function createValorantSplitActivity(
         onCancel: cancelSplit,
       };
 
-      cancelButton.addEventListener('click', cancelSplit, { once: true });
-      addKeyboardActivation(cancelButton, cancelSplit);
+      section.append(
+        createActivityCloseButton({
+          onClose: cancelSplit,
+          dataAttr: 'data-valorant-split-cancel',
+          artUrl: CLOSE_ART_URL,
+        }),
+      );
 
       if (testMode) {
         const completeButton = mount.querySelector<HTMLButtonElement>(

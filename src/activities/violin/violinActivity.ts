@@ -1,7 +1,10 @@
 import type { ActivityModule } from '../activityTypes';
 import { addKeyboardActivation } from '../activityDom';
+import { createActivityCloseButton } from '../activityShell';
 import type { ViolinSceneCallbacks } from './ViolinScene';
 import './violin.css';
+
+const CLOSE_ART_URL = '/assets/activities/violin/close-x.png';
 
 interface ViolinGameHandle {
   destroy(): void;
@@ -57,23 +60,24 @@ export function createViolinActivity(
       const testMode = isTestMode();
 
       mount.innerHTML = `
-        <section class="activity-panel activity-panel--violin" role="dialog" aria-label="the piece on the stand">
-          <h2>the piece on the stand</h2>
-          <p class="violin-game__caption">It has waited on the stand all this while. Both parts are ready now — play it through, and let it finish.</p>
-          <div class="violin-game">
+        <section class="activity-panel activity-shell activity-shell--violin" role="dialog" aria-label="the piece on the stand">
+          <h2 class="activity-shell__title">the piece on the stand</h2>
+          <div class="activity-shell__viewport">
             <div class="violin-game__host" data-violin-host></div>
           </div>
-          <div class="activity-actions">
-            <button type="button" data-violin-cancel>Cancel</button>
-            ${testMode ? '<button type="button" data-violin-test-complete>Finish the piece</button>' : ''}
-          </div>
+          <p class="activity-shell__controls">Echo the melody back on A S D F G H · Esc to leave</p>
+          ${
+            testMode
+              ? '<div class="activity-shell__actions"><button type="button" data-violin-test-complete>Finish the piece</button></div>'
+              : ''
+          }
         </section>
       `;
 
+      const section = mount.querySelector<HTMLElement>('.activity-shell');
       const host = mount.querySelector<HTMLElement>('[data-violin-host]');
-      const cancelButton = mount.querySelector<HTMLButtonElement>('[data-violin-cancel]');
 
-      if (!host || !cancelButton) {
+      if (!section || !host) {
         throw new Error('Unable to mount the violin activity.');
       }
 
@@ -108,8 +112,13 @@ export function createViolinActivity(
         onCancel: cancelPiece,
       };
 
-      cancelButton.addEventListener('click', cancelPiece, { once: true });
-      addKeyboardActivation(cancelButton, cancelPiece);
+      section.append(
+        createActivityCloseButton({
+          onClose: cancelPiece,
+          dataAttr: 'data-violin-cancel',
+          artUrl: CLOSE_ART_URL,
+        }),
+      );
 
       if (testMode) {
         const completeButton = mount.querySelector<HTMLButtonElement>('[data-violin-test-complete]');

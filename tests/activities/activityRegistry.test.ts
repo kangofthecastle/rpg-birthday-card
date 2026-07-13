@@ -248,8 +248,8 @@ describe('activityRegistry', () => {
         onCancel: vi.fn(),
       });
 
-      const panel = mount.querySelector<HTMLElement>('.activity-panel--friendone-fishing');
-      const gameShell = mount.querySelector<HTMLElement>('.friendone-fishing-game');
+      const panel = mount.querySelector<HTMLElement>('.activity-shell--fishing');
+      const gameShell = mount.querySelector<HTMLElement>('.activity-shell__viewport');
       const host = mount.querySelector<HTMLElement>('[data-friendone-fishing-host]');
 
       expect(panel).not.toBeNull();

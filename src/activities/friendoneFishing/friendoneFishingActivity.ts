@@ -1,6 +1,9 @@
 import type { ActivityModule } from '../activityTypes';
 import { addKeyboardActivation } from '../activityDom';
+import { createActivityCloseButton } from '../activityShell';
 import type { FriendOneFishingSceneCallbacks } from './FriendOneFishingScene';
+
+const CLOSE_ART_URL = '/assets/activities/friendone-fishing/close-x.png';
 
 interface FishingGameHandle {
   destroy(): void;
@@ -52,24 +55,24 @@ export function createFriendOneFishingActivity(
       const testMode = isTestMode();
 
       mount.innerHTML = `
-        <section class="activity-panel activity-panel--friendone-fishing" role="dialog" aria-label="____ Fishing">
-          <h2>____ Fishing</h2>
-          <div class="friendone-fishing-game">
+        <section class="activity-panel activity-shell activity-shell--fishing" role="dialog" aria-label="____ Fishing">
+          <h2 class="activity-shell__title">Fishing</h2>
+          <div class="activity-shell__viewport">
             <div class="friendone-fishing-game__host" data-friendone-fishing-host></div>
           </div>
-          <div class="activity-actions">
-            <button type="button" data-friendone-fishing-cancel>Cancel</button>
-            ${testMode ? '<button type="button" data-friendone-fishing-test-complete>Complete fishing</button>' : ''}
-          </div>
+          <p class="activity-shell__controls">Hold Space, Enter, or click to lift the fish · Keep it inside the green bar · Esc to leave</p>
+          ${
+            testMode
+              ? '<div class="activity-shell__actions"><button type="button" data-friendone-fishing-test-complete>Complete fishing</button></div>'
+              : ''
+          }
         </section>
       `;
 
+      const section = mount.querySelector<HTMLElement>('.activity-shell');
       const host = mount.querySelector<HTMLElement>('[data-friendone-fishing-host]');
-      const cancelButton = mount.querySelector<HTMLButtonElement>(
-        '[data-friendone-fishing-cancel]',
-      );
 
-      if (!host || !cancelButton) {
+      if (!section || !host) {
         throw new Error('Unable to mount ____ Fishing activity.');
       }
 
@@ -104,10 +107,13 @@ export function createFriendOneFishingActivity(
         onCancel: cancelFishing,
       };
 
-      cancelButton.addEventListener('click', cancelFishing, {
-        once: true,
-      });
-      addKeyboardActivation(cancelButton, cancelFishing);
+      section.append(
+        createActivityCloseButton({
+          onClose: cancelFishing,
+          dataAttr: 'data-friendone-fishing-cancel',
+          artUrl: CLOSE_ART_URL,
+        }),
+      );
 
       if (testMode) {
         const completeButton = mount.querySelector<HTMLButtonElement>(

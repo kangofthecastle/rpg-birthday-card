@@ -896,11 +896,19 @@ export class ViolinScene extends Phaser.Scene {
       g.lineBetween(STAFF_LEFT_LOCAL, y, STAFF_RIGHT_LOCAL, y);
     }
 
-    // A small time-signature-ish marking and a soft tempo word in warm ink.
-    const sigX = CLEF_LOCAL_X + 26;
-    g.lineStyle(2.5, INK, 0.6);
-    g.lineBetween(sigX, this.staffLineLocalY(0) + 2, sigX, this.staffLineLocalY(2) + 2);
-    g.lineBetween(sigX, this.staffLineLocalY(2) + 6, sigX, this.staffLineLocalY(4));
+    // Bar lines framing the phrase as one measure: a light opening line at the
+    // very left of the ruling, and a standard thin+thick "end of piece" bar at
+    // the right. Each spans exactly the top staff-line centre to the bottom
+    // one, so no nub overshoots the five lines.
+    const barTop = this.staffLineLocalY(0);
+    const barBottom = this.staffLineLocalY(4);
+    g.lineStyle(1.6, INK, 0.55);
+    g.lineBetween(STAFF_LEFT_LOCAL, barTop, STAFF_LEFT_LOCAL, barBottom);
+    g.lineBetween(STAFF_RIGHT_LOCAL - 6, barTop, STAFF_RIGHT_LOCAL - 6, barBottom);
+    g.lineStyle(3, INK, 0.7);
+    g.lineBetween(STAFF_RIGHT_LOCAL - 1.5, barTop, STAFF_RIGHT_LOCAL - 1.5, barBottom);
+
+    // A soft tempo word in warm ink.
 
     const tempo = this.add
       .text(0, -SHEET_HEIGHT / 2 + 18, 'dolce — for you', {

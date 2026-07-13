@@ -493,29 +493,31 @@ function addDoorwayEdgeSpill(
     container.add(spill);
   }
 
-  // Low upward light shafts rising off the threshold, angled slightly toward the
-  // room center — the read of light bouncing up over the open sill. Short and
-  // soft (no bright core pool) so they stay under the window beams.
-  const midX = (floor.x0 + floor.x1) / 2;
+  // Soft light spilling IN over the open threshold: each beam enters narrow at
+  // the front edge and fans wider as it reaches across the floor INTO the room,
+  // cast along the floor's inward axis (−mapY, i.e. up-and-to-the-right in
+  // screen). This reads as daylight reaching in over the open sill from the
+  // bottom edge — NOT a window shaft standing upright off it. Short and soft (no
+  // bright core pool) so they stay under the window beams.
+  const spanX = floor.x1 - floor.x0;
   const shaftCount = 5;
   for (let i = 0; i < shaftCount; i += 1) {
     const t = (i + 0.5) / shaftCount;
-    const fx = floor.x0 + (floor.x1 - floor.x0) * t + (rng() - 0.5) * 40;
-    const base = projectToIso(fx, floor.y1 - 6, origin);
-    const inward = fx < midX ? 1 : -1;
-    const height = 74 + rng() * 58;
-    const lean = (12 + rng() * 20) * inward; // horizontal drift toward center at the top
-    const wideHW = 30 + rng() * 16; // wide at the threshold base
-    const narrowHW = 8 + rng() * 8; // narrowing as it rises
-    const top: IsoPoint = { x: base.x + lean, y: base.y - height };
+    const fx = floor.x0 + spanX * t + (rng() - 0.5) * 40;
+    const source = projectToIso(fx, floor.y1 - 6, origin); // narrow, at the sill
+    const reach = 170 + rng() * 130; // how far into the room the beam spills (map px)
+    const drift = (rng() - 0.5) * 90; // slight along-edge fan of the inward end
+    const land = projectToIso(fx + drift, floor.y1 - 6 - reach, origin); // wide, inward
+    const wideHW = 30 + rng() * 16; // widening as it reaches into the room
+    const narrowHW = 8 + rng() * 8; // narrow where it enters at the sill
 
     const shaft = scene.add.graphics().setBlendMode(Phaser.BlendModes.ADD);
     shaft.fillStyle(0xffdf9c, 0.05);
-    shaft.fillPoints(toPhaserPoints(beamTrapezoid(top, base, narrowHW * 1.5, wideHW * 1.4)), true);
+    shaft.fillPoints(toPhaserPoints(beamTrapezoid(source, land, narrowHW * 1.5, wideHW * 1.4)), true);
     shaft.fillStyle(0xffe7b0, 0.08);
-    shaft.fillPoints(toPhaserPoints(beamTrapezoid(top, base, narrowHW, wideHW)), true);
+    shaft.fillPoints(toPhaserPoints(beamTrapezoid(source, land, narrowHW, wideHW)), true);
     shaft.fillStyle(0xfff1cf, 0.07);
-    shaft.fillPoints(toPhaserPoints(beamTrapezoid(top, base, narrowHW * 0.5, wideHW * 0.55)), true);
+    shaft.fillPoints(toPhaserPoints(beamTrapezoid(source, land, narrowHW * 0.5, wideHW * 0.55)), true);
     container.add(shaft);
     scene.tweens.add({
       targets: shaft,

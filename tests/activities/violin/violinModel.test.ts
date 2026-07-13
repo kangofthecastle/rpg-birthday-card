@@ -235,6 +235,101 @@ describe('violinModel — instant handoff (no takeover)', () => {
   });
 });
 
+describe('violinModel — mistakes allowed (one forgiven slip per note)', () => {
+  /** The key for some mapped note that is NOT the one currently expected. */
+  function wrongKey(state: ViolinState): string {
+    const expected = expectedKey(state);
+    const pitch = VIOLIN_PITCHES.find((p) => p.key !== expected);
+    if (!pitch) {
+      throw new Error('no wrong key');
+    }
+    return pitch.key;
+  }
+
+  it('defaults to off: the first wrong press is a normal miss (unchanged behaviour)', () => {
+    const state = runPlaybackToEcho(createViolinState());
+    // No third argument → mistakes NOT allowed.
+    const after = pressViolinKey(state, wrongKey(state));
+    expect(after.phase).toBe('playback');
+    expect(after.echoIndex).toBe(0);
+    expect(after.recovering).toBe(false);
+    expect(after.lastResult).toBe('waver');
+  });
+
+  it('a fresh state is not mid-recovery', () => {
+    expect(createViolinState().recovering).toBe(false);
+  });
+
+  it('forgives the first wrong press: the phrase holds and waits for the right note', () => {
+    const state = runPlaybackToEcho(createViolinState());
+    const before = { phrase: state.phraseIndex, echo: state.echoIndex, tempo: state.tempoScale };
+
+    const slipped = pressViolinKey(state, wrongKey(state), true);
+    // No reset — same phrase, same cursor, still echoing, just flagged recovering.
+    expect(slipped.phase).toBe('echo');
+    expect(slipped.phraseIndex).toBe(before.phrase);
+    expect(slipped.echoIndex).toBe(before.echo);
+    expect(slipped.tempoScale).toBe(before.tempo);
+    expect(slipped.recovering).toBe(true);
+    expect(slipped.lastResult).toBe('waver');
+  });
+
+  it('recovers when the correct note is then played: it rings, advances, clears the flag', () => {
+    let state = runPlaybackToEcho(createViolinState());
+    const correct = expectedKey(state);
+    state = pressViolinKey(state, wrongKey(state), true);
+    expect(state.recovering).toBe(true);
+
+    state = pressViolinKey(state, correct, true);
+    expect(state.lastResult).toBe('ring');
+    expect(state.echoIndex).toBe(1);
+    expect(state.recovering).toBe(false);
+    expect(state.phase).toBe('echo');
+  });
+
+  it('a SECOND wrong press while recovering is a normal miss (phrase resets, slower)', () => {
+    let state = runPlaybackToEcho(createViolinState());
+    state = pressViolinKey(state, wrongKey(state), true);
+    expect(state.recovering).toBe(true);
+
+    const second = pressViolinKey(state, wrongKey(state), true);
+    expect(second.phase).toBe('playback');
+    expect(second.echoIndex).toBe(0);
+    expect(second.recovering).toBe(false);
+    expect(second.tempoScale).toBeCloseTo(0.9, 5);
+    expect(second.lastResult).toBe('waver');
+  });
+
+  it('grants a fresh slip on each note: recovery on note 0 does not spend note 1\'s grace', () => {
+    let state = runPlaybackToEcho(createViolinState());
+    // Slip + recover on the first note.
+    state = pressViolinKey(state, wrongKey(state), true);
+    state = pressViolinKey(state, expectedKey(state), true);
+    expect(state.echoIndex).toBe(1);
+    expect(state.recovering).toBe(false);
+    // A wrong press on the SECOND note is again forgiven (its own grace).
+    const slipped = pressViolinKey(state, wrongKey(state), true);
+    expect(slipped.recovering).toBe(true);
+    expect(slipped.phase).toBe('echo');
+    expect(slipped.echoIndex).toBe(1);
+  });
+
+  it('a clean correct press (no prior slip) never enters recovery', () => {
+    const state = runPlaybackToEcho(createViolinState());
+    const after = pressViolinKey(state, expectedKey(state), true);
+    expect(after.recovering).toBe(false);
+    expect(after.lastResult).toBe('ring');
+  });
+
+  it('an unmapped key during recovery is ignored and keeps the recovering flag', () => {
+    let state = runPlaybackToEcho(createViolinState());
+    state = pressViolinKey(state, wrongKey(state), true);
+    const after = pressViolinKey(state, 'Z', true);
+    expect(after).toBe(state);
+    expect(after.recovering).toBe(true);
+  });
+});
+
 describe('violinModel — finale (whole-piece replay)', () => {
   function playToFinale(): ViolinState {
     let state = runPlaybackToEcho(createViolinState());

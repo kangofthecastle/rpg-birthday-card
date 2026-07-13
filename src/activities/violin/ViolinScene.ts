@@ -127,6 +127,7 @@ export class ViolinScene extends Phaser.Scene {
   private modelState: ViolinState = createViolinState();
 
   private roomBase!: Phaser.GameObjects.Graphics; // baked once, warm dusk room
+  private windowFallback?: Phaser.GameObjects.Graphics; // vector dusk window, hidden if backdrop art loads
   private roomLight!: Phaser.GameObjects.Graphics; // per-frame dim / warmth / vignette
   private beamFx!: Phaser.GameObjects.Graphics; // additive finale flood
   private sheet!: Phaser.GameObjects.Container; // tilted paper + staff + notes
@@ -245,6 +246,12 @@ export class ViolinScene extends Phaser.Scene {
       .setDisplaySize(CANVAS_WIDTH, CANVAS_HEIGHT)
       .setAlpha(0.6)
       .setDepth(-3);
+
+    // The painted backdrop has its own window + curtain in the left margin, so
+    // the vector fallback window would only ghost through as a second frame.
+    // Drop it entirely. (The finale light still floods from WINDOW_LIGHT, which
+    // now reads as pouring from the painted window.)
+    this.windowFallback?.setVisible(false);
   }
 
   update(time: number, _delta: number): void {
@@ -535,7 +542,16 @@ export class ViolinScene extends Phaser.Scene {
       g.fillRect(x, y, 1 + Math.round(rng()), 1 + Math.round(rng()));
     }
 
-    this.drawWindow(g);
+    // The vector dusk window belongs to the no-art fallback ambience. It lives
+    // on its own layer (not baked into roomBase) so that when the painted
+    // room-backdrop loads — which carries its own window + curtain in this same
+    // left margin — this one is hidden (placeBackdropImage) rather than bleeding
+    // through the 0.6-alpha backdrop as a ghosted, doubled frame. Sits above the
+    // wall (-5) but below the backdrop (-3) for the fallback case.
+    this.windowFallback?.destroy();
+    this.windowFallback = this.add.graphics().setDepth(-4);
+    this.drawWindow(this.windowFallback);
+
     this.drawStand(g);
 
     // Baked vignette in the corners so the panel edges settle into shadow.

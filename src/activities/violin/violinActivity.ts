@@ -61,7 +61,7 @@ export function createViolinActivity(
 
       mount.innerHTML = `
         <section class="activity-panel activity-shell activity-shell--violin" role="dialog" aria-label="the piece on the stand">
-          <h2 class="activity-shell__title">the piece on the stand</h2>
+          <h2 class="activity-shell__title">The piece on the stand</h2>
           <div class="activity-shell__viewport">
             <div class="violin-game__host" data-violin-host></div>
           </div>

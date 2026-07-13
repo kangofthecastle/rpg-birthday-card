@@ -1138,17 +1138,65 @@ body {
 }
 
 .activity-shell--fold .activity-shell__viewport {
-  background: #171019;
+  /* Pure black pillarbox bars around the contain-fit 16:10 fold canvas. */
+  background: #000;
 }
 
 .activity-shell__controls {
   flex: none;
-  margin: 8px 0 0;
+  /* A breath of space between the viewport's bottom edge and the hints. */
+  margin: 14px 0 0;
   padding: 0 6px;
   color: rgba(255, 247, 232, 0.62);
   font-size: 14px;
   line-height: 1.4;
   text-align: center;
+}
+
+/* Per-game typography for the title + controls strip — each game wears a
+   family it already speaks elsewhere in the project (system stacks only, no
+   downloaded fonts). Title and strip share the family; the strip stays the
+   smaller, muted line. */
+
+/* Fishing: warm storybook serif for the pond. */
+.activity-shell--fishing .activity-shell__title,
+.activity-shell--fishing .activity-shell__controls {
+  font-family: Georgia, "Times New Roman", serif;
+}
+
+/* RETAKE.EXE: the mono family of its own in-game HUD (ammo/round counters). */
+.activity-shell--valorant-split .activity-shell__title,
+.activity-shell--valorant-split .activity-shell__controls {
+  font-family: Consolas, "Courier New", ui-monospace, monospace;
+}
+
+.activity-shell--valorant-split .activity-shell__title {
+  letter-spacing: 0.08em;
+}
+
+/* The piece on the stand: the sheet's own voice — the Georgia italic of the
+   in-canvas "dolce" caption (and the pre-shell panel's lamplit title). */
+.activity-shell--violin .activity-shell__title,
+.activity-shell--violin .activity-shell__controls {
+  font-family: Georgia, "Times New Roman", serif;
+  font-style: italic;
+}
+
+.activity-shell--violin .activity-shell__title {
+  letter-spacing: 0.05em;
+  color: #ffe6b0;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5);
+}
+
+/* Boatigami: the typewriter voice of the letters being folded (letters screen
+   + letter modals). */
+.activity-shell--fold .activity-shell__title,
+.activity-shell--fold .activity-shell__controls {
+  font-family: "Courier New", ui-monospace, monospace;
+}
+
+.activity-shell--fold .activity-shell__title {
+  letter-spacing: 0.06em;
 }
 
 .activity-shell__actions {

@@ -8,6 +8,7 @@ import {
   getSignposts,
   isValidOutdoorLayoutFile,
   outdoorPlacementId,
+  PROP_KINDS,
   SIGNPOST_PROP_NAME,
   withOutdoorIds,
   type PropPlacement,
@@ -122,6 +123,44 @@ describe('real area layout overrides', () => {
   it('excludes fingerposts from the decoration props (they render separately)', () => {
     for (const area of OUTDOOR_AREAS) {
       expect(getOutdoorProps(area).some((p) => p.name === SIGNPOST_PROP_NAME), area).toBe(false);
+    }
+  });
+});
+
+describe('clearing framing pines', () => {
+  // Locked art dims + fallback style tags for the two generated dusk pines.
+  it('registers two distinct clearing pine kinds at their locked sizes', () => {
+    const tall = PROP_KINDS['clearing-pine-1'];
+    const broad = PROP_KINDS['clearing-pine-2'];
+    expect(tall).toMatchObject({ dir: 'clearing', w: 256, h: 416, style: 'pine-a' });
+    expect(broad).toMatchObject({ dir: 'clearing', w: 240, h: 336, style: 'pine-b' });
+    // Standing props: modest trunk colliders, not flat/overhead.
+    expect(tall.collider).toBeDefined();
+    expect(broad.collider).toBeDefined();
+    expect(tall.flat ?? false).toBe(false);
+    expect(tall.overhead ?? false).toBe(false);
+    // The tall spire is narrower in aspect than the broader pine.
+    expect(tall.w / tall.h).toBeLessThan(broad.w / broad.h);
+  });
+
+  it('frames the clearing with pines clear of the water band, spawn and kneel zone', () => {
+    const pines = getOutdoorProps('clearing').filter((p) => p.name.startsWith('clearing-pine-'));
+    // A modest framing set (both shapes present, both edges used).
+    expect(pines.length).toBeGreaterThanOrEqual(4);
+    expect(pines.some((p) => p.name === 'clearing-pine-1')).toBe(true);
+    expect(pines.some((p) => p.name === 'clearing-pine-2')).toBe(true);
+    expect(pines.some((p) => p.mapX < 512)).toBe(true); // west
+    expect(pines.some((p) => p.mapX > 512)).toBe(true); // east
+    for (const pine of pines) {
+      // Feet above the 2-tile shore water band (map is 640px tall, tile 64).
+      expect(pine.mapY, `${pine.name} above shore`).toBeLessThan(512);
+      // Off the central path lane / spawn column (x≈512).
+      expect(Math.abs(pine.mapX - 512), `${pine.name} off centre lane`).toBeGreaterThan(64);
+      // Clear of the "Kneel at the water" rect (x 320–704, y 440–568): a pine that
+      // sits in that y-band must be outside its x-range.
+      if (pine.mapY > 440) {
+        expect(pine.mapX < 320 || pine.mapX > 704, `${pine.name} off kneel rect`).toBe(true);
+      }
     }
   });
 });

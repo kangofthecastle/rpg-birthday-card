@@ -2425,6 +2425,19 @@ export class LocationScene extends Phaser.Scene {
       image.setOrigin(0.5, 1).setDepth(anchor.y);
     }
 
+    // Clearing set pieces warm subtly once the world has awakened, matching the
+    // shore band and drifting cranes (drawClearingShore/spawnClearingCranes use the
+    // same 0xffe9c8 tint) so the pines/lanterns read correctly under the golden
+    // shore light rather than staying flat twilight-cold.
+    if (
+      this.location.id === 'clearing' &&
+      !kind.flat &&
+      !kind.overhead &&
+      isFinalSpotUnlocked(this.state)
+    ) {
+      image.setTint(0xffe9c8);
+    }
+
     // Handle for the dressEdit editor (drag/resize/delete this exact billboard).
     this.outdoorPropHandles.push({ image, placement, kind });
 
@@ -2786,6 +2799,71 @@ export class LocationScene extends Phaser.Scene {
         }
         break;
       }
+      case 'pine-a':
+      case 'pine-b': {
+        // A painterly dark twilight pine silhouette matching the clearing's
+        // treeline: deep indigo foliage (the retired procedural line used
+        // 0x241d3c) built from stacked triangular tiers, a short dark trunk, and a
+        // faint warm rose/gold rim down the LEFT (lantern) side so it reads as lit
+        // by the paper lanterns. pine-a = tall/narrow spire; pine-b = broader.
+        const narrow = kind.style === 'pine-a';
+        const dark = '#221a38';
+        const mid = '#2c2447';
+        const deep = '#191331';
+        const rim = 'rgba(247,196,150,0.5)'; // warm rose/gold lantern-side rim
+        const trunkTop = h * 0.9;
+        const trunkW = w * 0.09;
+        // Short trunk peeking below the lowest boughs.
+        rrect(cx - trunkW / 2, trunkTop, trunkW, h - trunkTop - 4, trunkW * 0.4, '#241a24');
+        // Foliage: overlapping triangular tiers from a wide base up to the tip.
+        const spread = narrow ? 0.34 : 0.46; // half-width of the base tier
+        const tiers = narrow ? 5 : 4;
+        const topY = h * 0.05;
+        const baseY = h * 0.92;
+        const tier = (t: number, fill: string, inset: number): void => {
+          // t: 0 = bottom tier, 1 = top tier.
+          const bandTop = topY + (baseY - topY) * (t * (narrow ? 0.72 : 0.66));
+          const bandBot = bandTop + (baseY - topY) * (narrow ? 0.4 : 0.46);
+          const halfW = w * spread * (1 - t * 0.62) * inset;
+          ctx.beginPath();
+          ctx.moveTo(cx, bandTop);
+          ctx.lineTo(cx + halfW, bandBot);
+          ctx.lineTo(cx - halfW, bandBot);
+          ctx.closePath();
+          ctx.fillStyle = fill;
+          ctx.fill();
+        };
+        for (let i = 0; i < tiers; i += 1) {
+          const t = i / tiers;
+          tier(t, i % 2 === 0 ? dark : mid, 1);
+        }
+        // A deep-shadow core down the right (away from the lanterns).
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(cx, topY);
+        ctx.lineTo(cx + w * spread, baseY);
+        ctx.lineTo(cx, baseY);
+        ctx.closePath();
+        ctx.clip();
+        for (let i = 0; i < tiers; i += 1) {
+          tier(i / tiers, deep, 0.98);
+        }
+        ctx.restore();
+        // Faint warm rim-light tracing the lantern (left) edge of each tier.
+        ctx.strokeStyle = rim;
+        ctx.lineWidth = 1.6;
+        for (let i = 0; i < tiers; i += 1) {
+          const t = i / tiers;
+          const bandTop = topY + (baseY - topY) * (t * (narrow ? 0.72 : 0.66));
+          const bandBot = bandTop + (baseY - topY) * (narrow ? 0.4 : 0.46);
+          const halfW = w * spread * (1 - t * 0.62);
+          ctx.beginPath();
+          ctx.moveTo(cx, bandTop);
+          ctx.lineTo(cx - halfW, bandBot);
+          ctx.stroke();
+        }
+        break;
+      }
       case 'crane-1':
       case 'crane-2':
       case 'crane-3': {
@@ -2895,11 +2973,15 @@ export class LocationScene extends Phaser.Scene {
       stars.fillCircle(sx, sy, 0.6 + rng() * 1.4);
     }
 
-    // Distant pine silhouettes at the north corners (the fold-the-letters
-    // treeline), fading into the dusk.
-    const pines = this.add.graphics().setDepth(-19).setAlpha(0.85);
+    // Distant horizon treeline at the very top corners: a THIN, far-back line that
+    // now sits clearly BEHIND the real framing pines (the clearing-pine-1/2 props).
+    // Kept — not retired — for depth: it reads as forest receding on the skyline,
+    // not a doubling of the prop trees. Thinned from the old 6-per-side line
+    // (fewer, smaller, fainter) and pushed high/small so the prop pines carry the
+    // frame and this only whispers behind them.
+    const pines = this.add.graphics().setDepth(-19).setAlpha(0.55);
     const drawPine = (bx: number, by: number, ph: number): void => {
-      pines.fillStyle(0x241d3c, 1);
+      pines.fillStyle(0x201a34, 1);
       const pw = ph * 0.5;
       pines.beginPath();
       pines.moveTo(bx, by - ph);
@@ -2908,9 +2990,9 @@ export class LocationScene extends Phaser.Scene {
       pines.closePath();
       pines.fillPath();
     };
-    for (let i = 0; i < 6; i += 1) {
-      drawPine(20 + i * 34 + rng() * 12, tile * (1.0 + rng() * 0.4), tile * (1.4 + rng() * 1.1));
-      drawPine(width - 20 - i * 34 - rng() * 12, tile * (1.0 + rng() * 0.4), tile * (1.4 + rng() * 1.1));
+    for (let i = 0; i < 4; i += 1) {
+      drawPine(16 + i * 30 + rng() * 10, tile * (0.7 + rng() * 0.3), tile * (1.0 + rng() * 0.7));
+      drawPine(width - 16 - i * 30 - rng() * 10, tile * (0.7 + rng() * 0.3), tile * (1.0 + rng() * 0.7));
     }
 
     // Sakura petals drifting over the grass (not on the path lane or the shore).

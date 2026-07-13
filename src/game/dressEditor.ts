@@ -38,6 +38,45 @@ import {
   type RoomDressing,
   type RoomLayoutFile,
 } from '../content/roomDressing';
+import type {
+  PropKind,
+  PropPlacement as OutdoorPropPlacement,
+} from '../content/outdoorScenery';
+
+// --- Outdoor mode --------------------------------------------------------------
+// The editor edits either a dressed interior room's RoomDressing props OR an
+// outdoor area's OUTDOOR_PROPS decoration (+ the signpost). Rooms are the default
+// path (unchanged); an outdoor area passes `outdoor` hooks that adapt the parts
+// that differ: repositioning a billboard, the map rect for a signpost's linked
+// dialogue hotspot (shown as a gold outline), and the Save endpoint. All the
+// shared machinery (drag/nudge/pan/undo/DOM panel/interactables mode) is common.
+
+/** A placed outdoor decoration billboard paired with everything the editor needs
+ *  to move/resize/re-place it. Built by LocationScene as the props + signpost
+ *  render. The signpost handle also carries its caption + linked interaction id. */
+export interface OutdoorEditHandle {
+  readonly image: Phaser.GameObjects.Image;
+  readonly placement: OutdoorPropPlacement;
+  readonly kind: PropKind;
+  /** Signpost caption text object, moved together with the board. */
+  readonly label?: Phaser.GameObjects.Text;
+  /** Interaction id whose dialogue rect this signpost is linked to (signpost only). */
+  readonly signpostInteractionId?: string;
+}
+
+export interface OutdoorEditorHooks {
+  readonly handles: readonly OutdoorEditHandle[];
+  /** Re-place a billboard from its (mutated) placement. */
+  readonly reposition: (handle: OutdoorEditHandle) => void;
+  /** POST route for the outdoor layout save (dev endpoint). */
+  readonly saveRoute: string;
+  /** The linked dialogue hotspot rect (map px) for a signpost's interaction id. */
+  readonly signpostRect: (
+    interactionId: string,
+  ) => { x: number; y: number; width: number; height: number } | undefined;
+}
+
+type EditableOutdoorPlacement = Writable<OutdoorPropPlacement>;
 
 // Dev middleware (vite.config.ts) that writes the posted layout to
 // src/content/roomLayouts/<locationId>.json. The glob in roomDressing.ts picks
@@ -57,10 +96,14 @@ const SPAWNS_LAYER = 'Spawns';
 interface DressEditorOptions {
   readonly locationId: string;
   readonly projection: Projection;
-  readonly origin: IsoOrigin;
-  readonly dressing: RoomDressing;
+  /** Iso origin the room props were placed with. Room mode only. */
+  readonly origin?: IsoOrigin;
+  /** The dressed room. Room mode only; absent in outdoor mode. */
+  readonly dressing?: RoomDressing;
   readonly propHandles: readonly PropHandle[];
   readonly propDepthOverrides: Readonly<Record<string, number>>;
+  /** Present when editing an outdoor area's decoration instead of a room. */
+  readonly outdoor?: OutdoorEditorHooks;
   /**
    * Frame ids already tombstoned in the persisted layout (deliberately removed
    * in a prior session). Kept absent unless undone here, and re-persisted on
@@ -82,8 +125,12 @@ type Writable<T> = { -readonly [K in keyof T]: T[K] };
 type EditablePlacement = Writable<PropPlacement>;
 
 interface PropEntry {
-  placement: EditablePlacement;
+  /** Room prop placement, or an outdoor placement in outdoor mode. */
+  placement: EditablePlacement | EditableOutdoorPlacement;
   readonly image: Phaser.GameObjects.Image;
+  /** Outdoor mode: the live handle (its `placement` IS this entry's placement),
+   *  so reposition mutates the same object the editor edits. */
+  readonly outdoor?: OutdoorEditHandle;
 }
 
 type EditorMode = 'props' | 'interactables';
@@ -218,14 +265,22 @@ class DressEditor {
 
     // Deep-enough clone: top-level fields are edited; footprint is copied so an
     // export round-trips even for props we never touch. The original dressing
-    // data is never mutated.
-    this.entries = options.propHandles.map((handle) => ({
-      image: handle.image,
-      placement: {
-        ...handle.placement,
-        ...(handle.placement.footprint ? { footprint: { ...handle.placement.footprint } } : {}),
-      },
-    }));
+    // data is never mutated. In outdoor mode the entry carries a live handle whose
+    // `placement` IS the editable clone, so reposition mutates the same object.
+    if (options.outdoor) {
+      this.entries = options.outdoor.handles.map((handle) => {
+        const placement: EditableOutdoorPlacement = { ...handle.placement };
+        return { image: handle.image, placement, outdoor: { ...handle, placement } };
+      });
+    } else {
+      this.entries = options.propHandles.map((handle) => ({
+        image: handle.image,
+        placement: {
+          ...handle.placement,
+          ...(handle.placement.footprint ? { footprint: { ...handle.placement.footprint } } : {}),
+        },
+      }));
+    }
 
     this.graphics = scene.add.graphics().setDepth(OVERLAY_DEPTH);
 
@@ -426,6 +481,23 @@ class DressEditor {
 
   // --- editing helpers -----------------------------------------------------
 
+  // A placement's tombstone identity: the outdoor stable id (falling back to its
+  // prop name), or the room prop's frame. Drives the removed[] tombstone set.
+  private placementId(placement: EditablePlacement | EditableOutdoorPlacement): string {
+    if (this.options.outdoor) {
+      const p = placement as EditableOutdoorPlacement;
+      return p.id ?? p.name;
+    }
+    return (placement as EditablePlacement).frame;
+  }
+
+  // A placement's human label for toasts: prop name (outdoor) or frame (room).
+  private placementLabel(placement: EditablePlacement | EditableOutdoorPlacement): string {
+    return this.options.outdoor
+      ? (placement as EditableOutdoorPlacement).name
+      : (placement as EditablePlacement).frame;
+  }
+
   // Remove the selected prop: hide its sprite and pull it from entries[] so the
   // E export omits it. Pushed onto the undo stack with its index for Cmd/Ctrl+Z.
   private removeSelected(): void {
@@ -439,7 +511,7 @@ class DressEditor {
     this.selected = -1;
     this.updateRemovedCount();
     this.updateReadout();
-    this.toast(`Removed ${entry.placement.frame} — Cmd/Ctrl+Z to undo`);
+    this.toast(`Removed ${this.placementLabel(entry.placement)} — Cmd/Ctrl+Z to undo`);
   }
 
   private undoRemove(): void {
@@ -454,7 +526,7 @@ class DressEditor {
     this.selected = index;
     this.updateRemovedCount();
     this.updateReadout();
-    this.toast(`Restored ${last.entry.placement.frame}`);
+    this.toast(`Restored ${this.placementLabel(last.entry.placement)}`);
   }
 
   private updateCursor(): void {
@@ -466,7 +538,15 @@ class DressEditor {
   }
 
   private resizeSelected(dir: number): void {
-    const placement = this.entries[this.selected].placement;
+    if (this.options.outdoor) {
+      // Outdoor props resize by a single per-placement scale multiplier.
+      const placement = this.entries[this.selected].placement as EditableOutdoorPlacement;
+      placement.scale = round3(Math.max(MIN_SCALE, (placement.scale ?? 1) + dir * SCALE_STEP));
+      this.reposition(this.selected);
+      this.updateReadout();
+      return;
+    }
+    const placement = this.entries[this.selected].placement as EditablePlacement;
     if (placement.heightRatio !== undefined) {
       placement.heightRatio = round3(Math.max(MIN_HEIGHT, placement.heightRatio + dir * HEIGHT_STEP));
     } else if (placement.scale !== undefined) {
@@ -481,13 +561,18 @@ class DressEditor {
 
   private reposition(index: number): void {
     const entry = this.entries[index];
+    if (this.options.outdoor && entry.outdoor) {
+      this.options.outdoor.reposition(entry.outdoor);
+      return;
+    }
+    const placement = entry.placement as EditablePlacement;
     positionPropImage(
       this.scene,
-      this.options.dressing,
-      entry.placement,
+      this.options.dressing!,
+      placement,
       entry.image,
-      this.options.origin,
-      this.options.propDepthOverrides[entry.placement.frame],
+      this.options.origin!,
+      this.options.propDepthOverrides[placement.frame],
     );
   }
 
@@ -529,6 +614,24 @@ class DressEditor {
     g.lineBetween(anchor.x, anchor.y - 9, anchor.x, anchor.y + 9);
     g.fillStyle(0xf59e0b, 1);
     g.fillCircle(anchor.x, anchor.y, 3);
+
+    // Outdoor: when the selected prop is a signpost, outline its linked dialogue
+    // hotspot rect in faint gold so the pairing is visible. The board moves with
+    // the editor; the rect stays put (edit it in Interactables/M mode).
+    const interactionId = entry.outdoor?.signpostInteractionId;
+    if (this.options.outdoor && interactionId) {
+      const rect = this.options.outdoor.signpostRect(interactionId);
+      if (rect) {
+        const points = this.rectCornersMap(rect).map((c) => {
+          const p = this.projection.project(c.x, c.y);
+          return new Phaser.Geom.Point(p.x, p.y);
+        });
+        g.fillStyle(COLOR_INTERACTABLE, 0.12);
+        g.fillPoints(points, true);
+        g.lineStyle(2, COLOR_INTERACTABLE, 0.55);
+        g.strokePoints(points, true);
+      }
+    }
   }
 
   // --- interactables mode --------------------------------------------------
@@ -989,7 +1092,13 @@ class DressEditor {
       this.readoutEl.textContent = '(no prop selected)';
       return;
     }
-    const p = this.entries[this.selected].placement;
+    if (this.options.outdoor) {
+      const p = this.entries[this.selected].placement as EditableOutdoorPlacement;
+      this.readoutEl.textContent =
+        `${p.name}\nmapX ${p.mapX}  mapY ${p.mapY}\nscale ${round3(p.scale ?? 1)}`;
+      return;
+    }
+    const p = this.entries[this.selected].placement as EditablePlacement;
     const size =
       p.heightRatio !== undefined
         ? `heightRatio ${p.heightRatio}`
@@ -1053,9 +1162,9 @@ class DressEditor {
   // a prop back in entries[], clearing its tombstone).
   private tombstonedFrames(): string[] {
     return computeRemovedTombstones(
-      this.entries.map((entry) => entry.placement.frame),
+      this.entries.map((entry) => this.placementId(entry.placement)),
       this.initialRemoved,
-      this.removed.map((r) => r.entry.placement.frame),
+      this.removed.map((r) => this.placementId(r.entry.placement)),
     );
   }
 
@@ -1066,18 +1175,48 @@ class DressEditor {
     const removed = this.tombstonedFrames();
     return {
       locationId: this.options.locationId,
-      props: this.entries.map((entry) => entry.placement),
+      props: this.entries.map((entry) => entry.placement as EditablePlacement),
+      ...(removed.length > 0 ? { removed } : {}),
+    };
+  }
+
+  // The working layout as an OutdoorLayoutFile payload. Props are trimmed to the
+  // persistable fields (id/name/mapX/mapY/flip/scale) so the JSON stays minimal
+  // and matches the outdoor save endpoint's validator. Tombstones mirror rooms.
+  private buildOutdoorLayoutFile(): {
+    locationId: string;
+    props: Array<Record<string, unknown>>;
+    removed?: string[];
+  } {
+    const removed = this.tombstonedFrames();
+    const props = this.entries.map((entry) => {
+      const p = entry.placement as EditableOutdoorPlacement;
+      return {
+        ...(p.id !== undefined ? { id: p.id } : {}),
+        name: p.name,
+        mapX: p.mapX,
+        mapY: p.mapY,
+        ...(p.flip ? { flip: true } : {}),
+        ...(p.scale !== undefined && p.scale !== 1 ? { scale: round3(p.scale) } : {}),
+      };
+    });
+    return {
+      locationId: this.options.locationId,
+      props,
       ...(removed.length > 0 ? { removed } : {}),
     };
   }
 
   // Persist the working layout to disk via the dev endpoint. On success Vite
-  // sees the new roomLayouts/<id>.json and full-reloads, showing the saved
-  // state; no hand-paste needed. Falls back to a toast on any failure.
+  // sees the new roomLayouts/<id>.json (or outdoorLayouts/<id>.json) and
+  // full-reloads, showing the saved state; no hand-paste needed. Falls back to a
+  // toast on any failure.
   private async saveLayout(): Promise<void> {
-    const payload = this.buildLayoutFile();
+    const outdoor = this.options.outdoor;
+    const payload = outdoor ? this.buildOutdoorLayoutFile() : this.buildLayoutFile();
+    const route = outdoor ? outdoor.saveRoute : SAVE_LAYOUT_ROUTE;
     try {
-      const res = await fetch(SAVE_LAYOUT_ROUTE, {
+      const res = await fetch(route, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(payload),
@@ -1095,8 +1234,14 @@ class DressEditor {
   // --- export --------------------------------------------------------------
 
   private serializeProps(): string {
+    if (this.options.outdoor) {
+      const items = this.entries
+        .map((entry) => serializeOutdoorPlacement(entry.placement as EditableOutdoorPlacement))
+        .join('\n');
+      return `  props: [\n${items}\n  ],`;
+    }
     const items = this.entries
-      .map((entry) => serializePlacement(entry.placement))
+      .map((entry) => serializePlacement(entry.placement as EditablePlacement))
       .join('\n');
     return `  props: [\n${items}\n  ],`;
   }
@@ -1162,6 +1307,19 @@ function serializePlacement(placement: EditablePlacement): string {
   }
   lines.push('    },');
   return lines.join('\n');
+}
+
+// Paste-ready TS for an OUTDOOR_PROPS entry (E-export fallback). Omits the
+// synthesized `id` (the TS literals don't carry one) and default/absent fields.
+function serializeOutdoorPlacement(placement: EditableOutdoorPlacement): string {
+  const parts = [`name: '${placement.name}'`, `mapX: ${placement.mapX}`, `mapY: ${placement.mapY}`];
+  if (placement.flip) {
+    parts.push('flip: true');
+  }
+  if (placement.scale !== undefined && placement.scale !== 1) {
+    parts.push(`scale: ${round3(placement.scale)}`);
+  }
+  return `    { ${parts.join(', ')} },`;
 }
 
 function serializeValue(key: keyof PropPlacement, value: unknown): string {

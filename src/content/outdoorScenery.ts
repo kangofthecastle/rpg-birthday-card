@@ -239,6 +239,19 @@ export interface PropPlacement {
   readonly mapY: number;
   /** Mirror horizontally. */
   readonly flip?: boolean;
+  /**
+   * Per-placement display-scale multiplier applied on top of the prop kind's
+   * native size (default 1). The dressEdit editor's wheel/± resize writes this;
+   * the collider footprint scales with it so a shrunk prop blocks less ground.
+   */
+  readonly scale?: number;
+  /**
+   * Stable identity for the persisted-layout merge: `<name>#<occurrence>` within
+   * the location's TS-declared list (see outdoorPlacementId). Stamped on load; a
+   * saved layout carries it so a NEW TS placement (fresh id) still re-merges while
+   * existing ones are matched by id. Absent on the hand-authored TS literals.
+   */
+  readonly id?: string;
 }
 
 // Hand-placed so nothing lands on a path, spawn, exit, hotspot or house — dense
@@ -320,8 +333,139 @@ export const OUTDOOR_PROPS: Readonly<Record<string, readonly PropPlacement[]>> =
   ],
 };
 
+// ── Authored outdoor layout overrides ───────────────────────────────────────
+// Mirrors the room-dressing layout system (src/content/roomDressing.ts): the
+// OUTDOOR_PROPS arrays above are the initial/fallback placements, kept in TS so
+// their hand-placed rationale lives with the data. When an authored layout file
+// exists at src/content/outdoorLayouts/<locationId>.json — written in-game by the
+// ?dressEdit=1 editor's Save button — it REPLACES that area's props at module
+// load. Prop kinds, palettes and collider logic always stay in TS. The glob is
+// eager so lookups stay synchronous; an HMR reload after a Save re-picks the file.
+
+/** Stable per-placement identity: name + its occurrence index within the
+ * location's TS list. Deterministic from array order, so a NEW prop appended in
+ * TS gets a fresh id (and thus re-merges into a saved layout) while existing
+ * props keep theirs across saves. */
+export function outdoorPlacementId(name: string, occurrence: number): string {
+  return `${name}#${occurrence}`;
+}
+
+/** The signpost is persisted in the same layout file as the props (so its
+ * hand-placed position survives a reload), under this fixed id. It is rendered
+ * separately by LocationScene.renderSignpost, not among the OUTDOOR_PROPS. */
+export const SIGNPOST_PLACEMENT_ID = 'signpost#0';
+
+/** Stamp deterministic ids onto a TS-declared placement list (see above). */
+export function withOutdoorIds(placements: readonly PropPlacement[]): PropPlacement[] {
+  const counts = new Map<string, number>();
+  return placements.map((placement) => {
+    const occurrence = counts.get(placement.name) ?? 0;
+    counts.set(placement.name, occurrence + 1);
+    return { ...placement, id: placement.id ?? outdoorPlacementId(placement.name, occurrence) };
+  });
+}
+
+/** Persisted per-area outdoor layout (placements only; kinds/palette stay in TS). */
+export interface OutdoorLayoutFile {
+  readonly locationId: string;
+  readonly props: readonly PropPlacement[];
+  /**
+   * Ids the author deliberately removed ("tombstones"). A TS placement absent
+   * from the saved props is normally auto-merged back (so a newly-registered
+   * placement appears without a Save) — but a tombstoned id is NOT re-merged, so
+   * a deliberate deletion in dressEdit sticks across reloads. Same semantics as
+   * the room layout `removed[]`.
+   */
+  readonly removed?: readonly string[];
+}
+
+const OUTDOOR_LAYOUT_MODULES = import.meta.glob<OutdoorLayoutFile>('./outdoorLayouts/*.json', {
+  eager: true,
+  import: 'default',
+});
+
+const OUTDOOR_LAYOUTS_BY_LOCATION: Readonly<Record<string, OutdoorLayoutFile>> = Object.fromEntries(
+  Object.values(OUTDOOR_LAYOUT_MODULES)
+    .filter((file): file is OutdoorLayoutFile => Boolean(file && file.locationId))
+    .map((file) => [file.locationId, file]),
+);
+
+/**
+ * Merge a persisted layout into a base placement list. The saved `props` replace
+ * the TS fallback; any TS placement whose id the layout does not carry is
+ * appended, so a newly-registered placement appears without a Save first — UNLESS
+ * its id is tombstoned in `removed`, in which case it stays gone. Once the author
+ * arranges and Saves, a kept placement is written into `props` (matched by id) and
+ * this merge no longer re-adds it. Mirrors applyRoomLayout in roomDressing.ts.
+ */
+export function applyOutdoorLayout(
+  base: readonly PropPlacement[],
+  layout: Pick<OutdoorLayoutFile, 'props' | 'removed'>,
+): PropPlacement[] {
+  const savedIds = new Set(
+    layout.props.map((prop) => prop.id).filter((id): id is string => id !== undefined),
+  );
+  const removed = new Set(layout.removed ?? []);
+  const newFromTs = base.filter(
+    (prop) => prop.id !== undefined && !savedIds.has(prop.id) && !removed.has(prop.id),
+  );
+  return [...layout.props, ...newFromTs];
+}
+
+/** The persisted layout for an area, if any (raw, pre-merge). */
+export function getOutdoorLayout(locationId: string): OutdoorLayoutFile | undefined {
+  return OUTDOOR_LAYOUTS_BY_LOCATION[locationId];
+}
+
+/** Ids the author has tombstoned (deliberately removed) for an area. */
+export function getOutdoorLayoutRemoved(locationId: string): readonly string[] {
+  return OUTDOOR_LAYOUTS_BY_LOCATION[locationId]?.removed ?? [];
+}
+
+/**
+ * The decoration placements for an area: the TS fallback overridden by the
+ * authored layout JSON (if present), id-stamped. The signpost is excluded — it
+ * lives in the same layout but is rendered separately (see getOutdoorSignpost).
+ */
 export function getOutdoorProps(locationId: string): readonly PropPlacement[] {
-  return OUTDOOR_PROPS[locationId] ?? [];
+  const base = withOutdoorIds(OUTDOOR_PROPS[locationId] ?? []);
+  const layout = OUTDOOR_LAYOUTS_BY_LOCATION[locationId];
+  const merged = layout ? applyOutdoorLayout(base, layout) : base;
+  return merged.filter((placement) => placement.name !== 'signpost');
+}
+
+/**
+ * Validates an outdoor-layout payload shape (used by the dev save endpoint's
+ * mirror and unit tests). Checks the locationId and that every prop carries at
+ * least a string `name` and numeric `mapX`/`mapY`; optional id/scale/removed are
+ * left to the type. Mirrors isValidRoomLayoutFile.
+ */
+export function isValidOutdoorLayoutFile(value: unknown): value is OutdoorLayoutFile {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const file = value as Record<string, unknown>;
+  if (typeof file.locationId !== 'string' || !Array.isArray(file.props)) {
+    return false;
+  }
+  for (const prop of file.props) {
+    if (typeof prop !== 'object' || prop === null) {
+      return false;
+    }
+    const p = prop as Record<string, unknown>;
+    if (typeof p.name !== 'string' || typeof p.mapX !== 'number' || typeof p.mapY !== 'number') {
+      return false;
+    }
+    if (p.id !== undefined && typeof p.id !== 'string') {
+      return false;
+    }
+  }
+  if (file.removed !== undefined) {
+    if (!Array.isArray(file.removed) || file.removed.some((id) => typeof id !== 'string')) {
+      return false;
+    }
+  }
+  return true;
 }
 
 // ── Signposts ───────────────────────────────────────────────────────────────
@@ -338,6 +482,8 @@ export interface SignpostPlacement {
   /** Board caption drawn in-game. */
   readonly label: string;
   readonly flip?: boolean;
+  /** Per-placement display-scale multiplier (default 1); set via dressEdit. */
+  readonly scale?: number;
 }
 
 export const SIGNPOSTS: Readonly<Record<string, SignpostPlacement>> = {
@@ -348,4 +494,32 @@ export const SIGNPOSTS: Readonly<Record<string, SignpostPlacement>> = {
 
 export function getSignpost(locationId: string): SignpostPlacement | undefined {
   return SIGNPOSTS[locationId];
+}
+
+/**
+ * The signpost placement for an area, with its position/flip/scale overridden by
+ * the authored outdoor layout when the author has hand-moved it in dressEdit. The
+ * interactionId and label always stay in TS. Used by LocationScene.renderSignpost
+ * so the board renders where it was hand-placed (its dialogue rect is edited
+ * separately in the editor's Interactables mode).
+ */
+export function getOutdoorSignpost(locationId: string): SignpostPlacement | undefined {
+  const sign = SIGNPOSTS[locationId];
+  if (!sign) {
+    return undefined;
+  }
+  const layout = OUTDOOR_LAYOUTS_BY_LOCATION[locationId];
+  const override = layout?.props.find(
+    (prop) => prop.id === SIGNPOST_PLACEMENT_ID || prop.name === 'signpost',
+  );
+  if (!override) {
+    return sign;
+  }
+  return {
+    ...sign,
+    mapX: override.mapX,
+    mapY: override.mapY,
+    flip: override.flip ?? sign.flip,
+    scale: override.scale ?? sign.scale,
+  };
 }

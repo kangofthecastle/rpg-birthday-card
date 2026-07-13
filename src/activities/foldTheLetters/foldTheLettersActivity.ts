@@ -30,9 +30,12 @@ import {
   type RitualState,
 } from './foldModel';
 import { FoldStage } from './foldStage';
+import { createActivityCloseButton } from '../activityShell';
 import { isImageUrl } from '../../game/assetProbe';
 import { getUiRoot } from '../../ui/domRoot';
 import './foldTheLetters.css';
+
+const CLOSE_ART_URL = '/assets/activities/fold-the-letters/close-x.png';
 
 // Optional full-scene backdrop for the sail-away cinematic. File-first: when
 // present it cross-fades in over the composited boat as the drift begins and
@@ -109,24 +112,27 @@ export const foldTheLettersActivity: ActivityModule = {
     const timing = isTestMode() || prefersReducedMotion() ? TEST_TIMING : REAL_TIMING;
 
     mount.innerHTML = `
-      <section class="activity-panel activity-panel--fold" role="dialog" aria-label="fold" data-fold-panel>
-        <h2>fold</h2>
-        <p class="fold-caption" data-fold-hint>Three keepsakes, carried a long way. Give them to the water.</p>
-        <div class="fold-stage">
+      <section class="activity-panel activity-shell activity-shell--fold" role="dialog" aria-label="fold" data-fold-panel>
+        <h2 class="activity-shell__title">Boatigami</h2>
+        <div class="activity-shell__viewport">
           <canvas class="fold-stage__canvas" data-fold-canvas></canvas>
         </div>
-        <div class="activity-actions">
-          <button type="button" data-fold-cancel>Cancel</button>
-          ${isTestMode() ? '<button type="button" data-fold-test-complete>Fold the boat</button>' : ''}
-        </div>
+        <p class="activity-shell__controls" data-fold-hint>Three keepsakes, carried a long way. Give them to the water.</p>
+        ${
+          isTestMode()
+            ? '<div class="activity-shell__actions"><button type="button" data-fold-test-complete>Fold the boat</button></div>'
+            : ''
+        }
       </section>
     `;
 
     const panel = mount.querySelector<HTMLElement>('[data-fold-panel]');
     const canvas = mount.querySelector<HTMLCanvasElement>('[data-fold-canvas]');
     const hint = mount.querySelector<HTMLElement>('[data-fold-hint]');
-    const cancelButton = mount.querySelector<HTMLButtonElement>('[data-fold-cancel]');
-    if (!panel || !canvas || !hint || !cancelButton) {
+    // The X close button is created after the teardown handlers exist (below);
+    // hold the reference so the sail-away beat can disable it as the panel fades.
+    let cancelButton: HTMLButtonElement | undefined;
+    if (!panel || !canvas || !hint) {
       throw new Error('Unable to mount the fold activity.');
     }
 
@@ -552,8 +558,12 @@ export const foldTheLettersActivity: ActivityModule = {
       complete();
     }
 
-    cancelButton.addEventListener('click', cancel);
-    addKeyboardActivation(cancelButton, cancel);
+    cancelButton = createActivityCloseButton({
+      onClose: cancel,
+      dataAttr: 'data-fold-cancel',
+      artUrl: CLOSE_ART_URL,
+    });
+    panel.append(cancelButton);
 
     if (isTestMode()) {
       const testButton = mount.querySelector<HTMLButtonElement>('[data-fold-test-complete]');

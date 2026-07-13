@@ -204,7 +204,7 @@ export class FriendOneFishingScene extends Phaser.Scene {
       modelDelta,
     );
 
-    this.updateHudText(holdActive);
+    this.updateHudText();
     this.drawDynamicElements(time, holdActive);
   }
 
@@ -286,12 +286,14 @@ export class FriendOneFishingScene extends Phaser.Scene {
     );
   }
 
-  private updateHudText(holdActive = false): void {
+  private updateHudText(): void {
     const fishNumber = this.currentFishIndex + 1;
-    const holdLabel = holdActive ? 'Hold steady' : 'Hold to lift';
+    // A diegetic cue about the current fish only — the input mapping ("Space,
+    // Enter, or click … Esc to leave") lives in the standard controls strip
+    // beneath the viewport, not inside it.
     const specialCue = this.currentFish.isSpecial
       ? 'The koi surges and glows when it bursts.'
-      : 'Keep the fish inside the green catch bar.';
+      : 'The fish drifts — lift when it crosses the green bar.';
 
     this.fishNameText.setText(`Fish ${fishNumber}: ${this.currentFish.label}`);
     this.counterText.setText(`Caught ${this.caughtCount}/${FRIEND_ONE_FISH_SEQUENCE.length}`);
@@ -306,9 +308,7 @@ export class FriendOneFishingScene extends Phaser.Scene {
       return;
     }
 
-    this.helperText.setText(
-      `${holdLabel}: Space, Enter, or mouse. ${specialCue} Esc cancels.`,
-    );
+    this.helperText.setText(specialCue);
   }
 
   private drawDynamicElements(time: number, holdActive: boolean): void {

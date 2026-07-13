@@ -1235,10 +1235,10 @@ export class ViolinScene extends Phaser.Scene {
       // Handoff flows straight into the next listen, so it wears the same prompt
       // — the beat reads as the piece drawing breath, not a pause.
       this.titleText.setText('listen…');
-      this.helperText.setText('The piece plays itself through. Esc to step away.');
+      this.helperText.setText('The piece plays itself through.');
     } else if (phase === 'echo') {
       this.titleText.setText('now you — play it back');
-      this.helperText.setText('Echo the notes on A S D F G H. A wrong note just waits and plays again.');
+      this.helperText.setText('A wrong note just waits, then plays again.');
     } else if (phase === 'finale') {
       this.titleText.setText('');
       this.helperText.setText('');

@@ -1166,8 +1166,13 @@ export class SplitScene extends Phaser.Scene {
       return;
     }
 
+    // The input mapping lives in the standard controls strip beneath the
+    // viewport; the in-arena line stays diegetic — just the live objective.
+    const enemies = aliveEnemyCount(this.state);
     this.statusText.setText(
-      `WASD move · aim mouse · hold to fire · R reload · hold 4 on the spike to defuse. ${aliveEnemyCount(this.state)} enemies. Esc leaves.`,
+      enemies > 0
+        ? `${enemies} ${enemies === 1 ? 'enemy' : 'enemies'} still up — clear the site, then take the spike.`
+        : 'Site clear — get on the spike and hold it.',
     );
   }
 

@@ -311,6 +311,18 @@ const ACTIVITY_MUSIC_BY_ID: Readonly<Record<string, MusicKey | undefined>> = {
   'valorant-split': 'music-split',
 };
 
+// The four full-screen minigames. While one is open the global HUD chrome (the
+// top-right mute toggle and the Letters/envelope inventory) is hidden via a
+// body class so nothing floats over the standardized activity shell; it is
+// restored the moment the activity closes. The ending reveal is deliberately
+// NOT in this set — it runs its own terminal overlay flow.
+const MINIGAME_ACTIVITY_IDS: ReadonlySet<string> = new Set([
+  'friendone-pc-fishing',
+  'valorant-split',
+  'recipient-violin-piece',
+  'fold-the-letters',
+]);
+
 function locationMusicKey(locationId: string): MusicKey {
   return MUSIC_BY_LOCATION_ID[locationId] ?? 'music-path';
 }
@@ -3803,6 +3815,15 @@ export class LocationScene extends Phaser.Scene {
     const activityMount = document.createElement('div');
     root.append(activityMount);
 
+    // Hide the global HUD chrome (mute toggle + Letters inventory) for the
+    // duration of a minigame, so only the activity's own shell is on screen.
+    if (MINIGAME_ACTIVITY_IDS.has(activityId)) {
+      document.body.classList.add('minigame-active');
+    }
+    const restoreHud = (): void => {
+      document.body.classList.remove('minigame-active');
+    };
+
     const activityMusic = ACTIVITY_MUSIC_BY_ID[activityId];
     if (activityMusic) {
       playMusic(activityMusic, { fadeMs: 900 });
@@ -3818,12 +3839,14 @@ export class LocationScene extends Phaser.Scene {
       mount: activityMount,
       onGoHome: () => this.goHome(),
       onCancel: () => {
+        restoreHud();
         activityMount.remove();
         wakeScene();
         resumeLocationMusic();
         this.canMove = true;
       },
       onComplete: async (completion) => {
+        restoreHud();
         // The ending's frame-sequence transition hands off to the live, playable
         // galaxy scene. Wake this scene so it renders beneath the held galaxy
         // frame (still up in the activity mount), record the activity, then

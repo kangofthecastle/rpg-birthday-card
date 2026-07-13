@@ -2677,7 +2677,7 @@ export class LocationScene extends Phaser.Scene {
     // Caption centred on the board (upper ~72% of the sprite). Depth just above
     // the board so the player still occludes it when standing in front.
     const boardY = anchor.y - kind.h * scale * 0.72;
-    this.add
+    const caption = this.add
       .text(anchor.x, boardY, sign.label, {
         color: '#3c2a17',
         fontSize: '16px',
@@ -2685,8 +2685,19 @@ export class LocationScene extends Phaser.Scene {
         fontFamily: 'Georgia, "Times New Roman", serif',
       })
       .setOrigin(0.5, 0.5)
-      .setScale(scale)
       .setDepth(anchor.y + 0.1);
+    // Auto-fit: the board always displays at kind.w world-units wide (the sprite
+    // scale normalises any source art to kind.w), but the tilted plank the name
+    // sits on only spans ~72% of that. Long names (KERRISDALE, ALDERGROVE)
+    // overflow the plank at the base font size, so shrink the caption until it
+    // fits — the base `scale` stays the ceiling, so a name already within the
+    // plank is never enlarged.
+    const captionBudget = kind.w * 0.72;
+    const fitScale =
+      caption.width > 0
+        ? Math.min(scale, captionBudget / caption.width)
+        : scale;
+    caption.setScale(fitScale);
 
     if (!kind.collider) {
       return [];

@@ -1323,6 +1323,9 @@ body.minigame-active .collection-panel {
   --caption-gap: 3px; /* gap above the "n of m collected" caption */
   width: var(--panel-w);
   padding: var(--panel-pad);
+  /* Match the dialogue box's voice: the heading, caption, and hover-echoed
+     keepsake titles all share the game's dialogue font (see .dialogue-box). */
+  font-family: "Courier New", ui-monospace, monospace;
   /* Own stacking context (below the mute button z-200, above the game) so the
      fanned envelopes never paint above the letter-modal reader (z-400). */
   z-index: 150;

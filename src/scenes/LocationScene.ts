@@ -3385,8 +3385,44 @@ export class LocationScene extends Phaser.Scene {
       projection.rectCorners(object.x, object.y, object.width, object.height),
     );
 
-    marker.fillStyle(color, 0.28);
-    marker.fillPoints(polygon, true);
+    // Fill. Flat (outdoor) markers are axis-aligned rectangles that sit on the
+    // ground/water, so a hard-edged fill reads as a rectangle stamped on the
+    // surface — in the clearing the "Kneel at the water" marker looked like a
+    // shadow with a crisp rim on the twilight water. Feather the fill so it fades
+    // in from the edge instead: nested concentric rects, each at a fraction of the
+    // target alpha, composite to the full 0.28 in the interior and taper to nearly
+    // nothing at the rim (a soft falloff, ~1 tile deep — not a blur). The gold rim
+    // stroke still defines the hotspot. Iso (interior) markers keep the flat fill,
+    // since their corners are a parallelogram this nested-rect trick doesn't fit.
+    const FILL_ALPHA = 0.28;
+    if (projection.mode === 'flat') {
+      const xs = polygon.map((p) => p.x);
+      const ys = polygon.map((p) => p.y);
+      const x0 = Math.min(...xs);
+      const y0 = Math.min(...ys);
+      const w = Math.max(...xs) - x0;
+      const h = Math.max(...ys) - y0;
+      const layers = 6;
+      // Feather depth: subtle, capped so it never eats past the rect's centre.
+      const feather = Math.min(14, w / 2 - 1, h / 2 - 1);
+      if (feather > 0) {
+        const step = feather / layers;
+        // Per-layer alpha whose `layers`-fold source-over composite lands on
+        // FILL_ALPHA at the fully-covered core.
+        const layerAlpha = 1 - Math.pow(1 - FILL_ALPHA, 1 / layers);
+        marker.fillStyle(color, layerAlpha);
+        for (let i = 0; i < layers; i += 1) {
+          const inset = i * step;
+          marker.fillRect(x0 + inset, y0 + inset, w - inset * 2, h - inset * 2);
+        }
+      } else {
+        marker.fillStyle(color, FILL_ALPHA);
+        marker.fillPoints(polygon, true);
+      }
+    } else {
+      marker.fillStyle(color, FILL_ALPHA);
+      marker.fillPoints(polygon, true);
+    }
     marker.lineStyle(3, color, 0.9);
     marker.strokePoints(polygon, true);
 

@@ -123,51 +123,78 @@ describe('getRoomDressing', () => {
     }
   });
 
-  it('hangs both windows on the back-left wall, sheared to that wall', () => {
+  it('hangs windows as wall decor sheared to a back wall', () => {
     const dressing = getRoomDressing('recipient-house')!;
     const windows = dressing.props.filter((p) => p.frame === 'window');
 
-    // Two windows, both light sources (the owner asked for more light).
-    expect(windows.length).toBe(2);
+    // The dressed room ships at least one window for light (the owner asked for
+    // more light). Don't pin the count or which wall each window lands on —
+    // dressEdit can add, remove, or re-hang them freely (an earlier version of
+    // this test hard-asserted exactly two windows, both on the back-left wall).
+    // Assert only that whatever windows exist are valid wall decor.
+    expect(windows.length).toBeGreaterThan(0);
 
-    // Both hang on the back-left (west) wall and share its shear -0.5. The
-    // back-right/north wall window (shear +0.5) was removed — it never read
-    // right on that wall — so no window carries a positive shear.
-    const leftWall = windows.filter((w) => w.wallShear === -0.5);
-    const rightWall = windows.filter((w) => (w.wallShear ?? 0) > 0);
-    expect(leftWall.length).toBe(2);
-    expect(rightWall.length).toBe(0);
-
-    // Every window is wall decor: no footprint/collider, fixed depth behind the
-    // billboards, matching the original window's non-awakened treatment.
     for (const win of windows) {
-      expect(win.footprint).toBeUndefined();
-      expect(win.fixedDepth).toBeLessThan(0);
+      // Wall decor: no footprint/collider, and a fixed depth behind the
+      // billboards (never depth-sorted against the player like a floor prop).
+      expect(win.footprint, 'window footprint').toBeUndefined();
+      expect(win.fixedDepth!, 'window fixedDepth').toBeLessThan(0);
+      // Sized as flat art (scale), not player-relative height.
+      expect(win.heightRatio, 'window heightRatio').toBeUndefined();
+      // If sheared, it follows a back wall's screen slope (±0.5) — either wall,
+      // not left-only.
+      if (win.wallShear !== undefined) {
+        expect(Math.abs(win.wallShear), 'window wallShear').toBeCloseTo(0.5, 5);
+      }
     }
   });
 
-  it('sizes floor props against the player via heightRatio, keeping bed largest', () => {
-    const dressing = getRoomDressing('recipient-house')!;
-    const byFrame = (frame: string) => dressing.props.find((p) => p.frame === frame)!;
+  it('sizes props by exactly one mode — floor props by heightRatio, flat art by scale', () => {
+    // Structural sizing invariants that hold for ANY authored layout. The owner
+    // edits these rooms freely in-game via dressEdit, which never pins a prop to a
+    // specific size or ranks props against each other (an earlier version of this
+    // test asserted bed ≈ 1.5x and bed > desk > kitchen, and broke the moment a
+    // dressEdit pass nudged the desk a hair past the bed). Two sizing modes exist
+    // and are mutually exclusive: `heightRatio` (player-relative, for floor-
+    // standing props) and `scale` (for flat/wall art where height is not the
+    // measure). resolvePropScale in the renderer prefers heightRatio, and
+    // dressEdit only ever edits whichever one a prop already carries — so assert
+    // the *rules* every prop obeys, not the current taste of any one prop.
+    for (const locationId of ['recipient-house', 'friend-a', 'friend-b']) {
+      const dressing = getRoomDressing(locationId);
+      expect(dressing, locationId).toBeDefined();
 
-    // Solid floor props are sized by heightRatio (player-relative), not by an
-    // ad-hoc scale, so they read consistently against ____.
-    for (const frame of ['bed', 'desk', 'kitchen', 'monstera', 'pothos']) {
-      expect(byFrame(frame).heightRatio, frame).toBeGreaterThan(0);
-      expect(byFrame(frame).scale, frame).toBeUndefined();
+      for (const prop of dressing!.props) {
+        const where = `${locationId} ${prop.frame}`;
+        const hasHeight = prop.heightRatio !== undefined;
+        const hasScale = prop.scale !== undefined;
+
+        // A prop is sized by exactly one mode, never both (they would fight).
+        expect(hasHeight && hasScale, `${where}: sized by both heightRatio and scale`).toBe(false);
+
+        if (hasHeight) {
+          // Player-relative height: a positive, finite multiple within a sane
+          // band — never a fraction of a pixel, never many times the player.
+          expect(Number.isFinite(prop.heightRatio), `${where} heightRatio finite`).toBe(true);
+          expect(prop.heightRatio!, `${where} heightRatio`).toBeGreaterThan(0);
+          expect(prop.heightRatio!, `${where} heightRatio`).toBeLessThan(6);
+        }
+        if (hasScale) {
+          expect(Number.isFinite(prop.scale), `${where} scale finite`).toBe(true);
+          expect(prop.scale!, `${where} scale`).toBeGreaterThan(0);
+          expect(prop.scale!, `${where} scale`).toBeLessThan(10);
+        }
+
+        // A solid floor prop (one carrying a footprint/collider) is floor-
+        // standing, so it is always sized player-relative by heightRatio — never
+        // by an ad-hoc scale. Flat/wall art carries no footprint (see
+        // getPropColliders below), so this pins the floor-vs-flat sizing rule
+        // without naming a single specific prop.
+        if (prop.footprint) {
+          expect(hasHeight, `${where}: footprint prop must be sized by heightRatio`).toBe(true);
+        }
+      }
     }
-
-    // Cozy-RPG canon: the bed is the largest floor prop, with the desk cluster a
-    // hair behind it (the author's dressEdit pass resized the bed down to ~1.5x
-    // the player — no longer a full 2x tower, but still the biggest thing in the
-    // room, and still clearly above the kitchenette table).
-    expect(byFrame('bed').heightRatio!).toBeGreaterThan(byFrame('desk').heightRatio!);
-    expect(byFrame('bed').heightRatio!).toBeCloseTo(1.5, 1);
-    expect(byFrame('desk').heightRatio!).toBeGreaterThan(byFrame('kitchen').heightRatio!);
-
-    // The flat rug is not height-sized; it keeps an explicit scale.
-    expect(byFrame('rug').scale).toBeGreaterThan(0);
-    expect(byFrame('rug').heightRatio).toBeUndefined();
   });
 });
 
@@ -350,7 +377,7 @@ describe('per-prop standalone override slots', () => {
     expect(propOverrideTextureKey('recipient-house', 'bed')).toBe('prop-override:recipient-house:bed');
   });
 
-  it('lists a de-duplicated override candidate for every room prop, including the beds', () => {
+  it('lists exactly one de-duplicated override candidate for every room prop', () => {
     const candidates = listPropOverrideCandidates();
 
     // Unique per (location, frame).
@@ -363,16 +390,19 @@ describe('per-prop standalone override slots', () => {
       expect(c.url).toBe(propOverrideUrl(c.locationId, c.frame));
     }
 
-    // The three beds each get a slot (the first expected real drop-ins).
+    // The real contract BootScene relies on: the candidate set is EXACTLY the
+    // de-duplicated set of (location, frame) over every prop the dressed rooms
+    // actually render — one probe slot per placed prop, none for a prop that
+    // isn't there. Derived from the live dressings, so it holds for ANY authored
+    // layout instead of pinning a hand-listed roster (beds, friend-b bookshelf,
+    // ...) that a dressEdit tombstone could drop out from under the test.
+    const expected = new Set<string>();
     for (const locationId of ['recipient-house', 'friend-a', 'friend-b']) {
-      expect(
-        candidates.some((c) => c.locationId === locationId && c.frame === 'bed'),
-        `${locationId} bed slot`,
-      ).toBe(true);
+      for (const prop of getRoomDressing(locationId)!.props) {
+        expected.add(`${locationId}:${prop.frame}`);
+      }
     }
-
-    // Singles-only props expose a slot too (their only art source).
-    expect(candidates.some((c) => c.locationId === 'friend-b' && c.frame === 'bookshelf')).toBe(true);
+    expect(new Set(ids)).toEqual(expected);
   });
 });
 
@@ -458,10 +488,9 @@ describe('getPropColliders', () => {
         ).toBe(false);
       }
     }
-
-    // The desk specifically now sits well north of the front-door/near-pc spawn
-    // (704, 768) after the dressEdit rearrange, so its collider clears the whole
-    // spawn->exit corridor. Guards against a regression that drops it back south.
-    expect(deskRect.y + deskRect.height).toBeLessThan(768);
+    // NB: the desk's clearance of the near-pc spawn is already covered by the
+    // spawn-overlap loop above (it iterates every collider, the desk included),
+    // so no hard-coded desk coordinate is pinned here — a dressEdit rearrange
+    // that keeps the desk off the spawns and exit still passes.
   });
 });

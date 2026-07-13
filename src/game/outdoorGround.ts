@@ -63,6 +63,17 @@ export interface OutdoorGroundOptions {
   readonly exits: ReadonlyArray<{ x: number; y: number; width: number; height: number }>;
   /** 4-connected path cell mask (cols*rows, row-major) — see rasterizePathCells. */
   readonly pathMask: ReadonlyArray<boolean>;
+  /**
+   * Optional per-cell sub-tile draw offset in map px (cols*rows, row-major),
+   * added to the overlay's draw position for that cell. Used to slide a door's
+   * vertical approach leg so its band centres on the door's TRUE x-centre rather
+   * than the nearest tile column (door centres often sit exactly on a tile
+   * boundary, which otherwise snaps the road half a tile to one side). The
+   * walkable corridor stays tile-based; only the painted overlay shifts. Absent
+   * or zero entries draw at the plain tile origin.
+   */
+  readonly pathCellDx?: ReadonlyArray<number>;
+  readonly pathCellDy?: ReadonlyArray<number>;
   /** Twilight clearing: dusk grass, no hedge (the shore reads the boundary). */
   readonly dusk: boolean;
   /** Stable per-area seed for the procedural fallbacks. */
@@ -216,12 +227,14 @@ function buildPathLayer(scene: Phaser.Scene, opts: OutdoorGroundOptions): void {
       const s = row < rows - 1 && pathMask[index + cols];
       const w = column > 0 && pathMask[index - 1];
       const e = column < cols - 1 && pathMask[index + 1];
+      const dx = opts.pathCellDx?.[index] ?? 0;
+      const dy = opts.pathCellDy?.[index] ?? 0;
       for (const piece of choosePathOverlay(!!n, !!e, !!s, !!w)) {
         rt.drawFrame(
           rotatedScaledKey(scene, piece.key, piece.quarter, tile),
           undefined,
-          column * tile,
-          row * tile,
+          column * tile + dx,
+          row * tile + dy,
         );
       }
     }

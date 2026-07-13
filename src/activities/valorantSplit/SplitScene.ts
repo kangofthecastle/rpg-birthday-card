@@ -1,7 +1,6 @@
 import Phaser from 'phaser';
 import {
   SPLIT_CONFIG,
-  aliveEnemyCount,
   createSplitState,
   defuseProgress,
   enemyRect,
@@ -250,7 +249,6 @@ export class SplitScene extends Phaser.Scene {
   private allyCountText!: Phaser.GameObjects.Text;
   private enemyCountText!: Phaser.GameObjects.Text;
   private roundText!: Phaser.GameObjects.Text;
-  private statusText!: Phaser.GameObjects.Text;
   private barkText!: Phaser.GameObjects.Text;
   private popupText!: Phaser.GameObjects.Text;
   private promptText!: Phaser.GameObjects.Text;
@@ -339,17 +337,6 @@ export class SplitScene extends Phaser.Scene {
       .setOrigin(0.5, 0.5)
       .setDepth(813)
       .setScrollFactor(0);
-    this.statusText = this.add
-      .text(ARENA.width / 2, HUD.barBottomY - 16, '', {
-        align: 'center',
-        color: '#e6f2ff',
-        fontFamily: 'Arial, sans-serif',
-        fontSize: '16px',
-        stroke: '#141414',
-        strokeThickness: 5,
-      })
-      .setOrigin(0.5, 1)
-      .setDepth(810);
     this.barkText = this.add
       .text(0, 0, '', {
         align: 'center',
@@ -561,7 +548,6 @@ export class SplitScene extends Phaser.Scene {
           this.playSfx('reload');
           break;
         case 'reload-complete':
-          this.showWarn('RELOADED');
           break;
         case 'dry-fire':
           this.playSfx('dryfire');
@@ -647,7 +633,6 @@ export class SplitScene extends Phaser.Scene {
     this.drawHud();
 
     this.crosshair.setPosition(this.pointer.x, this.pointer.y);
-    this.updateStatusText();
     this.updateTimerText(now);
     this.updatePrompt();
   }
@@ -1271,32 +1256,6 @@ export class SplitScene extends Phaser.Scene {
 
     // --- Top scoreboard values (ally / enemy alive counts + tile dimming) ---
     this.updateTopBar();
-  }
-
-  private updateStatusText(): void {
-    if (this.finalizing) {
-      this.statusText.setText('');
-      return;
-    }
-
-    if (this.state.phase === 'detonated') {
-      this.statusText.setText('The spike went off — resetting. Run it back.');
-      return;
-    }
-
-    if (this.state.phase === 'dead') {
-      this.statusText.setText('You went down — restarting the retake from the top.');
-      return;
-    }
-
-    // The input mapping lives in the standard controls strip beneath the
-    // viewport; the in-arena line stays diegetic — just the live objective.
-    const enemies = aliveEnemyCount(this.state);
-    this.statusText.setText(
-      enemies > 0
-        ? `${enemies} ${enemies === 1 ? 'enemy' : 'enemies'} still up — clear the site, then take the spike.`
-        : 'Site clear — get on the spike and hold it.',
-    );
   }
 
   // The fuse countdown, centered in the top scoreboard bar. Turns red and blinks

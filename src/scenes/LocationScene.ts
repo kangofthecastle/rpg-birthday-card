@@ -39,6 +39,9 @@ import {
   type PropHandle,
   type ScreenBounds,
 } from '../game/roomRenderer';
+// Type-only: erased at runtime, so the dressEditor module stays lazily imported
+// (its startDressEditor is loaded via dynamic import only under ?dressEdit=1).
+import type { OutdoorEditHandle } from '../game/dressEditor';
 import { getCollisionZones, type CollisionZonesFile } from '../content/collisionZones';
 import { rasterizePolygonsToRects, type Polygon } from '../game/collisionGeometry';
 import type {
@@ -59,10 +62,13 @@ import {
   getExteriors,
   getOutdoorPalette,
   getOutdoorProps,
+  getOutdoorLayoutRemoved,
+  getOutdoorSignpost,
   getSignpost,
   exteriorTextureKey,
   propTextureKey,
   PROP_KINDS,
+  SIGNPOST_PLACEMENT_ID,
   GROUND_TILESET_KEY,
   GROUND_TILES,
   type ExteriorPlacement,
@@ -430,6 +436,11 @@ export class LocationScene extends Phaser.Scene {
   // dev ?dressEdit=1 editor. When that editor is active the player is frozen so
   // movement/interactions/edges stay inert while arranging furniture.
   private propHandles: readonly PropHandle[] = [];
+  // Outdoor decoration billboards paired with their placement + kind, for the
+  // ?dressEdit=1 editor in an outdoor area (drag/resize/delete). Collected as the
+  // props + signpost render; the signpost handle also carries its label + linked
+  // interaction id (for the gold-rect pairing hint).
+  private outdoorPropHandles: OutdoorEditHandle[] = [];
   private roomOrigin?: IsoOrigin;
   private dressEditFrozen = false;
   private propColliders: PropColliderRect[] = [];
@@ -603,18 +614,24 @@ export class LocationScene extends Phaser.Scene {
       return;
     }
     const params = new URLSearchParams(window.location.search);
-    if (
-      !params.has('dressEdit') ||
-      !this.projection ||
-      !this.dressing ||
-      !this.roomOrigin
-    ) {
+    if (!params.has('dressEdit') || !this.projection) {
       return;
     }
 
-    const projection = this.projection;
-    const dressing = this.dressing;
-    const origin = this.roomOrigin;
+    // Dressed interior rooms edit their RoomDressing props; outdoor areas edit the
+    // OUTDOOR_PROPS decoration (+ the signpost). Interactables (M) mode works in
+    // both (their maps carry the same Interactables/Exits/Spawns layers).
+    if (this.dressing && this.roomOrigin) {
+      this.startRoomDressEditor();
+    } else if (this.isOutdoor() && this.outdoorPropHandles.length > 0) {
+      this.startOutdoorDressEditor();
+    }
+  }
+
+  private startRoomDressEditor(): void {
+    const projection = this.projection!;
+    const dressing = this.dressing!;
+    const origin = this.roomOrigin!;
     const propHandles = this.propHandles;
     const propDepthOverrides = this.zonesFile?.propDepthOverrides ?? {};
     void import('../game/dressEditor').then(({ startDressEditor }) => {
@@ -630,6 +647,39 @@ export class LocationScene extends Phaser.Scene {
         removed: getRoomLayoutRemoved(this.location.id),
         setPlayerFrozen: (frozen: boolean) => {
           this.dressEditFrozen = frozen;
+        },
+      });
+    });
+  }
+
+  private startOutdoorDressEditor(): void {
+    const projection = this.projection!;
+    const handles = this.outdoorPropHandles;
+    void import('../game/dressEditor').then(({ startDressEditor }) => {
+      startDressEditor(this, {
+        locationId: this.location.id,
+        projection,
+        propHandles: [],
+        propDepthOverrides: {},
+        mapJson: this.getMapJson(),
+        mapUrl: this.location.mapUrl,
+        removed: getOutdoorLayoutRemoved(this.location.id),
+        setPlayerFrozen: (frozen: boolean) => {
+          this.dressEditFrozen = frozen;
+        },
+        outdoor: {
+          handles,
+          reposition: (handle) => this.positionOutdoorProp(handle),
+          saveRoute: '/__dev/save-outdoor-layout',
+          // The linked dialogue hotspot rect for a signpost (from the tmj), shown
+          // as a faint gold outline while the signpost is selected. Position-only
+          // here: the rect itself is edited in the editor's Interactables (M) mode.
+          signpostRect: (interactionId) => {
+            const rect = this.interactions.find((it) => it.id === interactionId);
+            return rect
+              ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
+              : undefined;
+          },
         },
       });
     });
@@ -835,6 +885,7 @@ export class LocationScene extends Phaser.Scene {
 
     this.propColliders = [];
     this.propColliderBodies = [];
+    this.outdoorPropHandles = [];
     let contentBounds: ScreenBounds | undefined;
 
     if (this.dressing) {
@@ -2621,7 +2672,9 @@ export class LocationScene extends Phaser.Scene {
     const key = this.ensurePropTexture(kind);
     const anchor = this.getProjection().project(placement.mapX, placement.mapY);
     const source = this.textures.get(key).getSourceImage() as { width: number };
-    const scale = kind.w / (source.width || kind.w);
+    // Per-placement scale (dressEdit resize) multiplies the kind's native size.
+    const placementScale = placement.scale ?? 1;
+    const scale = (kind.w / (source.width || kind.w)) * placementScale;
     const image = this.add.image(anchor.x, anchor.y, key).setScale(scale);
     if (placement.flip) {
       image.setFlipX(true);
@@ -2634,12 +2687,19 @@ export class LocationScene extends Phaser.Scene {
       image.setOrigin(0.5, 1).setDepth(anchor.y);
     }
 
+    // Handle for the dressEdit editor (drag/resize/delete this exact billboard).
+    this.outdoorPropHandles.push({ image, placement, kind });
+
     if (kind.collider && !kind.flat && !kind.overhead) {
+      // The collider footprint scales with the visual so a shrunk prop blocks
+      // proportionally less ground (and a grown one blocks more).
+      const cw = kind.collider.w * placementScale;
+      const ch = kind.collider.h * placementScale;
       const rect: PropColliderRect = {
-        x: placement.mapX - kind.collider.w / 2,
-        y: placement.mapY - kind.collider.h,
-        width: kind.collider.w,
-        height: kind.collider.h,
+        x: placement.mapX - cw / 2,
+        y: placement.mapY - ch,
+        width: cw,
+        height: ch,
       };
       // Never let a decoration body sit on a walkable corridor.
       if (corridor && this.colliderHitsCorridor(rect, corridor)) {
@@ -2650,11 +2710,36 @@ export class LocationScene extends Phaser.Scene {
     return undefined;
   }
 
+  // Re-place an outdoor decoration billboard (and, for the signpost, its caption)
+  // from its current placement. The dressEdit editor calls this after a drag /
+  // arrow-nudge / wheel-resize so the exact anchor + scale + depth math the
+  // initial render used stays the single source of truth (mirrors renderProp).
+  private positionOutdoorProp(handle: OutdoorEditHandle): void {
+    const { image, placement, kind, label } = handle;
+    const anchor = this.getProjection().project(placement.mapX, placement.mapY);
+    const source = this.textures.get(image.texture.key).getSourceImage() as { width: number };
+    const scale = (kind.w / (source.width || kind.w)) * (placement.scale ?? 1);
+    image.setScale(scale).setFlipX(Boolean(placement.flip)).setPosition(anchor.x, anchor.y);
+    if (kind.flat) {
+      image.setDepth(-14);
+    } else if (kind.overhead) {
+      image.setDepth(5000);
+    } else {
+      image.setDepth(anchor.y);
+    }
+    if (label) {
+      const boardY = anchor.y - kind.h * scale * 0.72;
+      label.setPosition(anchor.x, boardY).setScale(scale).setDepth(anchor.y + 0.1);
+    }
+  }
+
   // The visible signpost prop for a named area: the blank painted board with the
   // area name rendered ONTO it in-game (so a drop-in board art needs no baked
   // text). Bottom-anchored + y-sorted like the other standing props.
   private renderSignpost(tilemap: Phaser.Tilemaps.Tilemap): PropColliderRect[] {
-    const sign = getSignpost(this.location.id);
+    // Position/flip/scale come from the authored outdoor layout when the author
+    // hand-moved the board in dressEdit; interactionId + label stay in TS.
+    const sign = getOutdoorSignpost(this.location.id);
     if (!sign) {
       return [];
     }
@@ -2662,7 +2747,8 @@ export class LocationScene extends Phaser.Scene {
     const key = this.ensurePropTexture(kind);
     const anchor = this.getProjection().project(sign.mapX, sign.mapY);
     const source = this.textures.get(key).getSourceImage() as { width: number };
-    const scale = kind.w / (source.width || kind.w);
+    const placementScale = sign.scale ?? 1;
+    const scale = (kind.w / (source.width || kind.w)) * placementScale;
     const image = this.add
       .image(anchor.x, anchor.y, key)
       .setOrigin(0.5, 1)
@@ -2674,7 +2760,7 @@ export class LocationScene extends Phaser.Scene {
     // Caption centred on the board (upper ~72% of the sprite). Depth just above
     // the board so the player still occludes it when standing in front.
     const boardY = anchor.y - kind.h * scale * 0.72;
-    this.add
+    const label = this.add
       .text(anchor.x, boardY, sign.label, {
         color: '#3c2a17',
         fontSize: '16px',
@@ -2685,14 +2771,34 @@ export class LocationScene extends Phaser.Scene {
       .setScale(scale)
       .setDepth(anchor.y + 0.1);
 
+    // Handle for the dressEdit editor: dragging moves the board + its caption
+    // together; the linked interaction rect (dialogue hotspot) is shown as a
+    // faint gold outline while selected and is edited separately in M-mode.
+    this.outdoorPropHandles.push({
+      image,
+      label,
+      placement: {
+        id: SIGNPOST_PLACEMENT_ID,
+        name: 'signpost',
+        mapX: sign.mapX,
+        mapY: sign.mapY,
+        flip: sign.flip,
+        scale: sign.scale,
+      },
+      kind,
+      signpostInteractionId: sign.interactionId,
+    });
+
     if (!kind.collider) {
       return [];
     }
+    const cw = kind.collider.w * placementScale;
+    const ch = kind.collider.h * placementScale;
     const rect: PropColliderRect = {
-      x: sign.mapX - kind.collider.w / 2,
-      y: sign.mapY - kind.collider.h,
-      width: kind.collider.w,
-      height: kind.collider.h,
+      x: sign.mapX - cw / 2,
+      y: sign.mapY - ch,
+      width: cw,
+      height: ch,
     };
     const openEdges = new Set((this.location.edgeExits ?? []).map((exit) => exit.edge));
     const corridor = this.buildCorridorMask(tilemap, openEdges);

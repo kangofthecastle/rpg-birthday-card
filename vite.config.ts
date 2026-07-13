@@ -9,6 +9,7 @@ import {
 
 const SAVE_ROUTE = '/__dev/save-collision-zones';
 const SAVE_LAYOUT_ROUTE = '/__dev/save-room-layout';
+const SAVE_OUTDOOR_LAYOUT_ROUTE = '/__dev/save-outdoor-layout';
 const SAVE_MAP_OBJECTS_ROUTE = '/__dev/save-map-objects';
 const LOCATION_ID = /^[a-z0-9-]+$/;
 
@@ -165,6 +166,84 @@ function roomLayoutSaverPlugin(): Plugin {
   };
 }
 
+interface OutdoorLayoutPayload {
+  locationId: string;
+  props: Array<Record<string, unknown>>;
+  removed?: string[];
+}
+
+function isValidOutdoorLayoutPayload(value: unknown): value is OutdoorLayoutPayload {
+  if (typeof value !== 'object' || value === null) return false;
+  const file = value as Record<string, unknown>;
+  if (typeof file.locationId !== 'string' || !LOCATION_ID.test(file.locationId)) return false;
+  if (!Array.isArray(file.props)) return false;
+  for (const prop of file.props) {
+    if (typeof prop !== 'object' || prop === null) return false;
+    const p = prop as Record<string, unknown>;
+    // Outdoor placements are keyed by prop `name` (not a sheet `frame`); id is an
+    // optional stable-merge key.
+    if (typeof p.name !== 'string' || typeof p.mapX !== 'number' || typeof p.mapY !== 'number') {
+      return false;
+    }
+    if (p.id !== undefined && typeof p.id !== 'string') return false;
+  }
+  if (file.removed !== undefined) {
+    if (!Array.isArray(file.removed) || file.removed.some((id) => typeof id !== 'string')) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// Dev-only endpoint used by the in-game dress editor (?dressEdit=1) in an OUTDOOR
+// area to persist the authored decoration layout to
+// src/content/outdoorLayouts/<locationId>.json. Same security posture as the
+// room-layout saver: serve-only, path-restricted writes, id regex-validated.
+function outdoorLayoutSaverPlugin(): Plugin {
+  return {
+    name: 'outdoor-layout-saver',
+    apply: 'serve',
+    configureServer(server: ViteDevServer) {
+      server.middlewares.use(SAVE_OUTDOOR_LAYOUT_ROUTE, (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405;
+          res.end('Method Not Allowed');
+          return;
+        }
+
+        const chunks: Buffer[] = [];
+        req.on('data', (chunk: Buffer) => chunks.push(chunk));
+        req.on('end', () => {
+          try {
+            const parsed = JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
+            if (!isValidOutdoorLayoutPayload(parsed)) {
+              res.statusCode = 400;
+              res.end('Invalid payload');
+              return;
+            }
+            // Sanitize the id defensively (already regex-validated) to block any
+            // path traversal before it becomes a file path.
+            const safeId = parsed.locationId.replace(/[^a-z0-9-]/g, '');
+            const outPath = resolve(
+              server.config.root,
+              'src/content/outdoorLayouts',
+              `${safeId}.json`,
+            );
+            mkdirSync(dirname(outPath), { recursive: true });
+            writeFileSync(outPath, `${JSON.stringify(parsed, null, 2)}\n`, 'utf8');
+            res.statusCode = 200;
+            res.setHeader('content-type', 'application/json');
+            res.end(JSON.stringify({ ok: true, path: `${safeId}.json` }));
+          } catch (error) {
+            res.statusCode = 500;
+            res.end(`Error: ${String(error)}`);
+          }
+        });
+      });
+    },
+  };
+}
+
 // Dev-only endpoint used by the dress editor's "interactables" mode
 // (?dressEdit=1, then toggle) to persist edited interactable hotspot rects back
 // into the room's Tiled map (public/maps/<map>.tmj). Same security posture as
@@ -221,7 +300,12 @@ function mapObjectSaverPlugin(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [collisionZoneSaverPlugin(), roomLayoutSaverPlugin(), mapObjectSaverPlugin()],
+  plugins: [
+    collisionZoneSaverPlugin(),
+    roomLayoutSaverPlugin(),
+    outdoorLayoutSaverPlugin(),
+    mapObjectSaverPlugin(),
+  ],
   server: {
     host: '127.0.0.1',
     port: 5173,

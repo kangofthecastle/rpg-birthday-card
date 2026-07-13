@@ -1582,7 +1582,7 @@ export class LocationScene extends Phaser.Scene {
   }
 
   // (Re)rolls a crane's per-instance motion + look. Called at spawn and whenever a
-  // crane drifts off the downstream (east) edge so it re-enters upstream fresh.
+  // crane drifts off the downstream (west) edge so it re-enters upstream fresh.
   private randomizeCrane(
     crane: DriftingCrane,
     rng: () => number,
@@ -1591,7 +1591,9 @@ export class LocationScene extends Phaser.Scene {
     yMax: number,
   ): void {
     crane.scale = baseScale * (0.85 + rng() * 0.3); // ±15%
-    crane.image.setScale(crane.scale).setFlipX(rng() < 0.5);
+    // Never flipped: every crane faces LEFT (the art and the procedural fallback
+    // both face left), matching the right→left drift — always head-first.
+    crane.image.setScale(crane.scale);
     crane.speed = 5 + rng() * 4; // 5–9 px/sec: unhurried
     crane.bobAmp = 2 + rng() * 2.5; // 2–4.5 px
     crane.bobRate = 0.5 + rng() * 0.4; // slow
@@ -1603,10 +1605,11 @@ export class LocationScene extends Phaser.Scene {
     crane.baseY = yMin + rng() * (yMax - yMin);
   }
 
-  // Integrates the drifting cranes one frame: downstream drift, a gentle vertical
-  // bob and a slight rotation wobble, wrapping any crane that leaves the east edge
-  // back to the west so the trickle loops. Driven from update() before the
-  // gameplay gates, so the water keeps breathing even while dressEdit is frozen.
+  // Integrates the drifting cranes one frame: right→left downstream drift, a
+  // gentle vertical bob and a slight rotation wobble, wrapping any crane that
+  // leaves the west edge back to the east so the trickle loops. Driven from
+  // update() before the gameplay gates, so the water keeps breathing even while
+  // dressEdit is frozen.
   private advanceClearingCranes(deltaMs: number): void {
     if (this.clearingCranes.length === 0) {
       return;
@@ -1622,13 +1625,13 @@ export class LocationScene extends Phaser.Scene {
     const yMax = bandTop + tile * 1.15;
     const rng = this.craneWrapRng;
     for (const crane of this.clearingCranes) {
-      const nextX = crane.image.x + crane.speed * dt;
+      const nextX = crane.image.x - crane.speed * dt;
       const halfW = (crane.image.width * crane.scale) / 2;
-      if (nextX - halfW > width + tile) {
-        // Off the downstream edge: re-roll and re-enter from upstream (the
-        // texture — and so the colour variant — stays with the crane).
+      if (nextX + halfW < -tile) {
+        // Off the downstream (west) edge: re-roll and re-enter from the east
+        // (the texture — and so the colour variant — stays with the crane).
         this.randomizeCrane(crane, rng, crane.baseScale, yMin, yMax);
-        crane.image.setX(-tile - halfW);
+        crane.image.setX(width + tile + halfW);
       } else {
         crane.image.setX(nextX);
       }

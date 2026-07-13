@@ -20,7 +20,7 @@ import {
   type FishBehaviorParams,
   type FishBehaviorState,
 } from './fishBehavior';
-import { FISH_SPRITE_NOSE_ANGLE, fishSpriteFor } from './fishSprites';
+import { fishSpriteFacing, fishSpriteFor } from './fishSprites';
 import { isImageUrl } from '../../game/assetProbe';
 
 export interface FriendOneFishingSceneCallbacks {
@@ -44,6 +44,11 @@ const NEXT_FISH_DELAY_MS = 850;
 const POND_BACKGROUND_KEY = 'friendone-fishing-pond-dock';
 const POND_BACKGROUND_URL = '/assets/activities/friendone-fishing/pond-dock-v2.png';
 
+// Matches the Fishing activity shell's serif treatment (see
+// `.activity-shell--fishing` in styles.css) so the in-viewport Phaser text is
+// the same family as the title / controls strip around it.
+const FISHING_FONT = 'Georgia, "Times New Roman", serif';
+
 // Rod-tip anchor points in the 640x360 scene, measured from the painted rods on
 // the dock (both rods angle up-and-right, so the line hangs from a tip that
 // sits ABOVE the hand — the previous origins sat on the forearm). The fishing
@@ -60,6 +65,38 @@ const FRIEND_ONE_BOBBER = { x: 265, y: 248 } as const;
 const POND_BOUNDS = { minX: 196, maxX: 606, minY: 214, maxY: 332 } as const;
 const FISH_SPAWN = { x: 560, y: 286 } as const;
 
+// Depth layers. Fish and their effects sit LOW; the fishing line/bobbers sit
+// above them; the catch meter and all HUD text sit above everything so gameplay
+// UI is never occluded by a swimming fish.
+const DEPTH_FISH_FX = 10; // koi glow, wake trail, vector-fish fallback
+const DEPTH_FISH = 11; // the pond fish sprite itself
+const DEPTH_MOTION = 20; // shimmer, fishing lines, bobbers, ripples
+const DEPTH_METER = 30; // catch-meter panel + bars
+const DEPTH_METER_FISH = 31; // fish icon shown inside the meter
+const DEPTH_HUD = 40; // name / counter / helper / transition text
+
+// Water-surface outline (scene 640x360 coords), sampled from the painted
+// background: the pond's swimmable water bounded above by the dock's front edge
+// (which dips to ~254 at the post base around x=340) and, past x≈378, by open
+// water. Fish sprites AND their wakes are geometry-masked to this polygon so
+// they only ever appear on water — never over the dock or the reed banks.
+const WATER_MASK_POLYGON: ReadonlyArray<{ x: number; y: number }> = [
+  { x: 196, y: 224 },
+  { x: 226, y: 224 },
+  { x: 262, y: 222 },
+  { x: 300, y: 229 },
+  { x: 322, y: 231 },
+  { x: 334, y: 243 },
+  { x: 340, y: 255 },
+  { x: 352, y: 250 },
+  { x: 360, y: 227 },
+  { x: 376, y: 214 },
+  { x: 382, y: 200 },
+  { x: 610, y: 200 },
+  { x: 610, y: 338 },
+  { x: 196, y: 338 },
+];
+
 export class FriendOneFishingScene extends Phaser.Scene {
   private readonly callbacks: FriendOneFishingSceneCallbacks;
   private round: FishingRoundState = createFishingRound(FRIEND_ONE_FISH_SEQUENCE[0]);
@@ -73,10 +110,12 @@ export class FriendOneFishingScene extends Phaser.Scene {
   private enterKey?: Phaser.Input.Keyboard.Key;
   private escapeKey?: Phaser.Input.Keyboard.Key;
   private motionGraphics!: Phaser.GameObjects.Graphics;
+  private fishGraphics!: Phaser.GameObjects.Graphics;
   private meterGraphics!: Phaser.GameObjects.Graphics;
-  private fishNameText!: Phaser.GameObjects.Text;
+  private waterMask?: Phaser.Display.Masks.GeometryMask;
+  /** Recent fish positions for the subtle wake trail (newest last). */
+  private wake: Array<{ x: number; y: number; ttl: number; heading: number }> = [];
   private counterText!: Phaser.GameObjects.Text;
-  private helperText!: Phaser.GameObjects.Text;
   private transitionText!: Phaser.GameObjects.Text;
   private behavior: FishBehaviorState = createFishBehaviorState(FISH_SPAWN, 0x1a2b3c);
   private behaviorParams: FishBehaviorParams = createFishBehaviorParams(
@@ -104,8 +143,13 @@ export class FriendOneFishingScene extends Phaser.Scene {
   create(): void {
     this.cameras.main.setBackgroundColor('#18333b');
     this.createPondScene();
-    this.motionGraphics = this.add.graphics();
-    this.meterGraphics = this.add.graphics();
+    // Fish + their wake draw on their own layer so it can be clipped to the
+    // water without also clipping the fishing lines that hang over the dock.
+    this.fishGraphics = this.add.graphics().setDepth(DEPTH_FISH_FX);
+    this.motionGraphics = this.add.graphics().setDepth(DEPTH_MOTION);
+    this.meterGraphics = this.add.graphics().setDepth(DEPTH_METER);
+    this.waterMask = this.createWaterMask();
+    this.fishGraphics.setMask(this.waterMask);
 
     this.createHud();
     this.createInput();
@@ -204,8 +248,31 @@ export class FriendOneFishingScene extends Phaser.Scene {
       modelDelta,
     );
 
+    this.updateWake(modelDelta);
     this.updateHudText();
     this.drawDynamicElements(time, holdActive);
+  }
+
+  // Maintain a short trail of fading wake marks behind a swimming fish. Kept
+  // deliberately sparse and short-lived so the water reads as gently disturbed
+  // rather than scarred with ripples.
+  private updateWake(deltaMs: number): void {
+    for (const mark of this.wake) {
+      mark.ttl -= deltaMs;
+    }
+    this.wake = this.wake.filter((mark) => mark.ttl > 0);
+
+    const { x, y } = this.behavior.position;
+    const speed = Math.hypot(this.behavior.velocity.x, this.behavior.velocity.y);
+    const last = this.wake[this.wake.length - 1];
+    const movedFar = !last || Math.hypot(x - last.x, y - last.y) > 12;
+    // Only lay a wake when actually gliding, and only every ~12px of travel.
+    if (speed > 16 && movedFar) {
+      this.wake.push({ x, y, ttl: 620, heading: this.behavior.heading });
+      if (this.wake.length > 7) {
+        this.wake.shift();
+      }
+    }
   }
 
   private get currentFish(): FishConfig {
@@ -220,39 +287,46 @@ export class FriendOneFishingScene extends Phaser.Scene {
       .setDisplaySize(640, 360);
   }
 
+  // Geometry mask matching the painted water surface. Applied to the fish layer
+  // and the fish sprite so a fish (and its wake) is clipped to the water even
+  // when it swims up against the dock's front edge — it can never draw on land.
+  private createWaterMask(): Phaser.Display.Masks.GeometryMask {
+    const shape = this.make.graphics({}, false);
+    shape.fillStyle(0xffffff, 1);
+    shape.fillPoints(WATER_MASK_POLYGON as Phaser.Types.Math.Vector2Like[], true);
+    return shape.createGeometryMask();
+  }
+
   private createHud(): void {
-    this.fishNameText = this.add.text(24, 18, '', {
-      color: '#fff4d7',
-      fontFamily: 'Arial, sans-serif',
-      fontSize: '20px',
-      stroke: '#14262a',
-      strokeThickness: 4,
-    });
-    this.counterText = this.add.text(500, 18, '', {
-      color: '#fff4d7',
-      fontFamily: 'Arial, sans-serif',
-      fontSize: '16px',
-      stroke: '#14262a',
-      strokeThickness: 4,
-    });
-    this.helperText = this.add.text(24, 318, '', {
-      color: '#eef8e9',
-      fontFamily: 'Arial, sans-serif',
-      fontSize: '15px',
-      stroke: '#14262a',
-      strokeThickness: 4,
-      wordWrap: { width: 440 },
-    });
+    // In-viewport text matches the Fishing activity shell's serif treatment
+    // (Georgia, per .activity-shell--fishing in styles.css) rather than a bare
+    // sans, so the Phaser HUD reads as part of the same UI.
+    // The catch counter sits in the top-right, right-aligned above the meter
+    // panel (panel top = 34) with clear margin so it never clips the meter.
+    this.counterText = this.add
+      .text(614, 6, '', {
+        color: '#e6f2ec',
+        fontFamily: FISHING_FONT,
+        fontSize: '16px',
+        stroke: '#14262a',
+        strokeThickness: 4,
+      })
+      .setOrigin(1, 0);
     this.transitionText = this.add
       .text(298, 82, '', {
         align: 'center',
         color: '#ffe8a8',
-        fontFamily: 'Arial, sans-serif',
+        fontFamily: FISHING_FONT,
         fontSize: '21px',
         stroke: '#16333a',
         strokeThickness: 4,
       })
       .setOrigin(0.5);
+
+    // All HUD text sits above the fish and the meter.
+    for (const text of [this.counterText, this.transitionText]) {
+      text.setDepth(DEPTH_HUD);
+    }
   }
 
   private createInput(): void {
@@ -287,36 +361,45 @@ export class FriendOneFishingScene extends Phaser.Scene {
   }
 
   private updateHudText(): void {
-    const fishNumber = this.currentFishIndex + 1;
-    // A diegetic cue about the current fish only — the input mapping ("Space,
-    // Enter, or click … Esc to leave") lives in the standard controls strip
-    // beneath the viewport, not inside it.
-    const specialCue = this.currentFish.isSpecial
-      ? 'The koi surges and glows when it bursts.'
-      : 'The fish drifts — lift when it crosses the green bar.';
-
-    this.fishNameText.setText(`Fish ${fishNumber}: ${this.currentFish.label}`);
+    // Only the catch counter lives in the viewport now. The fish label and the
+    // drifting-hint line were removed at ____'s request; the "keep it in the
+    // green bar / Esc to leave" guidance lives in the controls strip beneath the
+    // viewport (see friendoneFishingActivity.ts).
     this.counterText.setText(`Caught ${this.caughtCount}/${FRIEND_ONE_FISH_SEQUENCE.length}`);
-
-    if (this.isFinalizing) {
-      this.helperText.setText('The glowing koi settles beside ____.');
-      return;
-    }
-
-    if (this.isTransitioning) {
-      this.helperText.setText('Nice catch. The next fish is circling closer.');
-      return;
-    }
-
-    this.helperText.setText(specialCue);
   }
 
   private drawDynamicElements(time: number, holdActive: boolean): void {
     this.motionGraphics.clear();
+    this.fishGraphics.clear();
     this.drawWaterShimmer(time);
-    this.drawFishingLines(time, holdActive);
+    // Fish and wake draw on the masked fish layer (below the lines/bobbers).
+    this.drawWake();
     this.drawPondFish(time);
+    this.drawFishingLines(time, holdActive);
     this.drawMeter(time);
+  }
+
+  // Soft, watery wake: each mark is a faint elongated ripple stretched along the
+  // fish's heading that widens and fades as it ages. Low alpha and short life
+  // keep it tasteful; the mask keeps every mark on the water.
+  private drawWake(): void {
+    const g = this.fishGraphics;
+    for (const mark of this.wake) {
+      const life = Math.max(0, Math.min(1, mark.ttl / 620));
+      const alpha = 0.1 * life;
+      if (alpha <= 0.005) continue;
+      const spread = 5 + (1 - life) * 7;
+      const cos = Math.cos(mark.heading);
+      const sin = Math.sin(mark.heading);
+      // Draw a thin ellipse aligned to travel by sampling a few points; Graphics
+      // has no rotated-ellipse primitive, so approximate with two soft dots.
+      const along = spread;
+      const across = spread * 0.42;
+      g.fillStyle(0xcdeefc, alpha);
+      g.fillEllipse(mark.x - cos * 2, mark.y - sin * 2, along * 1.6, across * 1.6);
+      g.fillStyle(0xe8f8ff, alpha * 0.7);
+      g.fillEllipse(mark.x, mark.y, along, across);
+    }
   }
 
   private drawWaterShimmer(time: number): void {
@@ -416,17 +499,17 @@ export class FriendOneFishingScene extends Phaser.Scene {
     // Koi glow trails the fish wherever it swims.
     if (fish.isSpecial) {
       const pulse = 0.55 + Math.sin(time / 160) * 0.2;
-      this.motionGraphics.fillStyle(0xffc85a, 0.22 + pulse * 0.22);
-      this.motionGraphics.fillCircle(x, y, 24 + pulse * 12);
+      this.fishGraphics.fillStyle(0xffc85a, 0.22 + pulse * 0.22);
+      this.fishGraphics.fillCircle(x, y, 24 + pulse * 12);
     }
 
     if (this.spriteReady.has(fish.id)) {
       this.drawPondFishSprite(fish.id, x, y, heading);
       if (fish.isSpecial) {
         // Koi art ships without a baked glow — keep sparkles procedural on top.
-        this.motionGraphics.fillStyle(0xfff0a3, 0.8);
-        this.motionGraphics.fillCircle(x + Math.sin(time / 130) * 16, y - 14, 2.5);
-        this.motionGraphics.fillCircle(x - Math.cos(time / 170) * 18, y + 12, 2);
+        this.fishGraphics.fillStyle(0xfff0a3, 0.8);
+        this.fishGraphics.fillCircle(x + Math.sin(time / 130) * 16, y - 14, 2.5);
+        this.fishGraphics.fillCircle(x - Math.cos(time / 170) * 18, y + 12, 2);
       }
       return;
     }
@@ -448,22 +531,27 @@ export class FriendOneFishingScene extends Phaser.Scene {
       this.pondFishSprite = this.add
         .image(x, y, cfg.key)
         .setOrigin(0.5)
-        .setDepth(5);
+        .setDepth(DEPTH_FISH);
+      if (this.waterMask) {
+        this.pondFishSprite.setMask(this.waterMask);
+      }
     } else if (this.pondFishSprite.texture.key !== cfg.key) {
       this.pondFishSprite.setTexture(cfg.key);
     }
 
     const source = this.textures.get(cfg.key).getSourceImage();
     const scale = cfg.pondWidth / Math.max(1, source.width);
-    // Top-down cutout: rotate the whole sprite to the travel heading (art nose
-    // points left, so subtract the nose angle). No flip — a top-down fish reads
-    // correctly at any rotation.
+    // Side-view cutout (nose left): mirror it to the travel side and pitch it
+    // gently toward the heading, so it always swims nose-first and upright —
+    // rotating the whole sprite to the heading flipped it belly-up when it
+    // headed right (the "moving backwards" bug).
+    const facing = fishSpriteFacing(heading);
     this.pondFishSprite
       .setVisible(true)
       .setPosition(x, y)
       .setScale(scale)
-      .setFlipX(false)
-      .setRotation(heading - FISH_SPRITE_NOSE_ANGLE);
+      .setFlipX(facing.flipX)
+      .setRotation(facing.rotation);
   }
 
   private drawPondFishVector(
@@ -477,14 +565,14 @@ export class FriendOneFishingScene extends Phaser.Scene {
     const tailFlick = Math.sin(time / 90) * 4;
 
     if (fish.isSpecial) {
-      this.motionGraphics.fillStyle(0xfff0a3, 0.75);
-      this.motionGraphics.fillCircle(x + 18 * dir, y - 16, 2.5);
-      this.motionGraphics.fillCircle(x - 22 * dir, y + 12, 2);
+      this.fishGraphics.fillStyle(0xfff0a3, 0.75);
+      this.fishGraphics.fillCircle(x + 18 * dir, y - 16, 2.5);
+      this.fishGraphics.fillCircle(x - 22 * dir, y + 12, 2);
     }
 
-    this.motionGraphics.fillStyle(fish.isSpecial ? 0xffa13d : 0x7fd6d0, 0.86);
-    this.motionGraphics.fillEllipse(x, y, 28, 12);
-    this.motionGraphics.fillTriangle(
+    this.fishGraphics.fillStyle(fish.isSpecial ? 0xffa13d : 0x7fd6d0, 0.86);
+    this.fishGraphics.fillEllipse(x, y, 28, 12);
+    this.fishGraphics.fillTriangle(
       x - 18 * dir,
       y,
       x - 30 * dir,
@@ -492,8 +580,8 @@ export class FriendOneFishingScene extends Phaser.Scene {
       x - 30 * dir,
       y + 8 + tailFlick,
     );
-    this.motionGraphics.fillStyle(0xfff8cf, fish.isSpecial ? 0.7 : 0.42);
-    this.motionGraphics.fillCircle(x + 6 * dir, y - 2, 2);
+    this.fishGraphics.fillStyle(0xfff8cf, fish.isSpecial ? 0.7 : 0.42);
+    this.fishGraphics.fillCircle(x + 6 * dir, y - 2, 2);
   }
 
   private drawMeter(time: number): void {
@@ -588,7 +676,7 @@ export class FriendOneFishingScene extends Phaser.Scene {
       this.meterFishSprite = this.add
         .image(centerX, centerY, cfg.key)
         .setOrigin(0.5)
-        .setDepth(6);
+        .setDepth(DEPTH_METER_FISH);
     } else if (this.meterFishSprite.texture.key !== cfg.key) {
       this.meterFishSprite.setTexture(cfg.key);
     }

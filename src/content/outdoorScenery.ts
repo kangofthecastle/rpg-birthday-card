@@ -214,7 +214,7 @@ export const PROP_KINDS: Readonly<Record<string, PropKind>> = {
   'lamp-post': { name: 'lamp-post', dir: 'outdoor', w: 112, h: 288, collider: { w: 34, h: 22 }, style: 'lamp' },
   mailbox: { name: 'mailbox', dir: 'outdoor', w: 96, h: 176, collider: { w: 44, h: 22 }, style: 'mailbox' },
   bench: { name: 'bench', dir: 'outdoor', w: 224, h: 144, collider: { w: 196, h: 30 }, style: 'bench' },
-  'signpost-arrow': { name: 'signpost-arrow', dir: 'outdoor', w: 192, h: 224, collider: { w: 40, h: 20 }, style: 'signpost-arrow' },
+  'signpost-arrow': { name: 'signpost-arrow', dir: 'outdoor', w: 256, h: 224, collider: { w: 40, h: 20 }, style: 'signpost-arrow' },
   'clearing-lantern-post': { name: 'clearing-lantern-post', dir: 'clearing', w: 128, h: 320, collider: { w: 34, h: 22 }, style: 'lantern-post' },
   'clearing-lantern-string': { name: 'clearing-lantern-string', dir: 'clearing', w: 512, h: 160, overhead: true, style: 'lantern-string' },
   // Twilight pines framing the clearing — the fold-the-letters treeline made real
@@ -546,21 +546,16 @@ export function getSignposts(locationId: string): readonly SignpostPlacement[] {
 
 /**
  * The writable region of an arrow board — the rectangular SHAFT, excluding the
- * triangular arrowhead — as a fraction of the sprite width. The in-game caption
- * auto-fit measures the label against this (not the whole board), so text never
- * rides onto the arrowhead. Both the drop-in art and the procedural fallback are
- * authored so the shaft matches this width.
+ * triangular arrowhead — is no longer a baked fraction. LocationScene measures the
+ * loaded (or fallback) signpost texture's alpha at runtime (see
+ * measureSignpostBoard): it locates the plank, its rectangular shaft (where the
+ * opaque column height plateaus, before the arrowhead tapers to its point), the
+ * shaft's vertical centre and a margin-inset usable width, then fits the caption
+ * from those live measurements × the current display scale. That makes the fit
+ * self-correct for any drop-in art size (e.g. a wider 256-wide board) and for any
+ * dressEdit resize with no constants to retune. The procedural fallback is
+ * measured the same way, so its authored geometry needs no matching constant.
  */
-export const SIGNPOST_ARROW_WRITABLE_FRACTION = 0.6;
-
-/**
- * Horizontal centre of that shaft, as a fraction from the sprite's LEFT edge, for
- * the native (unflipped) art whose arrow points right — the head sits to the
- * right so the shaft's centre is left of the board's centre. Mirrored about 0.5
- * when the sprite is flipped (arrow pointing left). The caption is positioned here
- * so it sits centred on the shaft in either direction while staying upright.
- */
-export const SIGNPOST_ARROW_SHAFT_CENTER_FRACTION = 0.44;
 
 /**
  * The fingerpost placements for an area, each with its position/flip/scale

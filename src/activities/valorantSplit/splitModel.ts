@@ -139,10 +139,15 @@ export const SPLIT_CONFIG = {
   spike: { x: 480, y: 290, size: 26 },
   playerStart: { x: 480, y: 415 },
   teammateStart: { x: 426, y: 422 },
-  // Timed reinforcements: the first group is live at spawn; one more wave bleeds
-  // in mid-round so there's never a long dead stretch. Capped at FIVE bots total
-  // (3 + 2, no third wave) — the bots are individually meaner instead. Killing
-  // every bot is NOT the win condition — completing the defuse under fire is.
+  // Reinforcements: a SINGLE scheduled group — the three bots that are live from
+  // the first frame. The only other bots that ever spawn are the two-bot defuse
+  // ambush (defuseAmbush), which drops in the instant the spike is first tapped.
+  // That is the whole roster: 3 opening bots + 2 on the first defuse tap = FIVE
+  // per round, and NEVER any more. There is deliberately no timed mid-round wave
+  // (an earlier ~T-35s reinforcement stacked on top of the ambush and pushed the
+  // total to seven — "the extra waves keep popping up"); the bots are meaner
+  // instead. Killing every bot is NOT the win condition — completing the defuse
+  // under fire is.
   reinforcements: [
     {
       atElapsedMs: 0,
@@ -150,14 +155,6 @@ export const SPLIT_CONFIG = {
         { x: 300, y: 150 },
         { x: 480, y: 140 },
         { x: 660, y: 150 },
-      ],
-    },
-    {
-      // ~T-35s (35s left on a 60s fuse).
-      atElapsedMs: 25000,
-      spawns: [
-        { x: 372, y: 150 },
-        { x: 588, y: 150 },
       ],
     },
   ] as const,

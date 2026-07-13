@@ -563,32 +563,25 @@ describe('enemy accuracy is poor and seed-deterministic', () => {
 });
 
 describe('timed reinforcements', () => {
-  it('bleeds in a single mid-round wave and caps at five bots', () => {
-    // No starting enemies so the schedule is the only thing that spawns; keep
-    // ____ invulnerable so the wave's bots can't restart the round on her.
-    let state = withState({ enemies: [], reinforcementsSpawned: 1 });
+  it('schedules a single opening group and never bleeds in a timed wave', () => {
+    // The opening three are the ONLY scheduled spawn; there is no timed mid-round
+    // reinforcement. Keep ____ invulnerable and never tap the spike so the only
+    // possible growth would be a (now-removed) timer wave.
+    let state = createSplitState(1);
     state = { ...state, player: { ...state.player, invulnMs: 1e7 } };
 
     expect(state.reinforcementsSpawned).toBe(1);
+    expect(state.enemies).toHaveLength(3);
 
-    // Before the ~T-35s wave: nothing new yet.
-    state = tickSplit(state, IDLE_INPUT, 20000);
+    // Ride most of the fuse — crossing the old ~T-35s (25s) mark — with no tap.
+    // Nothing new ever spawns and no reinforcement event is emitted.
+    for (let t = 0; t < 50000; t += 500) {
+      state = { ...state, player: { ...state.player, invulnMs: 1e7 } };
+      state = tickSplit(state, IDLE_INPUT, 500);
+    }
+
     expect(state.reinforcementsSpawned).toBe(1);
-    expect(state.enemies).toHaveLength(0);
-
-    // Past the ~T-35s reinforcement (the only extra wave).
-    state = tickSplit(state, IDLE_INPUT, 6000);
-    expect(state.reinforcementsSpawned).toBe(2);
-    expect(state.enemies).toHaveLength(2);
-    const wave = collect(state.events, 'reinforcement');
-    expect(wave).toHaveLength(1);
-    expect((wave[0] as { index: number; count: number }).index).toBe(1);
-    expect((wave[0] as { index: number; count: number }).count).toBe(2);
-
-    // No third wave: the schedule is exhausted at two groups (5 bots total).
-    state = tickSplit(state, IDLE_INPUT, 20000);
-    expect(state.reinforcementsSpawned).toBe(2);
-    expect(state.enemies).toHaveLength(2);
+    expect(state.enemies).toHaveLength(3);
     expect(collect(state.events, 'reinforcement')).toHaveLength(0);
   });
 
@@ -607,11 +600,16 @@ describe('timed reinforcements', () => {
 });
 
 describe('difficulty tuning (max five meaner bots)', () => {
-  it('caps reinforcements at five bots across two waves', () => {
-    const total = SPLIT_CONFIG.reinforcements.reduce((n, wave) => n + wave.spawns.length, 0);
+  it('caps the roster at five: three opening bots + a two-bot defuse ambush', () => {
+    // A single scheduled group of three, and the two-bot ambush that drops on
+    // the first defuse tap. 3 + 2 = 5, and nothing else ever spawns.
+    const scheduled = SPLIT_CONFIG.reinforcements.reduce((n, wave) => n + wave.spawns.length, 0);
+    const ambush = SPLIT_CONFIG.defuseAmbush.spawns.length;
 
-    expect(SPLIT_CONFIG.reinforcements).toHaveLength(2);
-    expect(total).toBe(5);
+    expect(SPLIT_CONFIG.reinforcements).toHaveLength(1);
+    expect(scheduled).toBe(3);
+    expect(ambush).toBe(2);
+    expect(scheduled + ambush).toBe(5);
   });
 
   it('makes each bot meaner than the previous baseline (0.38 / 300 / 280 / 62)', () => {
@@ -624,20 +622,51 @@ describe('difficulty tuning (max five meaner bots)', () => {
     expect(SPLIT_CONFIG.enemy.strafePeriodMs).toBeGreaterThan(0);
   });
 
-  it('never exceeds five alive bots across a full un-fought round', () => {
-    let state = withState({ enemies: createSplitState(7).enemies });
+  it('never spawns more than five bots across a long defused round (3 + 2, no extra waves)', () => {
+    // Sit ____ on the spike, invulnerable, holding the defuse the entire time so
+    // the two-bot ambush drops on the first tap. This is the worst case for spawn
+    // count — the opening three PLUS the ambush — and it must never exceed five.
+    // Ride well past the old ~T-35s (25s) timer mark to prove no third wave.
+    let state = setPlayerPos(withState({ enemies: createSplitState(7).enemies }), SPIKE);
+    let maxSpawned = state.enemies.length;
     let maxAlive = aliveEnemyCount(state);
 
-    // Ride most of the fuse without ever tapping the spike (so no ambush wave)
-    // and keep ____ invulnerable so the meaner bots can't restart the round out
-    // from under the count. The only growth is the single scheduled wave.
     for (let t = 0; t < 55000; t += 250) {
       state = { ...state, player: { ...state.player, invulnMs: 5000 } };
-      state = tickSplit(state, IDLE_INPUT, 250);
+      state = tickSplit(state, { ...IDLE_INPUT, holdDefuse: true }, 250);
+      // enemies[] accumulates dead bots within a round, so its length is the true
+      // TOTAL-spawned tally — the count that must be capped at five.
+      maxSpawned = Math.max(maxSpawned, state.enemies.length);
       maxAlive = Math.max(maxAlive, aliveEnemyCount(state));
+      if (state.phase === 'won') {
+        break;
+      }
     }
 
-    expect(maxAlive).toBe(5);
+    expect(maxSpawned).toBe(5);
+    expect(maxAlive).toBeLessThanOrEqual(5);
+  });
+
+  it('total spawns never exceed five across multiple detonation soft-resets', () => {
+    // A long simulation that tips into repeated detonation resets: ____ stands
+    // off the spike (invulnerable, never defusing) so each 60s fuse runs out and
+    // the round soft-resets to a fresh opening three. The per-round spawn tally
+    // (enemies.length, which resets on each fresh round) must never exceed five
+    // at any tick, and a timed reinforcement event must never fire.
+    let state = createSplitState(3);
+    let resets = 0;
+
+    for (let t = 0; t < 200000; t += 250) {
+      state = { ...state, player: { ...state.player, invulnMs: 1e7 } };
+      state = tickSplit(state, IDLE_INPUT, 250);
+      resets += collect(state.events, 'round-reset').length;
+      expect(state.enemies.length).toBeLessThanOrEqual(5);
+      expect(collect(state.events, 'reinforcement')).toHaveLength(0);
+    }
+
+    // The sim actually cycled through several rounds (proving resets don't leak
+    // or stack spawns).
+    expect(resets).toBeGreaterThan(1);
   });
 });
 

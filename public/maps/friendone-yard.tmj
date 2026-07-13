@@ -425,7 +425,7 @@
           "id": 2,
           "name": "from-friend-a",
           "type": "spawn",
-          "x": 512,
+          "x": 480,
           "y": 320,
           "point": true
         }
@@ -440,7 +440,7 @@
           "id": 3,
           "name": "to-friend-a",
           "type": "exit",
-          "x": 448,
+          "x": 416,
           "y": 150,
           "width": 128,
           "height": 84

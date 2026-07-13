@@ -82,17 +82,34 @@ export interface ExteriorPlacement {
 }
 
 // Anchors match each map's door exit rect center (see write-dev-maps.mjs) so the
-// door glow sits at the base of the house.
+// door glow sits at the base of the house. Each centre is a half-tile off the old
+// tile boundary onto the tile-column CENTRE its door leg rises in, so the leg
+// meets the doorway dead-centre with no path special-casing. Guildford nudges +32
+// (leg col 11); the two yards nudge -32 onto col 7, the door leg's column after
+// their edge roads are lengthened/shortened (see PATH_ORIGIN_COL_OFFSET).
 export const OUTDOOR_EXTERIORS: Readonly<Record<string, readonly ExteriorPlacement[]>> = {
   'main-outside': [
-    { asset: 'recipient-home', mapX: 704, mapY: 192, heightRatio: 2.9, footprint: { w: 168, d: 84 } },
+    { asset: 'recipient-home', mapX: 736, mapY: 192, heightRatio: 2.9, footprint: { w: 168, d: 84 } },
   ],
   'friendtwo-yard': [
-    { asset: 'friendtwo-house', mapX: 512, mapY: 192, heightRatio: 2.9, footprint: { w: 168, d: 84 } },
+    { asset: 'friendtwo-house', mapX: 480, mapY: 192, heightRatio: 2.9, footprint: { w: 168, d: 84 } },
   ],
   'friendone-yard': [
-    { asset: 'friendone-house', mapX: 512, mapY: 192, heightRatio: 2.9, footprint: { w: 168, d: 84 } },
+    { asset: 'friendone-house', mapX: 480, mapY: 192, heightRatio: 2.9, footprint: { w: 168, d: 84 } },
   ],
+};
+
+// Per-area horizontal shift (in tiles) of the worn-path ROUTING origin's column,
+// so an area's edge road can be drawn a tile longer/shorter at its interior end
+// while its door leg stays a clean vertical dead-centred on the door. Default 0
+// (origin = map centre). The two yards pull the origin one tile west onto the
+// door's column (col 7): Kerrisdale's east road then runs col 7..edge (a tile
+// LONGER), Aldergrove's west road runs edge..col 7 (a tile SHORTER), and both
+// door legs rise at col 7 under their -32-nudged doors. Guildford is unchanged
+// (its door column already equals the map-centre column).
+export const PATH_ORIGIN_COL_OFFSET: Readonly<Record<string, number>> = {
+  'friendtwo-yard': -1,
+  'friendone-yard': -1,
 };
 
 export function getExteriors(locationId: string): readonly ExteriorPlacement[] {

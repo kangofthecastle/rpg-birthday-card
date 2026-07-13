@@ -43,17 +43,34 @@ export const SPLIT_CONFIG = {
     height: 34,
     speed: 158,
     maxHearts: 4,
-    shotCooldownMs: 180,
-    // Weapon: 25 rounds per magazine, four mags total (one loaded + three in
-    // reserve = 75 reserve rounds). Reload refills the current mag from the
-    // reserve pool and takes reloadMs (locked out of firing during it).
-    magSize: 25,
+    // The Phantom fires 11 rounds/sec (660 RPM) on hold: one round every
+    // 1000/11 ≈ 90.9ms. tickSplit gates the trigger on this shot clock.
+    shotCooldownMs: 1000 / 11,
+    // Weapon: the Phantom's 30-round magazine, four mags total (one loaded +
+    // three in reserve = 90 reserve rounds). Reload refills the current mag from
+    // the reserve pool and takes reloadMs (locked out of firing during it).
+    magSize: 30,
     magazines: 4,
     reloadMs: 850,
-    // Valorant-style movement error: near-pinpoint standing still, a heavy cone
-    // while moving. Values are the ± half-angle of the shot cone in RADIANS.
+    // Valorant-style spread, two independent contributors summed into the cone:
+    //   • Character movement — near-pinpoint standing still (spreadStillRad), a
+    //     heavy cone while the CHARACTER moves (spreadMovingRad). Mouse/cursor
+    //     aiming motion is NOT movement and never widens the cone (only
+    //     input.move does; see resolvePlayerFire / playerShotSpreadRad).
+    //   • Spray bloom — the first rested shot is ~99% accurate (spreadStillRad);
+    //     holding the trigger blooms the cone per consecutive shot, staying
+    //     tight through the first ~4 then growing clearly to a capped max
+    //     (sprayBloomMaxRad) reached at sprayFullShots. A pause of sprayResetMs
+    //     with no shot resets the spray back to rested. The moving penalty rides
+    //     on TOP of the same bloom, so a moving shot is never tighter than a
+    //     stationary one at the same spray depth.
+    // Values are the ± half-angle of the shot cone in RADIANS.
     spreadStillRad: 0.014,
     spreadMovingRad: 0.19,
+    sprayBloomMaxRad: 0.106,
+    sprayFullShots: 12,
+    sprayBloomExponent: 2,
+    sprayResetMs: 300,
   },
   teammate: {
     width: 26,
@@ -182,6 +199,12 @@ export interface PlayerState {
   readonly ammoInMag: number;
   readonly reserveRounds: number;
   readonly reloadingMs: number;
+  // Spray bloom bookkeeping. sprayShots is the number of consecutive shots
+  // already fired in the current spray (0 when rested — the next shot is the
+  // first-shot-accurate one). sprayQuietMs is how long the trigger has been
+  // silent; once it reaches SPLIT_CONFIG.player.sprayResetMs the spray resets.
+  readonly sprayShots: number;
+  readonly sprayQuietMs: number;
 }
 
 export interface TeammateState {
@@ -336,6 +359,8 @@ function freshRound(
       ammoInMag: player.magSize,
       reserveRounds,
       reloadingMs: 0,
+      sprayShots: 0,
+      sprayQuietMs: 0,
     },
     teammate: {
       pos: SPLIT_CONFIG.teammateStart,
@@ -715,12 +740,36 @@ function knockOffDefuse(state: SplitState): SplitState {
 // Ammo / firing
 // ---------------------------------------------------------------------------
 
-// Resolve one player shot: apply movement inaccuracy (near-pinpoint standing
-// still, a heavy cone while moving), spend a round, and set the shot clock.
+// The ± half-angle (radians) of the shot cone for a shot fired at the given
+// spray depth. `sprayShots` is the number of consecutive shots ALREADY fired in
+// the current spray (0 for the first, rested shot). Standing still starts at the
+// rested floor (spreadStillRad, ~99% accurate) and blooms per shot up to a
+// capped max; a moving character pays the flat movement penalty (spreadMovingRad)
+// on TOP of the same bloom, so a moving shot is never tighter than a stationary
+// one at the same depth. Aim/cursor motion is deliberately NOT an input here —
+// only character movement and spray depth affect the cone.
+export function playerShotSpreadRad(sprayShots: number, moving: boolean): number {
+  const {
+    spreadStillRad,
+    spreadMovingRad,
+    sprayBloomMaxRad,
+    sprayFullShots,
+    sprayBloomExponent,
+  } = SPLIT_CONFIG.player;
+  const depth = clamp(sprayShots, 0, sprayFullShots);
+  const bloom = sprayBloomMaxRad * Math.pow(depth / sprayFullShots, sprayBloomExponent);
+  const base = moving ? spreadMovingRad : spreadStillRad;
+
+  return base + bloom;
+}
+
+// Resolve one player shot: apply the movement + spray-bloom cone for the current
+// spray depth, spend a round, deepen the spray, and set the shot clock.
 function resolvePlayerFire(state: SplitState, input: SplitInput): SplitState {
-  const { spreadStillRad, spreadMovingRad, shotCooldownMs } = SPLIT_CONFIG.player;
+  const { shotCooldownMs } = SPLIT_CONFIG.player;
   const moving = Math.hypot(input.move.x, input.move.y) > 0.001;
-  const cone = moving ? spreadMovingRad : spreadStillRad;
+  const depth = state.player.sprayShots;
+  const cone = playerShotSpreadRad(depth, moving);
 
   // Deterministic ± offset within the cone, drawn from the model RNG so replays
   // stay reproducible.
@@ -735,6 +784,10 @@ function resolvePlayerFire(state: SplitState, input: SplitInput): SplitState {
       ...shot.state.player,
       shotCooldownMs,
       ammoInMag: Math.max(0, shot.state.player.ammoInMag - 1),
+      // Deepen the spray and reset the quiet timer so recovery only begins once
+      // the trigger actually falls silent.
+      sprayShots: depth + 1,
+      sprayQuietMs: 0,
     },
   };
 }
@@ -900,7 +953,13 @@ function stepSplit(state: SplitState, input: SplitInput, deltaMs: number): Split
 
   next = { ...next, spikeTimerMs };
 
-  // Timers.
+  // Timers. Spray recovery: accumulate the quiet time since the last shot and,
+  // once it crosses sprayResetMs, snap the spray back to rested. During held
+  // fire the trigger only goes quiet for the ~91ms shot-clock gap (well under
+  // sprayResetMs), so a sustained spray keeps building; a deliberate pause
+  // resets it. resolvePlayerFire zeroes sprayQuietMs on the tick it fires.
+  const rawQuietMs = next.player.sprayQuietMs + deltaMs;
+  const sprayReset = rawQuietMs >= SPLIT_CONFIG.player.sprayResetMs;
   next = {
     ...next,
     holdFireMs: Math.max(0, next.holdFireMs - deltaMs),
@@ -908,6 +967,8 @@ function stepSplit(state: SplitState, input: SplitInput, deltaMs: number): Split
       ...next.player,
       shotCooldownMs: Math.max(0, next.player.shotCooldownMs - deltaMs),
       invulnMs: Math.max(0, next.player.invulnMs - deltaMs),
+      sprayShots: sprayReset ? 0 : next.player.sprayShots,
+      sprayQuietMs: sprayReset ? SPLIT_CONFIG.player.sprayResetMs : rawQuietMs,
     },
   };
 

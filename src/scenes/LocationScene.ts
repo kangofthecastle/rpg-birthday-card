@@ -2119,9 +2119,9 @@ export class LocationScene extends Phaser.Scene {
     }
   }
 
-  // One bulb in the southward-streaming ribbon. It rides a slow, continuous
-  // downward drift (looping — a stream, not a one-shot). A synced alpha cycle
-  // fades it up at the top of its run and back to zero at the bottom, so the
+  // One bulb in the northward-streaming ribbon. It rides a slow, continuous
+  // upward drift (looping — a stream, not a one-shot). A synced alpha cycle
+  // fades it up at the bottom of its run and back to zero at the top, so the
   // loop's snap-back never shows.
   //
   // In `ribbon` mode (post-boost) the bulbs concentrate into a loose vertical
@@ -2156,17 +2156,17 @@ export class LocationScene extends Phaser.Scene {
     const delay = rng() * runMs;
     const mote = this.add
       .image(x, startY, 'awaken-mote')
-      .setDepth(startY + travel + 6)
+      .setDepth(startY + 6)
       .setAlpha(0)
       .setScale(scale);
     if (tune.ribbon) {
       mote.setBlendMode(Phaser.BlendModes.ADD);
     }
-    // Steady southward drift; on each loop the position snaps back up while the
+    // Steady northward drift; on each loop the position snaps back down while the
     // alpha cycle (below) has it at zero, so the reset is invisible.
     this.tweens.add({
       targets: mote,
-      y: startY + travel,
+      y: startY - travel,
       duration: runMs,
       repeat: -1,
       delay,
@@ -2182,9 +2182,9 @@ export class LocationScene extends Phaser.Scene {
       delay,
       ease: 'Sine.easeInOut',
     });
-    // Alpha cycle synced to one descent: fade up, (in ribbon mode) HOLD near peak
+    // Alpha cycle synced to one ascent: fade up, (in ribbon mode) HOLD near peak
     // so the bulb stays lit through most of its run, then fade back to zero before
-    // the loop snaps back up. The hold is what makes the ribbon read as a solid,
+    // the loop snaps back down. The hold is what makes the ribbon read as a solid,
     // sustained flow rather than a sparse twinkle — at any instant most bulbs are
     // near peak, so the stream is always dense. Base mode keeps the plain triangle.
     const peak = tune.motePeakAlpha + rng() * 0.25;

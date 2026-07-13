@@ -166,6 +166,11 @@ const SOUTH_DUSK_ROWS = 4.5;
 const SOUTH_DUSK_PEAK_ALPHA = 0.5;
 const SOUTH_DUSK_INDIGO = 0x161031; // == CLEARING_DUSK.background
 
+// Clearing shore: height (in tiles) of the feathered damp bank that blends the
+// dusk grass into the water band so the waterline isn't an abrupt cut. Tunable —
+// raise for a wider, softer beach; lower toward 0 for a crisper edge.
+const CLEARING_SHORE_BANK_ROWS = 1.05;
+
 interface LocationSceneData {
   readonly locationId: string;
   readonly spawnId?: string;
@@ -517,7 +522,10 @@ export class LocationScene extends Phaser.Scene {
       })
       .setScrollFactor(0)
       .setScale(1 / this.cameraZoom)
-      .setDepth(1000);
+      .setDepth(1000)
+      // Hidden while empty: an empty Text still paints its background padding as a
+      // small dark box in the corner, so visibility must track the caption content.
+      .setVisible(false);
 
     if (this.arrivedViaEdge) {
       this.edgeCooldownUntil = this.time.now + EDGE_ARRIVAL_COOLDOWN_MS;
@@ -541,7 +549,7 @@ export class LocationScene extends Phaser.Scene {
     this.autoStartActivityId = undefined;
     // Freeze control during the settle so the player rests at the arrival spot.
     this.canMove = false;
-    this.promptText?.setText('');
+    this.setPrompt('');
     const testMode =
       new URLSearchParams(window.location.search).get('testMode') === '1';
     // The ending auto-start (final-keepsake-reveal) is covered by the persistent
@@ -705,7 +713,7 @@ export class LocationScene extends Phaser.Scene {
     if (this.dressEditFrozen) {
       this.controller.update(false);
       this.syncPlayerVisual();
-      this.promptText?.setText('');
+      this.setPrompt('');
       return;
     }
 
@@ -718,22 +726,28 @@ export class LocationScene extends Phaser.Scene {
 
     if (!this.canMove) {
       this.activeObject = undefined;
-      this.promptText?.setText('');
+      this.setPrompt('');
       return;
     }
 
     if (this.checkEdgeTransitions()) {
       this.activeObject = undefined;
-      this.promptText?.setText('');
+      this.setPrompt('');
       return;
     }
 
     this.activeObject = this.findActiveObject();
-    this.promptText?.setText(this.activeObject ? `E - ${this.getObjectLabel(this.activeObject)}` : '');
+    this.setPrompt(this.activeObject ? `E - ${this.getObjectLabel(this.activeObject)}` : '');
 
     if (this.activeObject && this.interactKey && Phaser.Input.Keyboard.JustDown(this.interactKey)) {
       void this.activateObject(this.activeObject);
     }
+  }
+
+  // Sets the interaction-prompt caption, hiding the object entirely when empty so
+  // its padded background never lingers as a small dark box in the corner.
+  private setPrompt(text: string): void {
+    this.promptText?.setText(text).setVisible(text.length > 0);
   }
 
   // Auto edge-to-edge transitions: when the player's body reaches an open world
@@ -1331,6 +1345,48 @@ export class LocationScene extends Phaser.Scene {
         water.strokePath();
       }
     }
+
+    // Soft bank: a feathered strip of damp twilight earth straddling the waterline
+    // so the dusk grass melts into the water instead of cutting to it. Alpha rises
+    // from the grass side to a damp peak at the water's edge, then eases back down
+    // into the water — no hard rim either way — with a faint lapping highlight along
+    // the seam. Painterly and quiet; height is CLEARING_SHORE_BANK_ROWS-tunable.
+    // Depth -16.9 sits just over the water band but under the awakened bloom (-16),
+    // and well under the drifting cranes / the kneel figure, so it disturbs none.
+    const bankHeight = tile * CLEARING_SHORE_BANK_ROWS;
+    const bankTop = top - bankHeight * 0.6;
+    const bankSpan = bankHeight; // ~0.6 above the waterline, ~0.45 feathering below
+    const bank = this.add.graphics().setDepth(-16.9);
+    const dampEarth = 0x2b2637; // muted damp twilight earth (reads sandy under warm light)
+    this.fillSmoothVerticalBand(
+      bank,
+      0,
+      bankTop,
+      width,
+      bankSpan,
+      () => dampEarth,
+      (t) => {
+        const waterline = 0.6; // fraction of the band that sits on the grass side
+        const peak = 0.5;
+        return t <= waterline
+          ? peak * Math.pow(t / waterline, 1.3)
+          : peak * (1 - ((t - waterline) / (1 - waterline)) * 0.85);
+      },
+    );
+
+    // Faint lapping highlight tracing the seam — soft-edged, so it reads as a wet
+    // gleam catching the twilight, not a drawn line. Warms once the world awakens.
+    const lap = this.add.graphics().setDepth(-16.85);
+    const lapColor = awakened ? 0xffe9c8 : 0xb7a3d6;
+    this.fillSmoothVerticalBand(
+      lap,
+      0,
+      top - tile * 0.14,
+      width,
+      tile * 0.28,
+      () => lapColor,
+      (t) => (awakened ? 0.3 : 0.2) * (1 - Math.abs(t - 0.5) * 2),
+    );
 
     if (!awakened) {
       return;
@@ -2479,7 +2535,7 @@ export class LocationScene extends Phaser.Scene {
       image.setDepth(anchor.y);
     }
     if (label) {
-      const boardY = anchor.y - kind.h * scale * 0.72;
+      const boardY = anchor.y - kind.h * scale * 0.83;
       const shaftX = anchor.x + signpostShaftOffset(kind, scale, Boolean(placement.flip));
       // Re-run the caption auto-fit so a resized board keeps the name on the arrow
       // shaft (same math as renderSignposts; label.width is the unscaled width).
@@ -2520,11 +2576,12 @@ export class LocationScene extends Phaser.Scene {
       if (sign.flip) {
         image.setFlipX(true);
       }
-      // Caption centred on the arrow SHAFT (upper ~72% of the sprite, offset from
-      // centre so it clears the arrowhead). The text is a separate object that is
+      // Caption centred on the arrow plank (~83% up the sprite from the feet, tuned
+      // to the real signpost-arrow.png plank centre; offset from centre so it clears
+      // the arrowhead). The text is a separate object that is
       // never flipped, so a left-pointing sign still reads upright. Depth just
       // above the board so the player occludes it when standing in front.
-      const boardY = anchor.y - kind.h * scale * 0.72;
+      const boardY = anchor.y - kind.h * scale * 0.83;
       const shaftX = anchor.x + signpostShaftOffset(kind, scale, Boolean(sign.flip));
       const caption = this.add
         .text(shaftX, boardY, sign.label, {
@@ -2953,16 +3010,21 @@ export class LocationScene extends Phaser.Scene {
   private decorateClearing(width: number, height: number, tile: number): void {
     const rng = mulberry32(fnv1a(`${this.location.id}:origami`));
 
-    // Sky wash: deep indigo up top warming to rose toward the water horizon.
+    // Sky wash: deep indigo up top warming to rose toward the water horizon. Drawn
+    // as a true GPU gradient so there is no strip stepping — the old 40-rect version
+    // left faint horizontal banding lines across the whole clearing grass.
     const grad = this.add.graphics().setDepth(-19.4).setAlpha(0.5);
-    const top = 0x1a1440;
+    const skyTop = 0x1a1440;
     const horizon = 0x743f5b;
-    const strips = 40;
-    for (let i = 0; i < strips; i += 1) {
-      const t = i / (strips - 1);
-      grad.fillStyle(mixColor(top, horizon, Math.pow(t, 1.25)), 1);
-      grad.fillRect(0, (t * height) - 1, width, height / strips + 2);
-    }
+    this.fillSmoothVerticalBand(
+      grad,
+      0,
+      0,
+      width,
+      height,
+      (t) => mixColor(skyTop, horizon, Math.pow(t, 1.25)),
+      () => 1,
+    );
 
     // Star field across the upper reaches.
     const stars = this.add.graphics().setDepth(-19.2);
@@ -3013,15 +3075,45 @@ export class LocationScene extends Phaser.Scene {
     }
   }
 
+  // Draws a smooth vertical gradient band via per-corner GPU gradient fills, so it
+  // reads as continuous — no strip/step banding. Each segment interpolates colour
+  // and alpha internally AND shares its endpoint values with its neighbour (pixel
+  // boundaries snapped to integers so segments abut with no overlap-doubling and no
+  // grass-gap), so any segment count looks seamless. colour/alpha are sampled as
+  // functions of t (0 at the band top, 1 at the bottom) to keep non-linear ramps.
+  private fillSmoothVerticalBand(
+    g: Phaser.GameObjects.Graphics,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    colorAt: (t: number) => number,
+    alphaAt: (t: number) => number,
+    segments = 16,
+  ): void {
+    for (let i = 0; i < segments; i += 1) {
+      const t0 = i / segments;
+      const t1 = (i + 1) / segments;
+      const yA = Math.round(y + t0 * h);
+      const yB = Math.round(y + t1 * h);
+      if (yB <= yA) continue;
+      const c0 = colorAt(t0);
+      const c1 = colorAt(t1);
+      const a0 = alphaAt(t0);
+      const a1 = alphaAt(t1);
+      g.fillGradientStyle(c0, c0, c1, c1, a0, a0, a1, a1);
+      g.fillRect(x, yA, w, yB - yA);
+    }
+  }
+
   // Guildford's southern approach to the clearing: a gradual painterly dusk band
   // across the last SOUTH_DUSK_ROWS tile-rows so the daytime neighbourhood eases
   // into the twilight water rather than cutting to it at the edge transition. The
   // grass cools/darkens toward indigo (intensifying to SOUTH_DUSK_PEAK_ALPHA at
-  // the very edge), a few sakura petals and faint cool motes drift in the band,
-  // and dark pine silhouettes frame the (unpaved) route mouth — echoing the
-  // clearing's own treeline. All world-space and negative-depth so it sits under
-  // props/player; a localised darkening, so the awakening's warm overlays lift it
-  // without erasing it. Seeded so it's stable across reloads/screenshots.
+  // the very edge), and a few sakura petals and faint cool motes drift in the band.
+  // All world-space and negative-depth so it sits under props/player; a localised
+  // darkening, so the awakening's warm overlays lift it without erasing it. Seeded
+  // so it's stable across reloads/screenshots.
   private decorateSouthDuskThreshold(width: number, height: number, tile: number): void {
     if (SOUTH_DUSK_PEAK_ALPHA <= 0 || SOUTH_DUSK_ROWS <= 0) {
       return;
@@ -3032,39 +3124,18 @@ export class LocationScene extends Phaser.Scene {
 
     // Cooling wash: transparent at the top of the band, deepening to indigo at the
     // bottom edge. A gentle non-linear ramp keeps the top feathered and the last
-    // row strongest. Drawn as thin strips so the gradient is smooth.
+    // row strongest. Drawn as a true GPU gradient (per-corner alpha) so there is no
+    // strip stepping — the old discrete-rect version left faint horizontal lines.
     const wash = this.add.graphics().setDepth(-8.5);
-    const strips = 24;
-    for (let i = 0; i < strips; i += 1) {
-      const t = (i + 1) / strips;
-      wash.fillStyle(SOUTH_DUSK_INDIGO, SOUTH_DUSK_PEAK_ALPHA * Math.pow(t, 1.6));
-      wash.fillRect(0, top + (t * bandHeight) - bandHeight / strips, width, bandHeight / strips + 1);
-    }
-
-    // Dark pine silhouettes, denser toward the corners, framing the central route
-    // mouth (kept clear so the way south still reads as an opening in the trees).
-    const pines = this.add.graphics().setDepth(-8.4).setAlpha(0.9);
-    const mouthClear = width * 0.16; // half-width of the clear gap at map centre
-    const drawPine = (bx: number, by: number, ph: number): void => {
-      const pw = ph * 0.5;
-      pines.fillStyle(0x1d1733, 1);
-      pines.beginPath();
-      pines.moveTo(bx, by - ph);
-      pines.lineTo(bx - pw / 2, by);
-      pines.lineTo(bx + pw / 2, by);
-      pines.closePath();
-      pines.fillPath();
-    };
-    const pineCount = 7;
-    for (let i = 0; i < pineCount; i += 1) {
-      // Bias placement toward the two edges (away from the centre mouth).
-      const side = i % 2 === 0 ? -1 : 1;
-      const spread = 0.06 + (i / pineCount) * 0.42;
-      const bx = width / 2 + side * (mouthClear + spread * (width / 2 - mouthClear)) + (rng() - 0.5) * tile;
-      if (Math.abs(bx - width / 2) < mouthClear) continue;
-      const by = height - tile * (0.2 + rng() * 0.5);
-      drawPine(bx, by, tile * (1.5 + rng() * 1.3));
-    }
+    this.fillSmoothVerticalBand(
+      wash,
+      0,
+      top,
+      width,
+      bandHeight,
+      () => SOUTH_DUSK_INDIGO,
+      (t) => SOUTH_DUSK_PEAK_ALPHA * Math.pow(t, 1.6),
+    );
 
     // Sakura petals drifting in the band (echoing the clearing), sparse and only
     // where the band has begun to cool (lower two-thirds).

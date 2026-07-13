@@ -15,7 +15,6 @@ import { fnv1a, mulberry32 } from './rng';
 import {
   GROUND_GRASS_KEY,
   GROUND_GRASS_DUSK_KEY,
-  GROUND_HEDGE_KEY,
   PATH_CAP_KEY,
   PATH_CORNER_KEY,
   PATH_STRAIGHT_KEY,
@@ -39,9 +38,8 @@ function mixColor(a: number, b: number, t: number): number {
 
 // Ground layer depths (below every sprite/prop, which start at 0+).
 const DEPTH_GRASS = -20;
-const DEPTH_TINT = -19.5; // over grass, under paths/hedge so dirt & hedge keep true colour
+const DEPTH_TINT = -19.5; // over grass, under paths so the worn dirt keeps its true colour
 const DEPTH_PATH = -19;
-const DEPTH_HEDGE = -18;
 
 export interface OutdoorGroundOptions {
   readonly width: number;
@@ -81,7 +79,8 @@ export function buildOutdoorGround(
   buildGrassLayer(scene, opts, rng);
   buildTintLayer(scene, opts);
   buildPathLayer(scene, opts);
-  buildHedgeLayer(scene, opts, rng);
+  // Boundary hedges were retired — closed edges read as plain grass (the map's
+  // collision border still stops the player; the world just isn't walled).
 }
 
 // ── Grass ────────────────────────────────────────────────────────────────────
@@ -275,99 +274,6 @@ function stampSmoothPath(
       from.y + (to.y - from.y) * t,
       halfWidth,
     );
-  }
-}
-
-// ── Hedge ─────────────────────────────────────────────────────────────────────
-function buildHedgeLayer(
-  scene: Phaser.Scene,
-  opts: OutdoorGroundOptions,
-  rng: () => number,
-): void {
-  if (opts.dusk) return; // clearing's boundary is the shore, not a hedge
-
-  const { width, height, tile, openEdges, palette } = opts;
-  const closed = (['north', 'south', 'east', 'west'] as const).filter(
-    (edge) => !openEdges.has(edge),
-  );
-
-  if (scene.textures.exists(GROUND_HEDGE_KEY)) {
-    // Horizontal edges tile the strip directly; vertical edges tile a 90°-rotated
-    // copy (a horizontally-seamless strip rotated 90° is vertically seamless).
-    for (const edge of closed) {
-      if (edge === 'north') {
-        addHedgeStrip(scene, GROUND_HEDGE_KEY, 0, 0, width, tile);
-      } else if (edge === 'south') {
-        addHedgeStrip(scene, GROUND_HEDGE_KEY, 0, height - tile, width, tile);
-      } else {
-        const rotKey = rotatedScaledKey(scene, GROUND_HEDGE_KEY, 1, tile);
-        const x = edge === 'west' ? 0 : width - tile;
-        addHedgeStrip(scene, rotKey, x, 0, tile, height);
-      }
-    }
-    return;
-  }
-
-  // Procedural fallback: a filled border band with overlapping leafy blobs.
-  const g = scene.add.graphics().setDepth(DEPTH_HEDGE);
-  for (const edge of closed) {
-    drawHedgeBandFallback(g, edge, width, height, tile, palette, rng);
-  }
-}
-
-function addHedgeStrip(
-  scene: Phaser.Scene,
-  key: string,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-): void {
-  scene.add
-    .tileSprite(x, y, w, h, key)
-    .setOrigin(0, 0)
-    .setDepth(DEPTH_HEDGE);
-}
-
-function drawHedgeBandFallback(
-  graphics: Phaser.GameObjects.Graphics,
-  edge: 'north' | 'south' | 'east' | 'west',
-  width: number,
-  height: number,
-  tile: number,
-  pal: OutdoorPalette,
-  rng: () => number,
-): void {
-  const horizontal = edge === 'north' || edge === 'south';
-  let x = 0;
-  let y = 0;
-  let w = width;
-  let h = height;
-  if (edge === 'north') h = tile;
-  if (edge === 'south') {
-    y = height - tile;
-    h = tile;
-  }
-  if (edge === 'west') w = tile;
-  if (edge === 'east') {
-    x = width - tile;
-    w = tile;
-  }
-  graphics.fillStyle(pal.border, 1);
-  graphics.fillRect(x, y, w, h);
-
-  const span = horizontal ? width : height;
-  const blobs = Math.max(3, Math.round(span / (tile * 0.55)));
-  for (let i = 0; i < blobs; i += 1) {
-    const along = ((i + 0.5) / blobs) * span;
-    const jitter = (rng() - 0.5) * tile * 0.3;
-    const bx = horizontal ? along + jitter : x + tile * 0.5;
-    const by = horizontal ? y + tile * 0.5 : along + jitter;
-    const r = tile * (0.34 + rng() * 0.14);
-    graphics.fillStyle(pal.borderStroke, 1);
-    graphics.fillCircle(bx, by, r);
-    graphics.fillStyle(pal.border, 1);
-    graphics.fillCircle(bx - 2, by - 2, r * 0.68);
   }
 }
 

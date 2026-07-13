@@ -1203,16 +1203,22 @@ body {
   object-fit: contain;
   image-rendering: pixelated;
   filter: drop-shadow(1px 2px 1.5px rgba(30, 18, 10, 0.5));
-  /* Display-only per-keepsake rotation. Lives on the img — the fan's
-     --spread/--tilt transforms sit on the parent button, so this composes
-     additively in both the collapsed stack and the hovered fan. */
-  transform: rotate(var(--art-rotate, 0deg));
+  /* Display-only per-keepsake adjustments. They live on the img — the fan's
+     --spread/--tilt transforms sit on the parent button, so they compose
+     additively in both the collapsed stack and the hovered fan. translateY
+     comes BEFORE rotate so the lowering is in screen space (straight down),
+     not tilted along the rotated axis. */
+  transform: translateY(var(--art-lower, 0px)) rotate(var(--art-rotate, 0deg));
 }
 
-/* Per-keepsake art rotation knobs (see data-keepsake-id in collectionPanel).
-   One-line tweak per asset; only the sheet music has one so far. */
+/* Per-keepsake art knobs (see data-keepsake-id in collectionPanel). One-line
+   tweak per asset; only the sheet music has them so far. Its art is drawn
+   upright and taller/top-heavier in the 64px canvas than the other two
+   (content top y=4 vs y=7/y=10), so it tilts to match their lean and can be
+   nudged down (--art-lower) to sit level with them. */
 .letter-stack__item[data-keepsake-id='golden-hour-photo'] {
-  --art-rotate: 0deg;
+  --art-rotate: 18deg;
+  --art-lower: 0px;
 }
 
 /* Label stays in the DOM (accessible name + smoke-test text); the visible

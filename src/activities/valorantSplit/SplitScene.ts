@@ -1036,7 +1036,7 @@ export class SplitScene extends Phaser.Scene {
 
     // --- Bottom-right: ammo counter (mag | reserve) + weapon label ---
     this.add
-      .text(ARENA.width - 24, barTop + 8, 'VANDAL', {
+      .text(ARENA.width - 24, barTop + 8, 'PHANTOM', {
         color: '#ffe6a0',
         fontFamily: 'Consolas, "Courier New", monospace',
         fontSize: '11px',
@@ -1046,7 +1046,7 @@ export class SplitScene extends Phaser.Scene {
       .setDepth(811)
       .setScrollFactor(0);
     this.ammoReserveText = this.add
-      .text(ARENA.width - 24, midY + 6, '75', {
+      .text(ARENA.width - 24, midY + 6, '90', {
         color: '#c7b06a',
         fontFamily: 'Consolas, "Courier New", monospace',
         fontSize: '20px',
@@ -1058,7 +1058,7 @@ export class SplitScene extends Phaser.Scene {
       .setDepth(812)
       .setScrollFactor(0);
     this.ammoMagText = this.add
-      .text(ARENA.width - 82, midY + 4, '25', {
+      .text(ARENA.width - 82, midY + 4, '30', {
         color: '#fff4d6',
         fontFamily: 'Consolas, "Courier New", monospace',
         fontSize: '34px',

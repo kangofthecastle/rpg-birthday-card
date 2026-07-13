@@ -10,6 +10,7 @@ import {
   fireTeammateShot,
   isInDefuseRadius,
   isSplitWon,
+  playerShotSpreadRad,
   rayRect,
   spikeTimeRemainingMs,
   tickSplit,
@@ -343,6 +344,10 @@ describe('movement inaccuracy (Valorant-style spread)', () => {
           invulnMs: 5000,
           ammoInMag: 25,
           reloadingMs: 0,
+          // Reset the spray each iteration so this measures the *rested* still vs
+          // moving cone (the first-shot accuracy), not accumulated spray bloom.
+          sprayShots: 0,
+          sprayQuietMs: 0,
         },
         holdFireMs: 5000,
         enemies: [enemyAt(TARGET)],
@@ -364,6 +369,139 @@ describe('movement inaccuracy (Valorant-style spread)', () => {
     expect(standing).toBe(shots); // pinpoint when planted
     expect(moving).toBeLessThan(standing); // heavy movement error
     expect(moving).toBeLessThan(shots * 0.85);
+  });
+});
+
+describe('Phantom rate of fire (11 rounds/sec)', () => {
+  it('sets the shot clock to a 660 RPM cadence (~90.9ms)', () => {
+    expect(SPLIT_CONFIG.player.shotCooldownMs).toBeCloseTo(1000 / 11, 6);
+    expect(1000 / SPLIT_CONFIG.player.shotCooldownMs).toBeCloseTo(11, 6);
+  });
+
+  it('fires ~11 rounds over one second of held fire', () => {
+    // Held trigger, no enemies (shots fly into space), fine 1ms frames so the
+    // shot clock isn't coarsely quantized.
+    let state = setPlayerPos(withState({ enemies: [] }), { x: 200, y: 400 });
+    const firing: SplitInput = { ...IDLE_INPUT, fire: true, aimAngle: UP };
+    let shots = 0;
+
+    for (let t = 0; t < 1000; t += 1) {
+      state = tickSplit(state, firing, 1);
+      shots += collect(state.events, 'player-shot').length;
+    }
+
+    // 1000 / (1000/11) = 11 shots; allow ±1 for frame-boundary rounding.
+    expect(shots).toBeGreaterThanOrEqual(10);
+    expect(shots).toBeLessThanOrEqual(12);
+  });
+});
+
+describe('Phantom magazine (30 loaded, 90 reserve)', () => {
+  it('carries a 30-round mag and three spare mags (90 reserve)', () => {
+    const state = createSplitState(1);
+
+    expect(SPLIT_CONFIG.player.magSize).toBe(30);
+    expect(SPLIT_CONFIG.player.magazines).toBe(4);
+    expect(state.player.ammoInMag).toBe(30);
+    expect(state.player.reserveRounds).toBe(90);
+    expect(state.player.reserveRounds).toBe(
+      (SPLIT_CONFIG.player.magazines - 1) * SPLIT_CONFIG.player.magSize,
+    );
+  });
+});
+
+describe('spray bloom (first-shot accuracy + ramp)', () => {
+  const { spreadStillRad, spreadMovingRad, sprayBloomMaxRad, sprayFullShots } =
+    SPLIT_CONFIG.player;
+
+  it('is ~99% accurate on the first rested shot (near-zero cone)', () => {
+    expect(playerShotSpreadRad(0, false)).toBe(spreadStillRad);
+    expect(playerShotSpreadRad(0, false)).toBeLessThan(0.02);
+  });
+
+  it('grows monotonically with spray depth and caps at a sane max', () => {
+    let prev = -1;
+    for (let n = 0; n <= sprayFullShots; n += 1) {
+      const cone = playerShotSpreadRad(n, false);
+      expect(cone).toBeGreaterThan(prev); // strictly increasing up to the cap
+      prev = cone;
+    }
+
+    // Capped: at/after sprayFullShots the cone is the rested floor plus the max
+    // bloom and never grows further.
+    const capped = playerShotSpreadRad(sprayFullShots, false);
+    expect(capped).toBeCloseTo(spreadStillRad + sprayBloomMaxRad, 6);
+    expect(playerShotSpreadRad(sprayFullShots + 50, false)).toBe(capped);
+  });
+
+  it('stays tight through the first four shots, then blooms clearly', () => {
+    // Shots 1–4 (depth 0..3) stay pinned near the rested floor.
+    for (let n = 0; n <= 3; n += 1) {
+      expect(playerShotSpreadRad(n, false)).toBeLessThan(spreadStillRad * 1.6);
+    }
+    expect(playerShotSpreadRad(3, false)).toBeLessThan(0.025);
+
+    // Beyond shot four the cone opens up markedly.
+    expect(playerShotSpreadRad(8, false)).toBeGreaterThan(playerShotSpreadRad(3, false) * 2);
+  });
+
+  it('never makes a moving shot tighter than a stationary one at the same depth', () => {
+    expect(playerShotSpreadRad(0, true)).toBe(spreadMovingRad); // rested moving penalty intact
+    for (let n = 0; n <= sprayFullShots + 4; n += 1) {
+      expect(playerShotSpreadRad(n, true)).toBeGreaterThan(playerShotSpreadRad(n, false));
+    }
+  });
+});
+
+describe('spray recovery and cursor-move independence', () => {
+  function holdFire(state: SplitState, frames: number, input: Partial<SplitInput> = {}): SplitState {
+    let next = state;
+    for (let i = 0; i < frames; i += 1) {
+      next = tickSplit(next, { ...IDLE_INPUT, fire: true, aimAngle: UP, ...input }, 8);
+    }
+    return next;
+  }
+
+  it('deepens while the trigger is held, then resets to rested after a pause', () => {
+    let state = setPlayerPos(withState({ enemies: [] }), { x: 200, y: 400 });
+
+    // ~600ms of held fire builds a spray several shots deep.
+    state = holdFire(state, 75);
+    expect(state.player.sprayShots).toBeGreaterThan(4);
+
+    // A pause longer than sprayResetMs snaps the spray back to rested.
+    state = tickSplit(state, IDLE_INPUT, SPLIT_CONFIG.player.sprayResetMs + 50);
+    expect(state.player.sprayShots).toBe(0);
+    expect(playerShotSpreadRad(state.player.sprayShots, false)).toBe(
+      SPLIT_CONFIG.player.spreadStillRad,
+    );
+  });
+
+  it('does not reset the spray during the shot-clock gap of sustained fire', () => {
+    // The quiet reset threshold must exceed the fire interval, or a held spray
+    // could never build past a single shot.
+    expect(SPLIT_CONFIG.player.sprayResetMs).toBeGreaterThan(SPLIT_CONFIG.player.shotCooldownMs);
+  });
+
+  it('is unaffected by cursor/aim movement (only character movement matters)', () => {
+    const base = setPlayerPos(withState({ enemies: [] }), { x: 200, y: 400 });
+
+    // Two identical held-fire sprays that differ ONLY in aim: one locked, one
+    // whipping the cursor around every frame. Character stays put (move = 0).
+    let locked = base;
+    let whipping = base;
+    for (let i = 0; i < 40; i += 1) {
+      locked = tickSplit(locked, { ...IDLE_INPUT, fire: true, aimAngle: UP }, 8);
+      whipping = tickSplit(whipping, { ...IDLE_INPUT, fire: true, aimAngle: i * 0.7 }, 8);
+    }
+
+    // Aiming motion perturbs neither the spray depth nor the RNG stream, so the
+    // cone (a pure function of depth + character-movement) is identical.
+    expect(whipping.player.sprayShots).toBe(locked.player.sprayShots);
+    expect(whipping.rngState).toBe(locked.rngState);
+    expect(playerShotSpreadRad(whipping.player.sprayShots, false)).toBe(
+      playerShotSpreadRad(locked.player.sprayShots, false),
+    );
   });
 });
 
@@ -598,6 +736,45 @@ describe('contested defuse', () => {
 
     expect(isSplitWon(state)).toBe(true);
     expect(collect(state.events, 'defuse-complete')).toHaveLength(1);
+  });
+});
+
+describe('defuse checkpoint at 3.5s (Valorant half-defuse semantics)', () => {
+  function atSpike(): SplitState {
+    const base = setPlayerPos(withState({ enemies: [] }), SPIKE);
+    return { ...base, player: { ...base.player, invulnMs: 1e7 } };
+  }
+
+  function hold(state: SplitState, ms: number, holding: boolean): SplitState {
+    return tickSplit(state, { ...IDLE_INPUT, holdDefuse: holding }, ms);
+  }
+
+  it('is a 7.0s total hold with the checkpoint exactly at the 3.5s half-mark', () => {
+    expect(SPLIT_CONFIG.defuse.totalMs).toBe(7000);
+    expect(SPLIT_CONFIG.defuse.checkpointMs).toBe(3500);
+    expect(SPLIT_CONFIG.defuse.checkpointMs).toBe(SPLIT_CONFIG.defuse.totalMs / 2);
+  });
+
+  it('releasing BEFORE 3.5s resets progress all the way to zero', () => {
+    let state = hold(atSpike(), 3400, true); // stop just shy of the checkpoint
+    expect(state.defuse.checkpointReached).toBe(false);
+    expect(state.defuse.progressMs).toBeCloseTo(3400, 0);
+
+    state = hold(state, 32, false); // release
+    expect(state.defuse.progressMs).toBe(0);
+  });
+
+  it('releasing AFTER crossing 3.5s restarts from the checkpoint, not zero', () => {
+    let state = hold(atSpike(), 3600, true); // cross the checkpoint
+    expect(state.defuse.checkpointReached).toBe(true);
+    expect(collect(state.events, 'defuse-checkpoint')).toHaveLength(1);
+
+    state = hold(state, 32, false); // release
+    expect(state.defuse.progressMs).toBe(SPLIT_CONFIG.defuse.checkpointMs);
+
+    // Resuming continues from the banked 3.5s, so 3.5s more of hold wins.
+    state = hold(state, 3500, true);
+    expect(isSplitWon(state)).toBe(true);
   });
 });
 

@@ -154,6 +154,16 @@ function resolveOutdoorAwakenTune(): OutdoorAwakenTune {
   return OUTDOOR_AWAKEN_DEFAULT;
 }
 
+// --- Guildford south dusk-threshold: tunable ---------------------------------
+// A painterly foreshadow of the twilight clearing along main-outside's south
+// edge, so the day->dusk hand-off across the edge transition isn't abrupt. Two
+// knobs: how many tile-rows the cooling band spans, and how deep the indigo goes
+// at the very edge (0 disables the wash). The band's indigo is the clearing's
+// own sky/background colour so the two places read as one continuous evening.
+const SOUTH_DUSK_ROWS = 4.5;
+const SOUTH_DUSK_PEAK_ALPHA = 0.5;
+const SOUTH_DUSK_INDIGO = 0x161031; // == CLEARING_DUSK.background
+
 interface LocationSceneData {
   readonly locationId: string;
   readonly spawnId?: string;
@@ -1160,6 +1170,18 @@ export class LocationScene extends Phaser.Scene {
     };
     const openEdges = new Set((this.location.edgeExits ?? []).map((exit) => exit.edge));
 
+    // The VISUAL worn-path routing. Normally identical to the walkable openEdges
+    // (centre -> every open edge + door), but Guildford's south leg toward the
+    // clearing is deliberately left UNPAVED: the way down to the twilight water is
+    // "off the path" — you leave the road and wander south through plain grass.
+    // Targeted to main-outside's south edge only; the edge stays fully walkable
+    // (the corridor mask below reads the unfiltered openEdges) and the south edge
+    // is still an OPEN edge here, so no hedge is drawn across the route mouth.
+    const pathEdges =
+      this.location.id === 'main-outside'
+        ? new Set([...openEdges].filter((edge) => edge !== 'south'))
+        : openEdges;
+
     // Layered ground (v2): grass base + transparent worn-dirt path overlays +
     // boundary hedge strip, each an independent drop-in art slot with a procedural
     // fallback (see outdoorGround.ts). The path cell mask is the same 4-connected
@@ -1173,8 +1195,9 @@ export class LocationScene extends Phaser.Scene {
       rows,
       palette: pal,
       openEdges,
+      pathOpenEdges: pathEdges,
       exits: this.exits,
-      pathMask: this.rasterizePathCells(cols, rows, tile, width, height, openEdges),
+      pathMask: this.rasterizePathCells(cols, rows, tile, width, height, pathEdges),
       dusk: this.location.id === 'clearing',
       seed: this.location.id,
     });
@@ -1183,6 +1206,15 @@ export class LocationScene extends Phaser.Scene {
       this.decorateClearing(width, height, tile);
       this.drawClearingShore(width, height, tile);
       this.spawnClearingCranes(width, height, tile);
+    }
+
+    // Guildford's south edge foreshadows the twilight clearing: a painterly dusk
+    // band cooling the last few tile-rows toward indigo, with a few drifting
+    // petals and dark pine silhouettes framing the (now unpaved) route mouth. It
+    // reads in plain daylight and, being a localised world-space darkening rather
+    // than a competing full-screen wash, sits quietly under the awakening overlays.
+    if (this.location.id === 'main-outside') {
+      this.decorateSouthDuskThreshold(width, height, tile);
     }
   }
 
@@ -1826,6 +1858,18 @@ export class LocationScene extends Phaser.Scene {
       return;
     }
     if (!isFinalSpotUnlocked(this.state)) {
+      return;
+    }
+    // The clearing is a TWILIGHT scene. The neighbourhood's "walking into
+    // streaming daylight" awakening — a screen-wide warm additive exposure lift
+    // plus a gold ambient tint and drifting warm motes — bleaches its deep
+    // indigo/rose dusk and drowns the lantern/star/petal dressing, so an
+    // awakened arrival (the state a real player is in by the time they reach the
+    // clearing) reads as a flat, washed-out field rather than the moody twilight.
+    // The clearing has its OWN awakened treatment (the shore light-bloom and the
+    // warmed cranes in drawClearingShore/spawnClearingCranes), so skip the
+    // generic daylight flood here and let the dusk dressing stay legible.
+    if (this.location.id === 'clearing') {
       return;
     }
 
@@ -2838,6 +2882,82 @@ export class LocationScene extends Phaser.Scene {
       petals.fillStyle(pinks[Math.floor(rng() * pinks.length)], 0.55 + rng() * 0.35);
       const r = 1.6 + rng() * 2.4;
       petals.fillEllipse(px, py, r * 1.8, r);
+    }
+  }
+
+  // Guildford's southern approach to the clearing: a gradual painterly dusk band
+  // across the last SOUTH_DUSK_ROWS tile-rows so the daytime neighbourhood eases
+  // into the twilight water rather than cutting to it at the edge transition. The
+  // grass cools/darkens toward indigo (intensifying to SOUTH_DUSK_PEAK_ALPHA at
+  // the very edge), a few sakura petals and faint cool motes drift in the band,
+  // and dark pine silhouettes frame the (unpaved) route mouth — echoing the
+  // clearing's own treeline. All world-space and negative-depth so it sits under
+  // props/player; a localised darkening, so the awakening's warm overlays lift it
+  // without erasing it. Seeded so it's stable across reloads/screenshots.
+  private decorateSouthDuskThreshold(width: number, height: number, tile: number): void {
+    if (SOUTH_DUSK_PEAK_ALPHA <= 0 || SOUTH_DUSK_ROWS <= 0) {
+      return;
+    }
+    const rng = mulberry32(fnv1a(`${this.location.id}:south-dusk`));
+    const bandHeight = tile * SOUTH_DUSK_ROWS;
+    const top = height - bandHeight;
+
+    // Cooling wash: transparent at the top of the band, deepening to indigo at the
+    // bottom edge. A gentle non-linear ramp keeps the top feathered and the last
+    // row strongest. Drawn as thin strips so the gradient is smooth.
+    const wash = this.add.graphics().setDepth(-8.5);
+    const strips = 24;
+    for (let i = 0; i < strips; i += 1) {
+      const t = (i + 1) / strips;
+      wash.fillStyle(SOUTH_DUSK_INDIGO, SOUTH_DUSK_PEAK_ALPHA * Math.pow(t, 1.6));
+      wash.fillRect(0, top + (t * bandHeight) - bandHeight / strips, width, bandHeight / strips + 1);
+    }
+
+    // Dark pine silhouettes, denser toward the corners, framing the central route
+    // mouth (kept clear so the way south still reads as an opening in the trees).
+    const pines = this.add.graphics().setDepth(-8.4).setAlpha(0.9);
+    const mouthClear = width * 0.16; // half-width of the clear gap at map centre
+    const drawPine = (bx: number, by: number, ph: number): void => {
+      const pw = ph * 0.5;
+      pines.fillStyle(0x1d1733, 1);
+      pines.beginPath();
+      pines.moveTo(bx, by - ph);
+      pines.lineTo(bx - pw / 2, by);
+      pines.lineTo(bx + pw / 2, by);
+      pines.closePath();
+      pines.fillPath();
+    };
+    const pineCount = 7;
+    for (let i = 0; i < pineCount; i += 1) {
+      // Bias placement toward the two edges (away from the centre mouth).
+      const side = i % 2 === 0 ? -1 : 1;
+      const spread = 0.06 + (i / pineCount) * 0.42;
+      const bx = width / 2 + side * (mouthClear + spread * (width / 2 - mouthClear)) + (rng() - 0.5) * tile;
+      if (Math.abs(bx - width / 2) < mouthClear) continue;
+      const by = height - tile * (0.2 + rng() * 0.5);
+      drawPine(bx, by, tile * (1.5 + rng() * 1.3));
+    }
+
+    // Sakura petals drifting in the band (echoing the clearing), sparse and only
+    // where the band has begun to cool (lower two-thirds).
+    const petals = this.add.graphics().setDepth(-8.3);
+    const pinks = [0xf4c2d4, 0xecaac4, 0xf6ccdb, 0xd79ec8];
+    for (let i = 0; i < 16; i += 1) {
+      const px = rng() * width;
+      const py = top + bandHeight * (0.34 + rng() * 0.62);
+      petals.fillStyle(pinks[Math.floor(rng() * pinks.length)], 0.4 + rng() * 0.3);
+      const r = 1.4 + rng() * 2.2;
+      petals.fillEllipse(px, py, r * 1.8, r);
+    }
+
+    // Faint cool dusk motes: a handful of soft lavender specks in the upper band,
+    // the first hint of the clearing's star shimmer bleeding north.
+    const motes = this.add.graphics().setDepth(-8.35);
+    for (let i = 0; i < 10; i += 1) {
+      const mx = rng() * width;
+      const my = top + bandHeight * (0.1 + rng() * 0.55);
+      motes.fillStyle(0xcdb9e8, 0.22 + rng() * 0.3);
+      motes.fillCircle(mx, my, 0.7 + rng() * 1.3);
     }
   }
 

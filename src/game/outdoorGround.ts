@@ -51,6 +51,14 @@ export interface OutdoorGroundOptions {
   readonly rows: number;
   readonly palette: OutdoorPalette;
   readonly openEdges: ReadonlySet<string>;
+  /**
+   * Edges the worn dirt PATH routes toward (defaults to openEdges). Split out so a
+   * structurally-open edge can be left deliberately unpaved — e.g. Guildford's
+   * south approach to the clearing is walked "off the path" through plain grass,
+   * so its south edge is open (no hedge) yet carries no road. The hedge layer
+   * still reads the full `openEdges`, so no framing is drawn across the gap.
+   */
+  readonly pathOpenEdges?: ReadonlySet<string>;
   /** Door/interaction exit rects (map px) worn paths route toward. */
   readonly exits: ReadonlyArray<{ x: number; y: number; width: number; height: number }>;
   /** 4-connected path cell mask (cols*rows, row-major) — see rasterizePathCells. */
@@ -237,7 +245,8 @@ function buildPathLayer(scene: Phaser.Scene, opts: OutdoorGroundOptions): void {
 function routeTargets(
   opts: OutdoorGroundOptions,
 ): Array<{ x: number; y: number }> {
-  const { width, height, openEdges, exits } = opts;
+  const { width, height, exits } = opts;
+  const openEdges = opts.pathOpenEdges ?? opts.openEdges;
   const targets: Array<{ x: number; y: number }> = [];
   if (openEdges.has('west')) targets.push({ x: 0, y: height / 2 });
   if (openEdges.has('east')) targets.push({ x: width, y: height / 2 });

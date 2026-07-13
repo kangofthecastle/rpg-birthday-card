@@ -34,7 +34,7 @@ export function runBootScreen(options: BootScreenOptions = {}): Promise<void> {
   const promptLabel = options.promptLabel ?? 'press any key';
   const host = options.host ?? document.body;
 
-  const { overlay, linesEl, cursorEl, promptEl } = createBootScreenDom();
+  const { overlay, textNode, cursorEl, promptEl } = createBootScreenDom();
   host.append(overlay);
 
   return new Promise<void>((resolve) => {
@@ -61,7 +61,10 @@ export function runBootScreen(options: BootScreenOptions = {}): Promise<void> {
         parts.push(lines[lineIndex].slice(0, charIndex));
       }
 
-      linesEl.textContent = parts.join('\n');
+      // Write into the dedicated text node, not textContent: the caret is an
+      // inline child of the <pre> (so it shares the text's line box) and must
+      // survive each re-render sitting right after the last typed character.
+      textNode.nodeValue = parts.join('\n');
     };
 
     const enterPromptPhase = (): void => {
@@ -170,6 +173,7 @@ export function runBootScreen(options: BootScreenOptions = {}): Promise<void> {
 interface BootScreenDom {
   readonly overlay: HTMLElement;
   readonly linesEl: HTMLElement;
+  readonly textNode: Text;
   readonly cursorEl: HTMLElement;
   readonly promptEl: HTMLElement;
 }
@@ -190,6 +194,10 @@ function createBootScreenDom(): BootScreenDom {
   linesEl.className = 'boot-screen__lines';
   linesEl.setAttribute('aria-live', 'polite');
 
+  // The typed text lives in its own node so the caret can be an inline sibling
+  // that trails the last character and shares its line box.
+  const textNode = document.createTextNode('');
+
   const cursorEl = document.createElement('span');
   cursorEl.className = 'boot-screen__cursor';
   cursorEl.setAttribute('aria-hidden', 'true');
@@ -198,9 +206,10 @@ function createBootScreenDom(): BootScreenDom {
   promptEl.className = 'boot-screen__prompt';
   promptEl.hidden = true;
 
-  console_.append(linesEl, cursorEl);
+  linesEl.append(textNode, cursorEl);
+  console_.append(linesEl);
   crt.append(console_, promptEl);
   overlay.append(crt);
 
-  return { overlay, linesEl, cursorEl, promptEl };
+  return { overlay, linesEl, textNode, cursorEl, promptEl };
 }

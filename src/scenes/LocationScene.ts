@@ -69,13 +69,12 @@ import {
   propTextureKey,
   PROP_KINDS,
   SIGNPOST_PLACEMENT_ID,
-  GROUND_TILESET_KEY,
-  GROUND_TILES,
   type ExteriorPlacement,
   type OutdoorPalette,
   type PropKind,
   type PropPlacement,
 } from '../content/outdoorScenery';
+import { buildOutdoorGround } from '../game/outdoorGround';
 import {
   completeLocation,
   createInitialRunState,
@@ -186,6 +185,25 @@ function colorToHex(color: number): string {
   return `#${color.toString(16).padStart(6, '0')}`;
 }
 
+/**
+ * Caption scale that keeps a signpost's area name on the tilted plank. The board
+ * displays kind.w * placementScale world-units wide and the plank spans ~72% of
+ * that; long names (KERRISDALE, ALDERGROVE) overflow at the base font size, so
+ * shrink until they fit. `imageScale` (the board's sprite scale, placementScale
+ * included) stays the ceiling so a short name is never enlarged. `captionWidth`
+ * is the Text object's unscaled width. Shared by renderSignpost and the dressEdit
+ * reposition path so a hand-resized board re-fits identically.
+ */
+function signpostCaptionFit(
+  captionWidth: number,
+  kind: PropKind,
+  imageScale: number,
+  placementScale: number,
+): number {
+  const budget = kind.w * placementScale * 0.72;
+  return captionWidth > 0 ? Math.min(imageScale, budget / captionWidth) : imageScale;
+}
+
 /** Linear blend of two 0xRRGGBB colours (t=0 -> a, t=1 -> b). */
 function mixColor(a: number, b: number, t: number): number {
   const ar = (a >> 16) & 0xff;
@@ -200,11 +218,6 @@ function mixColor(a: number, b: number, t: number): number {
   return (r << 16) | (g << 8) | bl;
 }
 
-interface TilePiece {
-  readonly frame: number;
-  /** Clockwise 90° turns to apply to the base tile orientation. */
-  readonly quarter: number;
-}
 
 // One paper crane drifting on the clearing's shore water. The image is the crane
 // sprite; the ripple is a faint highlight ellipse tracked beneath it. Motion is
@@ -232,67 +245,6 @@ interface DriftingCrane {
   scale: number;
 }
 
-// Picks the ground path tile(s) for a cell from its 4-neighbour connectivity.
-// Base tile orientations (from the tileset): straight = N–S, curve = {E,S},
-// T = {E,S,W} (missing N), fade (dead-end) = open at S. Rotations are clockwise
-// quarter turns (N→E→S→W). The dusk set has only straight + fade, so its corners
-// degrade to a straight/cross stamp.
-function choosePathTile(
-  n: boolean,
-  e: boolean,
-  s: boolean,
-  w: boolean,
-  dusk: boolean,
-): readonly TilePiece[] {
-  const count = (n ? 1 : 0) + (e ? 1 : 0) + (s ? 1 : 0) + (w ? 1 : 0);
-  // Quarter turns to rotate a base direction into a target (base→target).
-  const fadeQuarter = { S: 0, W: 1, N: 2, E: 3 } as const;
-
-  if (dusk) {
-    const straight = GROUND_TILES.duskPathStraight;
-    if (count <= 1) {
-      const target = n ? 'N' : e ? 'E' : w ? 'W' : 'S';
-      return [{ frame: GROUND_TILES.duskPathFade, quarter: fadeQuarter[target] }];
-    }
-    const horizontal = e || w;
-    const vertical = n || s;
-    if (horizontal && vertical) {
-      return [
-        { frame: straight, quarter: 0 },
-        { frame: straight, quarter: 1 },
-      ];
-    }
-    return [{ frame: straight, quarter: horizontal ? 1 : 0 }];
-  }
-
-  if (count === 0) {
-    return [{ frame: GROUND_TILES.pathStraight, quarter: 0 }];
-  }
-  if (count === 1) {
-    const target = n ? 'N' : e ? 'E' : w ? 'W' : 'S';
-    return [{ frame: GROUND_TILES.pathFade, quarter: fadeQuarter[target] }];
-  }
-  if (count === 2) {
-    if (n && s) return [{ frame: GROUND_TILES.pathStraight, quarter: 0 }];
-    if (e && w) return [{ frame: GROUND_TILES.pathStraight, quarter: 1 }];
-    // Corner: curve base is {E,S}. Rotate to the actual open pair.
-    let quarter = 0;
-    if (s && w) quarter = 1;
-    else if (w && n) quarter = 2;
-    else if (n && e) quarter = 3;
-    return [{ frame: GROUND_TILES.pathCurve, quarter }];
-  }
-  if (count === 3) {
-    // T base misses N; rotate so the missing side matches (N→0,E→1,S→2,W→3).
-    const missingQuarter = !n ? 0 : !e ? 1 : !s ? 2 : 3;
-    return [{ frame: GROUND_TILES.pathT, quarter: missingQuarter }];
-  }
-  // 4-way cross: overlay two straights.
-  return [
-    { frame: GROUND_TILES.pathStraight, quarter: 0 },
-    { frame: GROUND_TILES.pathStraight, quarter: 1 },
-  ];
-}
 
 // Ambient bed per location; activities layer their own bed on top and the
 // location bed resumes when they end. The ending swaps beds itself.
@@ -1208,241 +1160,30 @@ export class LocationScene extends Phaser.Scene {
     };
     const openEdges = new Set((this.location.edgeExits ?? []).map((exit) => exit.edge));
 
-    // File-first: when the ground tileset dropped in, tile the ground from it
-    // (grass scatter + auto-tiled paths + hedge band + dusk set for the
-    // clearing) instead of the procedural fills. The procedural path below stays
-    // the fallback when the tileset is absent. Per-area palette tinting is kept
-    // as a subtle overlay in both paths so areas stay distinguishable.
-    if (this.textures.exists(GROUND_TILESET_KEY)) {
-      this.buildTilesetGround(tilemap, pal, openEdges);
-      if (this.location.id === 'clearing') {
-        this.decorateClearing(width, height, tile);
-        this.drawClearingShore(width, height, tile);
-        this.spawnClearingCranes(width, height, tile);
-      }
-      return;
-    }
+    // Layered ground (v2): grass base + transparent worn-dirt path overlays +
+    // boundary hedge strip, each an independent drop-in art slot with a procedural
+    // fallback (see outdoorGround.ts). The path cell mask is the same 4-connected
+    // centre->edge/door routing the corridor mask uses, so paths and walkability
+    // agree. The clearing then layers its dusk decoration, shore and cranes.
+    buildOutdoorGround(this, {
+      width,
+      height,
+      tile,
+      cols,
+      rows,
+      palette: pal,
+      openEdges,
+      exits: this.exits,
+      pathMask: this.rasterizePathCells(cols, rows, tile, width, height, openEdges),
+      dusk: this.location.id === 'clearing',
+      seed: this.location.id,
+    });
 
-    const rng = mulberry32(fnv1a(this.location.id));
-
-    // 1. Grass base + subtle per-tile checker + scattered darker tufts.
-    //    This is ~800+ primitive fills. Baking it once and drawing a single
-    //    textured quad instead of re-tessellating a retained Graphics EVERY
-    //    frame is the win. We bake into a GPU RenderTexture rather than
-    //    Graphics.generateTexture: generateTexture does a synchronous
-    //    gl.readPixels back to the CPU (a visible startup stall), whereas
-    //    RenderTexture.draw stays entirely GPU-side. The off-display-list stamp
-    //    Graphics is drawn once then destroyed; the tuft/checker rng draws still
-    //    run every create() so the downstream hedge PRNG stream (which shares
-    //    `rng`) is unchanged.
-    const ground = this.make.graphics({}, false);
-    ground.fillStyle(pal.floorA, 1);
-    ground.fillRect(0, 0, width, height);
-    for (let row = 0; row < rows; row += 1) {
-      for (let column = 0; column < cols; column += 1) {
-        const checker = (row + column) % 2 === 0;
-        // Occasionally flip a tile so the grid reads organic, not a hard board.
-        if (checker !== (rng() < 0.18)) {
-          ground.fillStyle(pal.floorB, 0.55);
-          ground.fillRect(column * tile, row * tile, tile, tile);
-        }
-      }
-    }
-    const tuftCount = Math.round(cols * rows * 0.6);
-    for (let i = 0; i < tuftCount; i += 1) {
-      const x = rng() * width;
-      const y = rng() * height;
-      const r = 2 + rng() * 3;
-      ground.fillStyle(pal.stroke, 0.18 + rng() * 0.16);
-      ground.fillEllipse(x, y, r * 2.4, r * 1.4);
-      ground.fillEllipse(x + r, y - r * 0.4, r * 1.6, r);
-    }
-    const groundTexture = this.add
-      .renderTexture(0, 0, width, height)
-      .setOrigin(0, 0)
-      .setDepth(-20);
-    groundTexture.draw(ground);
-    ground.destroy();
-
-    // 2. Worn paths from the map centre toward each open edge and each door.
-    const paths = this.add.graphics().setDepth(-19);
-    const center = { x: width / 2, y: height / 2 };
-    const targets: Array<{ x: number; y: number }> = [];
-    if (openEdges.has('west')) targets.push({ x: 0, y: height / 2 });
-    if (openEdges.has('east')) targets.push({ x: width, y: height / 2 });
-    if (openEdges.has('north')) targets.push({ x: width / 2, y: 0 });
-    if (openEdges.has('south')) targets.push({ x: width / 2, y: height });
-    for (const exit of this.exits) {
-      targets.push({ x: exit.x + exit.width / 2, y: exit.y + exit.height / 2 });
-    }
-    const pathEdge = mixColor(pal.path, 0x000000, 0.28);
-    for (const target of targets) {
-      this.stampPath(paths, center, target, pathEdge, tile * 0.44);
-      this.stampPath(paths, center, target, pal.path, tile * 0.27);
-    }
-    paths.setAlpha(0.72);
-
-    // 3. Boundary read: hedge/tree band ~1 tile thick on each CLOSED edge.
-    const hedges = this.add.graphics().setDepth(-18);
-    for (const edge of ['north', 'south', 'east', 'west'] as const) {
-      if (openEdges.has(edge)) {
-        continue;
-      }
-      this.drawHedgeBand(hedges, edge, width, height, tile, pal, rng);
-    }
-
-    // 4. The clearing's southern boundary is a SHORE: a dark-water band that
-    // always reads as water, and glows with light from beyond once the world
-    // has awakened (every letter collected).
     if (this.location.id === 'clearing') {
       this.decorateClearing(width, height, tile);
       this.drawClearingShore(width, height, tile);
       this.spawnClearingCranes(width, height, tile);
     }
-  }
-
-  // Tileset-driven flat ground: grass base with seeded variant scatter, worn
-  // dirt paths auto-tiled (straight/curve/T/fade) along the same centre→edge/door
-  // routes, and a 1-tile hedge band on every CLOSED edge. The clearing uses the
-  // dusk-tinted tile set. Everything bakes into one GPU RenderTexture; a subtle
-  // per-area palette rect is overlaid so areas stay distinguishable.
-  private buildTilesetGround(
-    tilemap: Phaser.Tilemaps.Tilemap,
-    pal: OutdoorPalette,
-    openEdges: Set<string>,
-  ): void {
-    const tile = tilemap.tileWidth;
-    const cols = tilemap.width;
-    const rows = tilemap.height;
-    const width = tilemap.widthInPixels;
-    const height = tilemap.heightInPixels;
-    const dusk = this.location.id === 'clearing';
-    const rng = mulberry32(fnv1a(`${this.location.id}:tiles`));
-
-    const rt = this.add
-      .renderTexture(0, 0, width, height)
-      .setOrigin(0, 0)
-      .setDepth(-20);
-
-    // 1. Grass base — mostly the plain variant, occasional bright/textured, rare
-    //    tufted accent. The clearing uses the two dusk grass tiles.
-    for (let row = 0; row < rows; row += 1) {
-      for (let column = 0; column < cols; column += 1) {
-        const roll = rng();
-        let frame: number;
-        if (dusk) {
-          frame = roll < 0.26 ? GROUND_TILES.duskGrass[1] : GROUND_TILES.duskGrass[0];
-        } else if (roll < 0.05) {
-          // Rare tufted accent. The bright full-tile variant (grass[1]) is
-          // dropped here: at tile scale it read as jarring checkerboard blobs.
-          frame = GROUND_TILES.grass[3];
-        } else if (roll < 0.34) {
-          frame = GROUND_TILES.grass[2];
-        } else {
-          frame = GROUND_TILES.grass[0];
-        }
-        // Break the grid: rotate the base/textured grass in 90° steps so the
-        // seams between identical tiles disappear.
-        const gq = frame === GROUND_TILES.grass[3] ? 0 : Math.floor(rng() * 4);
-        this.stampGroundTile(rt, frame, gq, column * tile, row * tile, tile);
-      }
-    }
-
-    // 2. Worn paths: rasterize centre→(open edge / door) routes into a 1-tile-wide
-    //    cell mask, then auto-tile each cell from its 4-neighbour connectivity.
-    const path = this.rasterizePathCells(cols, rows, tile, width, height, openEdges);
-    for (let index = 0; index < path.length; index += 1) {
-      if (!path[index]) {
-        continue;
-      }
-      const column = index % cols;
-      const row = Math.floor(index / cols);
-      const n = row > 0 && path[index - cols];
-      const s = row < rows - 1 && path[index + cols];
-      const w = column > 0 && path[index - 1];
-      const e = column < cols - 1 && path[index + 1];
-      for (const piece of choosePathTile(n, e, s, w, dusk)) {
-        this.stampGroundTile(rt, piece.frame, piece.quarter, column * tile, row * tile, tile);
-      }
-    }
-
-    // 3. Hedge band ~1 tile thick on each CLOSED edge (dusk areas have no hedge
-    //    tile set — the shore reads the boundary there, so skip when dusk).
-    if (!dusk) {
-      // Vary the hedge to kill the visible repeat + hard seam: alternate the
-      // straight tile (frame 8) with the bushier canopy tile (frame 10, row 2 of
-      // the tileset) and randomly flip each 180°, so no two neighbours match.
-      const hedgeVariants = [
-        GROUND_TILES.hedgeStraight,
-        GROUND_TILES.hedgeStraight,
-        GROUND_TILES.hedgeStraight + 2,
-      ];
-      const stampHedge = (col: number, row: number, baseQuarter: number): void => {
-        const f = hedgeVariants[Math.floor(rng() * hedgeVariants.length)];
-        const q = baseQuarter + (rng() < 0.5 ? 2 : 0);
-        this.stampGroundTile(rt, f, q, col * tile, row * tile, tile);
-      };
-      for (let column = 0; column < cols; column += 1) {
-        if (!openEdges.has('north')) stampHedge(column, 0, 0);
-        if (!openEdges.has('south')) stampHedge(column, rows - 1, 0);
-      }
-      for (let row = 0; row < rows; row += 1) {
-        if (!openEdges.has('west')) stampHedge(0, row, 1);
-        if (!openEdges.has('east')) stampHedge(cols - 1, row, 1);
-      }
-    }
-
-    // 4. Subtle per-area palette overlay so shared grass tiles still read as
-    //    distinct places (cool ____ yard, warm ____ yard, dusk clearing).
-    const tint = this.add.graphics().setDepth(-19).setAlpha(dusk ? 0.22 : 0.16);
-    tint.fillStyle(pal.floorA, 1);
-    tint.fillRect(0, 0, width, height);
-  }
-
-  // Stamps one 64px tileset frame (optionally rotated by `quarter` clockwise
-  // 90° turns) into the ground RenderTexture at map px (x, y). Rotated variants
-  // are baked once into cached canvas textures so no per-draw rotation is needed.
-  private stampGroundTile(
-    rt: Phaser.GameObjects.RenderTexture,
-    frame: number,
-    quarter: number,
-    x: number,
-    y: number,
-    size: number,
-  ): void {
-    rt.drawFrame(this.rotatedTileKey(frame, quarter, size), undefined, x, y);
-  }
-
-  private rotatedTileKey(frame: number, quarter: number, size: number): string {
-    const key = `gt-${frame}-${quarter}-${size}`;
-    if (this.textures.exists(key)) {
-      return key;
-    }
-    const source = this.textures.get(GROUND_TILESET_KEY);
-    const cut = source.get(frame);
-    const canvasTexture = this.textures.createCanvas(key, size, size);
-    if (!canvasTexture) {
-      return GROUND_TILESET_KEY;
-    }
-    const ctx = canvasTexture.getContext();
-    ctx.save();
-    ctx.translate(size / 2, size / 2);
-    ctx.rotate((quarter * Math.PI) / 2);
-    ctx.translate(-size / 2, -size / 2);
-    ctx.drawImage(
-      source.getSourceImage() as CanvasImageSource,
-      cut.cutX,
-      cut.cutY,
-      cut.cutWidth,
-      cut.cutHeight,
-      0,
-      0,
-      size,
-      size,
-    );
-    ctx.restore();
-    canvasTexture.refresh();
-    return key;
   }
 
   // Rasterizes the worn-path routes (map centre → each open edge and each door
@@ -1633,7 +1374,7 @@ export class LocationScene extends Phaser.Scene {
   }
 
   // (Re)rolls a crane's per-instance motion + look. Called at spawn and whenever a
-  // crane drifts off the downstream (east) edge so it re-enters upstream fresh.
+  // crane drifts off the downstream (west) edge so it re-enters upstream fresh.
   private randomizeCrane(
     crane: DriftingCrane,
     rng: () => number,
@@ -1642,7 +1383,9 @@ export class LocationScene extends Phaser.Scene {
     yMax: number,
   ): void {
     crane.scale = baseScale * (0.85 + rng() * 0.3); // ±15%
-    crane.image.setScale(crane.scale).setFlipX(rng() < 0.5);
+    // Never flipped: every crane faces LEFT (the art and the procedural fallback
+    // both face left), matching the right→left drift — always head-first.
+    crane.image.setScale(crane.scale);
     crane.speed = 5 + rng() * 4; // 5–9 px/sec: unhurried
     crane.bobAmp = 2 + rng() * 2.5; // 2–4.5 px
     crane.bobRate = 0.5 + rng() * 0.4; // slow
@@ -1654,10 +1397,11 @@ export class LocationScene extends Phaser.Scene {
     crane.baseY = yMin + rng() * (yMax - yMin);
   }
 
-  // Integrates the drifting cranes one frame: downstream drift, a gentle vertical
-  // bob and a slight rotation wobble, wrapping any crane that leaves the east edge
-  // back to the west so the trickle loops. Driven from update() before the
-  // gameplay gates, so the water keeps breathing even while dressEdit is frozen.
+  // Integrates the drifting cranes one frame: right→left downstream drift, a
+  // gentle vertical bob and a slight rotation wobble, wrapping any crane that
+  // leaves the west edge back to the east so the trickle loops. Driven from
+  // update() before the gameplay gates, so the water keeps breathing even while
+  // dressEdit is frozen.
   private advanceClearingCranes(deltaMs: number): void {
     if (this.clearingCranes.length === 0) {
       return;
@@ -1673,13 +1417,13 @@ export class LocationScene extends Phaser.Scene {
     const yMax = bandTop + tile * 1.15;
     const rng = this.craneWrapRng;
     for (const crane of this.clearingCranes) {
-      const nextX = crane.image.x + crane.speed * dt;
+      const nextX = crane.image.x - crane.speed * dt;
       const halfW = (crane.image.width * crane.scale) / 2;
-      if (nextX - halfW > width + tile) {
-        // Off the downstream edge: re-roll and re-enter from upstream (the
-        // texture — and so the colour variant — stays with the crane).
+      if (nextX + halfW < -tile) {
+        // Off the downstream (west) edge: re-roll and re-enter from the east
+        // (the texture — and so the colour variant — stays with the crane).
         this.randomizeCrane(crane, rng, crane.baseScale, yMin, yMax);
-        crane.image.setX(-tile - halfW);
+        crane.image.setX(width + tile + halfW);
       } else {
         crane.image.setX(nextX);
       }
@@ -2372,68 +2116,6 @@ export class LocationScene extends Phaser.Scene {
     graphics.destroy();
   }
 
-  // Stamps overlapping circles from `from` to `to` — a soft, round-capped worn
-  // trail. All fills use alpha 1 (the caller sets the graphics' overall alpha),
-  // so overlaps never darken unevenly.
-  private stampPath(
-    graphics: Phaser.GameObjects.Graphics,
-    from: { x: number; y: number },
-    to: { x: number; y: number },
-    color: number,
-    halfWidth: number,
-  ): void {
-    const distance = Math.hypot(to.x - from.x, to.y - from.y);
-    const steps = Math.max(2, Math.round(distance / (halfWidth * 0.7)));
-    graphics.fillStyle(color, 1);
-    for (let i = 0; i <= steps; i += 1) {
-      const t = i / steps;
-      graphics.fillCircle(from.x + (to.x - from.x) * t, from.y + (to.y - from.y) * t, halfWidth);
-    }
-  }
-
-  private drawHedgeBand(
-    graphics: Phaser.GameObjects.Graphics,
-    edge: 'north' | 'south' | 'east' | 'west',
-    width: number,
-    height: number,
-    tile: number,
-    pal: OutdoorPalette,
-    rng: () => number,
-  ): void {
-    const horizontal = edge === 'north' || edge === 'south';
-    let x = 0;
-    let y = 0;
-    let w = width;
-    let h = height;
-    if (edge === 'north') h = tile;
-    if (edge === 'south') {
-      y = height - tile;
-      h = tile;
-    }
-    if (edge === 'west') w = tile;
-    if (edge === 'east') {
-      x = width - tile;
-      w = tile;
-    }
-
-    graphics.fillStyle(pal.border, 1);
-    graphics.fillRect(x, y, w, h);
-
-    const span = horizontal ? width : height;
-    const blobs = Math.max(3, Math.round(span / (tile * 0.55)));
-    for (let i = 0; i < blobs; i += 1) {
-      const along = ((i + 0.5) / blobs) * span;
-      const jitter = (rng() - 0.5) * tile * 0.3;
-      const bx = horizontal ? along + jitter : x + tile * 0.5;
-      const by = horizontal ? y + tile * 0.5 : along + jitter;
-      const r = tile * (0.34 + rng() * 0.14);
-      graphics.fillStyle(pal.borderStroke, 1);
-      graphics.fillCircle(bx, by, r);
-      graphics.fillStyle(pal.border, 1);
-      graphics.fillCircle(bx - 2, by - 2, r * 0.68);
-    }
-  }
-
   private createPlayer(): void {
     const mapJson = this.getMapJson();
     // Edge arrivals pass explicit map-space coords; doors/testMode use a named
@@ -2729,7 +2411,12 @@ export class LocationScene extends Phaser.Scene {
     }
     if (label) {
       const boardY = anchor.y - kind.h * scale * 0.72;
-      label.setPosition(anchor.x, boardY).setScale(scale).setDepth(anchor.y + 0.1);
+      // Re-run the caption auto-fit so a resized board keeps the name on the
+      // plank (same math as renderSignpost; label.width is the unscaled width).
+      label
+        .setPosition(anchor.x, boardY)
+        .setScale(signpostCaptionFit(label.width, kind, scale, placement.scale ?? 1))
+        .setDepth(anchor.y + 0.1);
     }
   }
 
@@ -2760,7 +2447,7 @@ export class LocationScene extends Phaser.Scene {
     // Caption centred on the board (upper ~72% of the sprite). Depth just above
     // the board so the player still occludes it when standing in front.
     const boardY = anchor.y - kind.h * scale * 0.72;
-    const label = this.add
+    const caption = this.add
       .text(anchor.x, boardY, sign.label, {
         color: '#3c2a17',
         fontSize: '16px',
@@ -2768,15 +2455,22 @@ export class LocationScene extends Phaser.Scene {
         fontFamily: 'Georgia, "Times New Roman", serif',
       })
       .setOrigin(0.5, 0.5)
-      .setScale(scale)
       .setDepth(anchor.y + 0.1);
+    // Auto-fit: the board displays at kind.w * placementScale world-units wide
+    // (the sprite scale normalises any source art to kind.w, then the per-
+    // placement dressEdit scale multiplies it), but the tilted plank the name
+    // sits on only spans ~72% of that. Long names (KERRISDALE, ALDERGROVE)
+    // overflow the plank at the base font size, so shrink the caption until it
+    // fits — the base `scale` stays the ceiling, so a name already within the
+    // plank is never enlarged.
+    caption.setScale(signpostCaptionFit(caption.width, kind, scale, placementScale));
 
     // Handle for the dressEdit editor: dragging moves the board + its caption
     // together; the linked interaction rect (dialogue hotspot) is shown as a
     // faint gold outline while selected and is edited separately in M-mode.
     this.outdoorPropHandles.push({
       image,
-      label,
+      label: caption,
       placement: {
         id: SIGNPOST_PLACEMENT_ID,
         name: 'signpost',

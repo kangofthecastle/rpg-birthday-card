@@ -41,9 +41,8 @@ export const PATH_TEE_URL = '/assets/tiles/path-tee.png';
 export const PATH_CAP_KEY = 'path-cap'; // base: dead-end open at S
 export const PATH_CAP_URL = '/assets/tiles/path-cap.png';
 
-/** Horizontally-seamless hedge/wall strip (tiled along closed edges). */
-export const GROUND_HEDGE_KEY = 'ground-hedge';
-export const GROUND_HEDGE_URL = '/assets/tiles/hedge-strip.png';
+// Boundary hedges were retired — closed edges read as plain grass — so the
+// ground-hedge slot is no longer loaded (hedge-strip.png stays on disk, unused).
 
 /** Every layered ground slot, for BootScene's probe-then-load loop. */
 export const GROUND_ART_SLOTS: ReadonlyArray<{ key: string; url: string }> = [
@@ -53,7 +52,6 @@ export const GROUND_ART_SLOTS: ReadonlyArray<{ key: string; url: string }> = [
   { key: PATH_CORNER_KEY, url: PATH_CORNER_URL },
   { key: PATH_TEE_KEY, url: PATH_TEE_URL },
   { key: PATH_CAP_KEY, url: PATH_CAP_URL },
-  { key: GROUND_HEDGE_KEY, url: GROUND_HEDGE_URL },
 ];
 /** Placeholder SVG source size; a drop-in PNG can be any size (scaled to fit). */
 export const EXTERIOR_SOURCE_WIDTH = 320;
@@ -349,6 +347,17 @@ export const OUTDOOR_PROPS: Readonly<Record<string, readonly PropPlacement[]>> =
     { name: 'clearing-pine-1', mapX: 932, mapY: 388 },
     { name: 'clearing-pine-2', mapX: 848, mapY: 244 },
     { name: 'clearing-pine-2', mapX: 874, mapY: 498 },
+    // Densified frame (~doubled): staggered scales/variants filling the gaps in the
+    // west/east treeline, same rim-light convention (west flipped, east not), still
+    // clear of the central lane, kneel rect (x 320–704), water band (y > 512),
+    // spawn (512,300) and the lantern posts. The author thins/rearranges in
+    // dressEdit — this is a full-but-not-crowded starting frame.
+    { name: 'clearing-pine-2', mapX: 56, mapY: 320, flip: true },
+    { name: 'clearing-pine-2', mapX: 120, mapY: 410, flip: true },
+    { name: 'clearing-pine-1', mapX: 232, mapY: 452, flip: true },
+    { name: 'clearing-pine-2', mapX: 968, mapY: 320 },
+    { name: 'clearing-pine-2', mapX: 904, mapY: 410 },
+    { name: 'clearing-pine-1', mapX: 792, mapY: 452 },
     // The paper cranes are no longer static props here: they drift on the shore
     // water, spawned by LocationScene.spawnClearingCranes. (The paper boat was
     // removed entirely — narratively it doesn't exist until ____ folds it.)

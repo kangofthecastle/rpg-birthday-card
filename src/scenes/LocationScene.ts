@@ -1448,28 +1448,16 @@ export class LocationScene extends Phaser.Scene {
       },
     );
 
-    // Faint lapping highlight tracing the seam — soft-edged, so it reads as a wet
-    // gleam catching the twilight, not a drawn line. Warms once the world awakens.
-    const lap = this.add.graphics().setDepth(-16.85);
-    const lapColor = awakened ? 0xffe9c8 : 0xb7a3d6;
-    this.fillSmoothVerticalBand(
-      lap,
-      0,
-      top - tile * 0.14,
-      width,
-      tile * 0.28,
-      () => lapColor,
-      (t) => (awakened ? 0.3 : 0.2) * (1 - Math.abs(t - 0.5) * 2),
-    );
-
     if (!awakened) {
       return;
     }
 
-    // Awakened: a bloom of light along the shore and beneath the water.
+    // Awakened: a soft bloom of light BENEATH the water only. The former warm
+    // seam highlight (a lapping gleam plus a bright band straddling the
+    // waterline) read as a thick, washed-out horizontal bar rather than a wet
+    // gleam, so it's dropped — the feathered damp bank above already carries the
+    // land→water transition. Only the cool underwater bloom remains.
     const glow = this.add.graphics().setDepth(-16);
-    glow.fillStyle(0xffe1a1, 0.22);
-    glow.fillRect(0, top - tile * 0.5, width, tile * 0.8);
     glow.fillStyle(0x7fd8ff, 0.14);
     glow.fillRect(0, top + tile * 0.6, width, bandHeight);
     this.tweens.add({
@@ -2067,7 +2055,6 @@ export class LocationScene extends Phaser.Scene {
     }
 
     this.spawnLightMotes(tune);
-    this.createSouthThresholdGlow();
   }
 
   // Post-violin awakening for a dressed interior (recipient-house): golden light
@@ -2268,45 +2255,6 @@ export class LocationScene extends Phaser.Scene {
     }
   }
 
-  // A soft, pulsing warm band across the south exit once the way has opened —
-  // the same door-glow language players already know (createOutdoorDoorMarkers'
-  // 0xffca74/0xffe1a1), read as "a way through" toward the clearing. The band's
-  // rect is derived from the south edgeExit and the map dims, not hardcoded.
-  // Gentle by design: a low glow on the ground, layered like the door markers.
-  private createSouthThresholdGlow(): void {
-    if (this.location.id !== 'main-outside') {
-      return;
-    }
-    const southExit = (this.location.edgeExits ?? []).find((exit) => exit.edge === 'south');
-    if (!southExit) {
-      return;
-    }
-    const tile = this.mapDims.tileSize;
-    const width = this.mapDims.width;
-    const height = this.mapDims.height;
-    // Band across the walkable span (one tile inset from each border corner),
-    // rising a couple of tiles up from the very bottom edge.
-    const x0 = tile;
-    const x1 = width - tile;
-    const bandHeight = tile * 2.5;
-    const top = height - bandHeight;
-
-    const glow = this.add.graphics().setDepth(-8);
-    // Warm wash, transparent at the top of the band and strongest at the edge.
-    glow.fillGradientStyle(0xffca74, 0xffca74, 0xffca74, 0xffca74, 0, 0, 0.34, 0.34);
-    glow.fillRect(x0, top, x1 - x0, bandHeight);
-    // A brighter threshold line low in the band — the door-marker stroke colour.
-    glow.fillStyle(0xffe1a1, 0.5);
-    glow.fillRect(x0, height - tile * 0.7, x1 - x0, tile * 0.28);
-    this.tweens.add({
-      targets: glow,
-      alpha: { from: 0.55, to: 1 },
-      duration: 1600,
-      yoyo: true,
-      repeat: -1,
-      ease: 'Sine.easeInOut',
-    });
-  }
 
   private createMoteTexture(): void {
     if (this.textures.exists('awaken-mote')) {

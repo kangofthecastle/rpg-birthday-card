@@ -5,28 +5,56 @@
 
 export const EXTERIOR_KEY_PREFIX = 'exterior-';
 
-// Optional drop-in ground tileset (probed + loaded in BootScene as a 64×64
-// spritesheet). When present, createFlatGround tiles the outdoor ground from it
-// instead of the procedural grass/path/hedge fills. 4×4 grid (256×256):
-//   row 0: grass variants (base / bright / textured / tufted)
-//   row 1: worn dirt path — straight[N-S] / curve[E-S] / T[E-S-W] / fade[S]
-//   row 2: hedge border — straight[E-W] / corner / canopy / corner
-//   row 3: dusk-tinted set — grass / grass-variant / path[N-S] / path-fade
-export const GROUND_TILESET_KEY = 'ground-tileset';
-export const GROUND_TILESET_URL = '/assets/tiles/ground-tileset.png';
+// Outdoor ground art — LAYERED drop-in slots (v2). The packed 4×4 ground-tileset
+// sheet was retired: a single generated sheet could never keep grass seamless,
+// path corners clean, AND the hedge un-banded all at once. Each concern is now an
+// independent optional file, so image-gen only has to get ONE seamless thing
+// right per image. Every slot is probed in BootScene (isImageUrl) and loaded into
+// its texture key when present; when absent, outdoorGround.ts paints a procedural
+// fallback so the world never regresses before art lands.
+//
+//  • GRASS      — one large seamless tileable texture, engine tiles it (no cells,
+//                 so no grid seams by construction). A separate dusk texture for
+//                 the clearing's twilight.
+//  • PATH       — four TRANSPARENT overlay pieces composited over the grass
+//                 (straight / quarter-arc corner / T / dead-end cap). The engine
+//                 rotates/flips them per path cell; because they are dirt-on-alpha
+//                 there is no grass to match, and corners are smooth arcs.
+//  • HEDGE      — one horizontally-seamless strip (NO baked lighting gradient),
+//                 tiled along each closed edge (rotated for vertical edges).
 export const GROUND_TILE_SIZE = 64;
-/** Frame indices into the 4×4 tileset (row-major). */
-export const GROUND_TILES = {
-  grass: [0, 1, 2, 3] as const,
-  pathStraight: 4,
-  pathCurve: 5,
-  pathT: 6,
-  pathFade: 7,
-  hedgeStraight: 8,
-  duskGrass: [12, 13] as const,
-  duskPathStraight: 14,
-  duskPathFade: 15,
-} as const;
+
+/** Seamless grass texture (tiles on all four edges). */
+export const GROUND_GRASS_KEY = 'ground-grass';
+export const GROUND_GRASS_URL = '/assets/tiles/grass-tile.png';
+/** Seamless dusk/twilight grass for the clearing. */
+export const GROUND_GRASS_DUSK_KEY = 'ground-grass-dusk';
+export const GROUND_GRASS_DUSK_URL = '/assets/tiles/grass-dusk-tile.png';
+
+/** Transparent worn-dirt path overlay pieces (base orientations below). */
+export const PATH_STRAIGHT_KEY = 'path-straight'; // base: vertical band (N–S)
+export const PATH_STRAIGHT_URL = '/assets/tiles/path-straight.png';
+export const PATH_CORNER_KEY = 'path-corner'; // base: quarter arc joining S & E
+export const PATH_CORNER_URL = '/assets/tiles/path-corner.png';
+export const PATH_TEE_KEY = 'path-tee'; // base: T open at E,S,W (missing N)
+export const PATH_TEE_URL = '/assets/tiles/path-tee.png';
+export const PATH_CAP_KEY = 'path-cap'; // base: dead-end open at S
+export const PATH_CAP_URL = '/assets/tiles/path-cap.png';
+
+/** Horizontally-seamless hedge/wall strip (tiled along closed edges). */
+export const GROUND_HEDGE_KEY = 'ground-hedge';
+export const GROUND_HEDGE_URL = '/assets/tiles/hedge-strip.png';
+
+/** Every layered ground slot, for BootScene's probe-then-load loop. */
+export const GROUND_ART_SLOTS: ReadonlyArray<{ key: string; url: string }> = [
+  { key: GROUND_GRASS_KEY, url: GROUND_GRASS_URL },
+  { key: GROUND_GRASS_DUSK_KEY, url: GROUND_GRASS_DUSK_URL },
+  { key: PATH_STRAIGHT_KEY, url: PATH_STRAIGHT_URL },
+  { key: PATH_CORNER_KEY, url: PATH_CORNER_URL },
+  { key: PATH_TEE_KEY, url: PATH_TEE_URL },
+  { key: PATH_CAP_KEY, url: PATH_CAP_URL },
+  { key: GROUND_HEDGE_KEY, url: GROUND_HEDGE_URL },
+];
 /** Placeholder SVG source size; a drop-in PNG can be any size (scaled to fit). */
 export const EXTERIOR_SOURCE_WIDTH = 320;
 export const EXTERIOR_SOURCE_HEIGHT = 360;

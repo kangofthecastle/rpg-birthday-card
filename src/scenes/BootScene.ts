@@ -14,9 +14,7 @@ import {
   EXTERIOR_SOURCE_HEIGHT,
   EXTERIOR_SOURCE_WIDTH,
   exteriorTextureKey,
-  GROUND_TILESET_KEY,
-  GROUND_TILESET_URL,
-  GROUND_TILE_SIZE,
+  GROUND_ART_SLOTS,
   ALL_PROP_KINDS,
   propAssetUrl,
   propTextureKey,
@@ -126,14 +124,14 @@ export class BootScene extends Phaser.Scene {
     }));
 
     const [
-      hasTileset,
+      groundArtPresence,
       hasDoormat,
       hasGalaxyGround,
       hasShoreWater,
       propOverridePresence,
       outdoorPropPresence,
     ] = await Promise.all([
-      isImageUrl(GROUND_TILESET_URL),
+      Promise.all(GROUND_ART_SLOTS.map((slot) => isImageUrl(slot.url))),
       isImageUrl(DOORMAT_DROP_URL),
       isImageUrl(GALAXY_GROUND_URL),
       isImageUrl(SHORE_WATER_URL),
@@ -141,11 +139,14 @@ export class BootScene extends Phaser.Scene {
       Promise.all(outdoorProps.map((candidate) => isImageUrl(candidate.url))),
     ]);
 
+    // Layered ground art (v2): each grass/path/hedge slot loads independently, so
+    // a partial art drop upgrades only its layer and the rest stays procedural.
+    const presentGroundArt = GROUND_ART_SLOTS.filter((_, index) => groundArtPresence[index]);
     const presentOverrides = propOverrides.filter((_, index) => propOverridePresence[index]);
     const presentOutdoorProps = outdoorProps.filter((_, index) => outdoorPropPresence[index]);
 
     if (
-      !hasTileset &&
+      presentGroundArt.length === 0 &&
       !hasDoormat &&
       !hasGalaxyGround &&
       !hasShoreWater &&
@@ -155,11 +156,8 @@ export class BootScene extends Phaser.Scene {
       return;
     }
     await new Promise<void>((resolve) => {
-      if (hasTileset) {
-        this.load.spritesheet(GROUND_TILESET_KEY, GROUND_TILESET_URL, {
-          frameWidth: GROUND_TILE_SIZE,
-          frameHeight: GROUND_TILE_SIZE,
-        });
+      for (const slot of presentGroundArt) {
+        this.load.image(slot.key, slot.url);
       }
       if (hasDoormat) {
         this.load.image(DOORMAT_DROP_KEY, DOORMAT_DROP_URL);

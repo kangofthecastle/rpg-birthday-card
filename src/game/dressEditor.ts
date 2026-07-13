@@ -33,6 +33,11 @@ import { positionPropImage, type PropHandle } from './roomRenderer';
 import { getObjectLayer, type TiledMapJson } from './mapHelpers';
 import type { TmjRectPatch } from './tmjRectPatch';
 import {
+  clampPanelPosition,
+  loadPanelState,
+  savePanelState,
+} from './dressEditorPanelState';
+import {
   computeRemovedTombstones,
   type PropPlacement,
   type RoomDressing,
@@ -251,11 +256,26 @@ class DressEditor {
   private readonly initialRemoved: readonly string[];
 
   private panel!: HTMLElement;
+  private panelBody!: HTMLElement;
+  private collapseBtn!: HTMLButtonElement;
   private readoutEl!: HTMLElement;
   private removedCountEl!: HTMLElement;
   private hintEl!: HTMLElement;
   private saveBtn!: HTMLButtonElement;
   private toastEl!: HTMLElement;
+
+  // --- draggable/collapsible panel ------------------------------------------
+  // The DOM control panel can be dragged by its title bar out of the scene's
+  // way and collapsed to just that bar; both position and collapsed state
+  // persist across editor sessions (localStorage), clamped to the viewport.
+  private panelX = 12;
+  private panelY = 12;
+  private panelCollapsed = false;
+  private panelDragging = false;
+  private panelGrabDX = 0;
+  private panelGrabDY = 0;
+  private panelPointerId: number | null = null;
+  private onWindowResize = (): void => this.clampPanelToViewport();
 
   constructor(scene: Phaser.Scene, options: DressEditorOptions) {
     this.scene = scene;
@@ -993,7 +1013,16 @@ class DressEditor {
         min-width:220px;padding:10px 12px;background:rgba(20,16,21,.93);
         border:1px solid #3b3550;border-radius:10px;color:#f5f3ff;
         font:600 12px/1.4 system-ui,sans-serif;box-shadow:0 6px 24px rgba(0,0,0,.4)}
-      .dress-editor-panel h4{margin:0 0 6px;font-size:12px;letter-spacing:.03em}
+      .dress-editor-panel .dress-editor-titlebar{display:flex;align-items:center;
+        gap:8px;margin:0 0 6px;cursor:grab;touch-action:none;
+        user-select:none;-webkit-user-select:none}
+      .dress-editor-panel .dress-editor-titlebar.dragging{cursor:grabbing}
+      .dress-editor-panel h4{margin:0;font-size:12px;letter-spacing:.03em;flex:1}
+      .dress-editor-panel button.dress-editor-collapse{margin-top:0;padding:2px 8px;
+        min-width:26px;line-height:1.1;font-size:14px;background:#2a2440;
+        border-color:#3b3550;cursor:pointer}
+      .dress-editor-panel button.dress-editor-collapse:hover{background:#3b3550}
+      .dress-editor-panel.collapsed .dress-editor-titlebar{margin:0}
       .dress-editor-panel .dress-editor-readout{font:500 12px/1.5 ui-monospace,
         Menlo,monospace;white-space:pre;color:#c7f9e5;margin:4px 0 8px}
       .dress-editor-panel .dress-editor-removed{color:#fca5a5;font-weight:600;
@@ -1020,8 +1049,28 @@ class DressEditor {
     const panel = document.createElement('div');
     panel.className = 'dress-editor-panel';
 
+    // Title bar: doubles as the drag handle and hosts the collapse toggle.
+    const titlebar = document.createElement('div');
+    titlebar.className = 'dress-editor-titlebar';
+
     const title = document.createElement('h4');
     title.textContent = `Dress Editor — ${this.options.locationId}`;
+
+    const collapseBtn = document.createElement('button');
+    collapseBtn.type = 'button';
+    collapseBtn.className = 'dress-editor-collapse';
+    collapseBtn.title = 'Collapse/expand the panel to just its title bar';
+    // Don't let a click on the toggle start (or be swallowed by) a title drag.
+    collapseBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
+    collapseBtn.addEventListener('click', () => this.toggleCollapsed());
+    this.collapseBtn = collapseBtn;
+
+    titlebar.append(title, collapseBtn);
+
+    // Everything below the title bar collapses away as one block.
+    const body = document.createElement('div');
+    body.className = 'dress-editor-body';
+    this.panelBody = body;
 
     this.readoutEl = document.createElement('div');
     this.readoutEl.className = 'dress-editor-readout';
@@ -1064,9 +1113,12 @@ class DressEditor {
     exportBtn.title = 'Copy the props[] as paste-ready TypeScript (fallback)';
     exportBtn.addEventListener('click', () => void this.exportProps());
 
-    panel.append(title, this.readoutEl, this.removedCountEl, hint, modeBtn, saveBtn, exportBtn);
+    body.append(this.readoutEl, this.removedCountEl, hint, modeBtn, saveBtn, exportBtn);
+    panel.append(titlebar, body);
     document.body.appendChild(panel);
     this.panel = panel;
+
+    this.initPanelPlacement(titlebar);
 
     this.updateModeButton();
     this.updateSaveButton();
@@ -1075,6 +1127,126 @@ class DressEditor {
     this.toastEl = document.createElement('div');
     this.toastEl.className = 'dress-editor-toast';
     document.body.appendChild(this.toastEl);
+  }
+
+  // --- draggable / collapsible panel ---------------------------------------
+
+  // Restore persisted position + collapsed state (clamped to the current
+  // viewport), apply them, and wire up title-bar dragging. Pointer events are
+  // handled on the DOM title bar with pointer capture, so a panel drag never
+  // reaches the Phaser canvas underneath — no prop selection, rect edit, or
+  // Space-pan can start while dragging the panel.
+  private initPanelPlacement(titlebar: HTMLElement): void {
+    const persisted = loadPanelState();
+    if (persisted) {
+      this.panelX = persisted.x;
+      this.panelY = persisted.y;
+      this.panelCollapsed = persisted.collapsed;
+    }
+    this.applyCollapsed();
+    // Clamp against the real rendered size once it's in the DOM.
+    this.clampPanelToViewport();
+
+    titlebar.addEventListener('pointerdown', (e) => this.onPanelPointerDown(e, titlebar));
+    titlebar.addEventListener('pointermove', (e) => this.onPanelPointerMove(e));
+    titlebar.addEventListener('pointerup', (e) => this.onPanelPointerUp(e, titlebar));
+    titlebar.addEventListener('pointercancel', (e) => this.onPanelPointerUp(e, titlebar));
+    window.addEventListener('resize', this.onWindowResize);
+  }
+
+  private onPanelPointerDown(event: PointerEvent, titlebar: HTMLElement): void {
+    // Ignore secondary buttons; keep the gesture entirely on the DOM overlay so
+    // the scene never sees it.
+    if (event.button !== 0) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    this.panelDragging = true;
+    this.panelPointerId = event.pointerId;
+    this.panelGrabDX = event.clientX - this.panelX;
+    this.panelGrabDY = event.clientY - this.panelY;
+    titlebar.classList.add('dragging');
+    try {
+      titlebar.setPointerCapture(event.pointerId);
+    } catch {
+      // setPointerCapture can throw for stale ids — dragging still works.
+    }
+  }
+
+  private onPanelPointerMove(event: PointerEvent): void {
+    if (!this.panelDragging || event.pointerId !== this.panelPointerId) {
+      return;
+    }
+    event.preventDefault();
+    const { x, y } = clampPanelPosition(
+      event.clientX - this.panelGrabDX,
+      event.clientY - this.panelGrabDY,
+      this.panel.offsetWidth,
+      this.panel.offsetHeight,
+      window.innerWidth,
+      window.innerHeight,
+    );
+    this.panelX = x;
+    this.panelY = y;
+    this.applyPanelPosition();
+  }
+
+  private onPanelPointerUp(event: PointerEvent, titlebar: HTMLElement): void {
+    if (event.pointerId !== this.panelPointerId) {
+      return;
+    }
+    this.panelDragging = false;
+    this.panelPointerId = null;
+    titlebar.classList.remove('dragging');
+    try {
+      titlebar.releasePointerCapture(event.pointerId);
+    } catch {
+      // ignore — capture may already be gone
+    }
+    this.persistPanelState();
+  }
+
+  private toggleCollapsed(): void {
+    this.panelCollapsed = !this.panelCollapsed;
+    this.applyCollapsed();
+    // A collapsed panel is shorter; re-clamp so expanding near a bottom edge
+    // can't push it off-screen (and vice-versa).
+    this.clampPanelToViewport();
+    this.persistPanelState();
+  }
+
+  private applyCollapsed(): void {
+    this.panel.classList.toggle('collapsed', this.panelCollapsed);
+    this.panelBody.style.display = this.panelCollapsed ? 'none' : '';
+    this.collapseBtn.textContent = this.panelCollapsed ? '+' : '–';
+    this.collapseBtn.setAttribute('aria-expanded', this.panelCollapsed ? 'false' : 'true');
+  }
+
+  private applyPanelPosition(): void {
+    this.panel.style.left = `${this.panelX}px`;
+    this.panel.style.top = `${this.panelY}px`;
+    // Override the stylesheet's default top/left anchoring.
+    this.panel.style.right = 'auto';
+    this.panel.style.bottom = 'auto';
+  }
+
+  private clampPanelToViewport(): void {
+    const { x, y } = clampPanelPosition(
+      this.panelX,
+      this.panelY,
+      this.panel.offsetWidth,
+      this.panel.offsetHeight,
+      window.innerWidth,
+      window.innerHeight,
+    );
+    this.panelX = x;
+    this.panelY = y;
+    this.applyPanelPosition();
+  }
+
+  private persistPanelState(): void {
+    savePanelState({ x: this.panelX, y: this.panelY, collapsed: this.panelCollapsed });
   }
 
   private updateReadout(): void {
@@ -1270,6 +1442,7 @@ class DressEditor {
     if (this.scene.game.canvas) {
       this.scene.game.canvas.style.cursor = '';
     }
+    window.removeEventListener('resize', this.onWindowResize);
     this.graphics.destroy();
     for (const rect of this.rects) rect.label.destroy();
     for (const ref of this.exitRefs) ref.label.destroy();

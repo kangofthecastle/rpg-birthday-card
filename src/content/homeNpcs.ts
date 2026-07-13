@@ -11,7 +11,11 @@
  * billboard next to the thing the player actually interacts with.
  */
 
-import { FRIEND_TWO_SPRITE } from './galaxyScene';
+import {
+  FRIEND_TWO_PARTIAL_FRAMES,
+  friendtwoRowAnimationKey,
+  friendtwoRowTextureKey,
+} from './friendtwoPartialSprite';
 
 // ____'s 4-direction idle/walk sheet: 1536×2048, 6 columns × 8 rows of 256px
 // frames — identical layout to ____'s. Rows 0–3 are idle (down, left, right,
@@ -29,6 +33,24 @@ export const FRIEND_ONE_SPRITE = {
   idleDownStartFrame: 0,
   idleDownFrameCount: 6,
   idleAnimationKey: 'friendone-idle-down',
+} as const;
+
+// ____'s home billboard sprite, built from the partial frame set's idle-south
+// strip (the only facing this static resident shows — he stands at his desk's
+// left corner facing the entrance). Each row ships as its own 1536×256 strip, so
+// the "key" here is that one strip's texture and its 6 frames drive the idle
+// bob. The other generated rows (idle-west/east/north, walk-south) are still
+// loaded and registered (see LocationScene.createFriendTwoPartialAnimations) and
+// reachable through resolveFriendTwoRow, but nothing plays them for this billboard.
+export const FRIEND_TWO_HOME_SPRITE = {
+  key: friendtwoRowTextureKey('idle-south'),
+  scale: FRIEND_TWO_PARTIAL_FRAMES.scale,
+  origin: FRIEND_TWO_PARTIAL_FRAMES.origin,
+  idleFrameRate: FRIEND_TWO_PARTIAL_FRAMES.idleFrameRate,
+  /** First frame of the idle-south strip (rows are one-per-file, so 0). */
+  idleDownStartFrame: 0,
+  idleDownFrameCount: FRIEND_TWO_PARTIAL_FRAMES.framesPerRow,
+  idleAnimationKey: friendtwoRowAnimationKey('idle-south'),
 } as const;
 
 /** The shared shape of an idle-down character billboard config. */
@@ -69,7 +91,7 @@ export interface HomeHostNpc {
  */
 export const HOME_HOST_NPCS: Record<string, HomeHostNpc> = {
   'friend-a': { id: 'friendone', sprite: FRIEND_ONE_SPRITE, mapX: 1050, mapY: 582 },
-  'friend-b': { id: 'friendtwo', sprite: FRIEND_TWO_SPRITE, mapX: 452, mapY: 430 },
+  'friend-b': { id: 'friendtwo', sprite: FRIEND_TWO_HOME_SPRITE, mapX: 452, mapY: 430 },
 };
 
 /**

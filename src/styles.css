@@ -1210,8 +1210,16 @@ body.minigame-active .collection-panel {
   /* Sits just beneath the mute button in the top-right corner. */
   top: 72px;
   right: 20px;
-  width: 220px;
-  padding: 14px;
+  /* Box-fit knobs (defaults = current look). Art size and font sizes are NOT
+     controlled here — these only tune how closely the box hugs its content. */
+  --panel-w: 220px; /* outer box width (border-box) */
+  --panel-pad: 14px; /* outer padding all round */
+  --head-gap: 8px; /* gap under the "Letters" heading */
+  --stack-h: 92px; /* height of the letter-stack row */
+  --stack-top: 12px; /* art offset from the top of that row */
+  --caption-gap: 8px; /* gap above the "n of m collected" caption */
+  width: var(--panel-w);
+  padding: var(--panel-pad);
   /* Own stacking context (below the mute button z-200, above the game) so the
      fanned envelopes never paint above the letter-modal reader (z-400). */
   z-index: 150;
@@ -1266,7 +1274,7 @@ body.minigame-active .collection-panel {
 }
 
 .collection-panel h2 {
-  margin: 0 0 8px;
+  margin: 0 0 var(--head-gap, 8px);
   font-size: 16px;
   text-align: center;
 }
@@ -1286,7 +1294,7 @@ body.minigame-active .collection-panel {
 
 .letter-stack {
   position: relative;
-  height: 92px;
+  height: var(--stack-h, 92px);
   margin: 2px 0 0;
   /* Fan geometry — kept gentle: these are precious things, not a card trick. */
   --spread: 26px; /* horizontal step per letter when fanned */
@@ -1296,7 +1304,7 @@ body.minigame-active .collection-panel {
 .letter-stack__item {
   position: absolute;
   left: 50%;
-  top: 12px;
+  top: var(--stack-top, 12px);
   /* Square to match the keepsake art's 1:1 aspect — the raw art IS the card,
      so no envelope chrome sits behind it. */
   width: 58px;
@@ -1407,7 +1415,7 @@ body.minigame-active .collection-panel {
 }
 
 .collection-panel__caption {
-  margin: 8px 0 0;
+  margin: var(--caption-gap, 8px) 0 0;
   min-height: 1.3em;
   font-size: 12px;
   line-height: 1.3;

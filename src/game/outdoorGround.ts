@@ -61,17 +61,6 @@ export interface OutdoorGroundOptions {
   readonly exits: ReadonlyArray<{ x: number; y: number; width: number; height: number }>;
   /** 4-connected path cell mask (cols*rows, row-major) — see rasterizePathCells. */
   readonly pathMask: ReadonlyArray<boolean>;
-  /**
-   * Optional per-cell sub-tile draw offset in map px (cols*rows, row-major),
-   * added to the overlay's draw position for that cell. Used to slide a door's
-   * vertical approach leg so its band centres on the door's TRUE x-centre rather
-   * than the nearest tile column (door centres often sit exactly on a tile
-   * boundary, which otherwise snaps the road half a tile to one side). The
-   * walkable corridor stays tile-based; only the painted overlay shifts. Absent
-   * or zero entries draw at the plain tile origin.
-   */
-  readonly pathCellDx?: ReadonlyArray<number>;
-  readonly pathCellDy?: ReadonlyArray<number>;
   /** Twilight clearing: dusk grass, no hedge (the shore reads the boundary). */
   readonly dusk: boolean;
   /** Stable per-area seed for the procedural fallbacks. */
@@ -212,29 +201,53 @@ function hasAllPathArt(scene: Phaser.Scene): boolean {
 
 function buildPathLayer(scene: Phaser.Scene, opts: OutdoorGroundOptions): void {
   const { width, height, tile, cols, rows, pathMask } = opts;
+  const pathEdges = opts.pathOpenEdges ?? opts.openEdges;
 
   if (hasAllPathArt(scene)) {
     const rt = scene.add
       .renderTexture(0, 0, width, height)
       .setOrigin(0, 0)
       .setDepth(DEPTH_PATH);
+    const draw = (key: string, quarter: number, px: number, py: number): void => {
+      rt.drawFrame(rotatedScaledKey(scene, key, quarter, tile), undefined, px, py);
+    };
     for (let index = 0; index < pathMask.length; index += 1) {
       if (!pathMask[index]) continue;
       const column = index % cols;
       const row = Math.floor(index / cols);
-      const n = row > 0 && pathMask[index - cols];
-      const s = row < rows - 1 && pathMask[index + cols];
-      const w = column > 0 && pathMask[index - 1];
-      const e = column < cols - 1 && pathMask[index + 1];
-      const dx = opts.pathCellDx?.[index] ?? 0;
-      const dy = opts.pathCellDy?.[index] ?? 0;
-      for (const piece of choosePathOverlay(!!n, !!e, !!s, !!w)) {
-        rt.drawFrame(
-          rotatedScaledKey(scene, piece.key, piece.quarter, tile),
-          undefined,
-          column * tile + dx,
-          row * tile + dy,
-        );
+      const n = !!(row > 0 && pathMask[index - cols]);
+      const s = !!(row < rows - 1 && pathMask[index + cols]);
+      const w = !!(column > 0 && pathMask[index - 1]);
+      const e = !!(column < cols - 1 && pathMask[index + 1]);
+      const count = (n ? 1 : 0) + (e ? 1 : 0) + (s ? 1 : 0) + (w ? 1 : 0);
+
+      // World-edge exit mouth: a single-connection cell sitting on a map boundary
+      // whose edge the road routes toward is NOT a dead-end — the road leaves the
+      // area toward the next map. Render it as a straight running through the
+      // boundary (band full-width to the edge) instead of a fade cap, so an exit
+      // route reads as the road continuing off-screen.
+      if (count === 1) {
+        const mouth =
+          (column === 0 && pathEdges.has('west')) ||
+          (column === cols - 1 && pathEdges.has('east')) ||
+          (row === 0 && pathEdges.has('north')) ||
+          (row === rows - 1 && pathEdges.has('south'));
+        if (mouth) {
+          // Orient the straight along the single interior connection's axis.
+          draw(PATH_STRAIGHT_KEY, e || w ? 1 : 0, column * tile, row * tile);
+          continue;
+        }
+      }
+
+      // Every path cell is tile-snapped, so a leg, its bend and its junction all
+      // share exact grid-aligned band geometry: straights butt seamlessly, bends
+      // get the quarter-arc corner and junctions the T — all continuous. (Door
+      // approach legs were previously slid a sub-tile fraction to centre on the
+      // door, but that half-tile shift met the on-grid junction/corner cell with a
+      // visible step and disconnected the band; continuity wins over that centring,
+      // so the leg now snaps to its tile column — up to ~half a tile off the door.)
+      for (const piece of choosePathOverlay(n, e, s, w)) {
+        draw(piece.key, piece.quarter, column * tile, row * tile);
       }
     }
     return;

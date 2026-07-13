@@ -480,7 +480,10 @@ export function isValidOutdoorLayoutFile(value: unknown): value is OutdoorLayout
 // house — one pointing west to Kerrisdale, one east to Aldergrove. Both share the
 // single "main-signpost" dialogue rect (the "Arrows point every way" line reads as
 // the whole junction, so one interaction covers both signs). Anchors flank the
-// central junction below the east/west corridor lanes; fine-tune in dressEdit.
+// central junction just NORTH of the east/west corridor lanes (feet in the row
+// above the road band, so the colliders stay out of the corridor mask), spread
+// wide enough that the lamp-post's lantern head — which y-sorts in front at this
+// height — never covers a caption; fine-tune in dressEdit.
 export interface SignpostPlacement {
   /** Interaction / hotspot id this fingerpost's "read" dialogue belongs to. */
   readonly interactionId: string;
@@ -500,9 +503,9 @@ export interface SignpostPlacement {
 export const SIGNPOSTS: Readonly<Record<string, readonly SignpostPlacement[]>> = {
   'main-outside': [
     // Points WEST toward the west-edge road to Kerrisdale (____'s yard).
-    { interactionId: 'main-signpost', id: 'signpost-arrow#0', mapX: 496, mapY: 556, label: 'KERRISDALE', flip: true },
+    { interactionId: 'main-signpost', id: 'signpost-arrow#0', mapX: 460, mapY: 364, label: 'KERRISDALE', flip: true },
     // Points EAST toward the east-edge road to Aldergrove (____'s yard).
-    { interactionId: 'main-signpost', id: 'signpost-arrow#1', mapX: 912, mapY: 556, label: 'ALDERGROVE' },
+    { interactionId: 'main-signpost', id: 'signpost-arrow#1', mapX: 948, mapY: 364, label: 'ALDERGROVE' },
   ],
 };
 

@@ -451,17 +451,7 @@
       "id": 5,
       "name": "Interactables",
       "type": "objectgroup",
-      "objects": [
-        {
-          "id": 4,
-          "name": "friendtwo-signpost",
-          "type": "dialogue",
-          "x": 640,
-          "y": 400,
-          "width": 96,
-          "height": 96
-        }
-      ]
+      "objects": []
     }
   ]
 }

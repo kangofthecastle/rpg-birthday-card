@@ -63,12 +63,14 @@ import {
   getOutdoorPalette,
   getOutdoorProps,
   getOutdoorLayoutRemoved,
-  getOutdoorSignpost,
-  getSignpost,
+  getOutdoorSignposts,
+  getSignposts,
   exteriorTextureKey,
   propTextureKey,
   PROP_KINDS,
-  SIGNPOST_PLACEMENT_ID,
+  SIGNPOST_PROP_NAME,
+  SIGNPOST_ARROW_WRITABLE_FRACTION,
+  SIGNPOST_ARROW_SHAFT_CENTER_FRACTION,
   type ExteriorPlacement,
   type OutdoorPalette,
   type PropKind,
@@ -186,13 +188,14 @@ function colorToHex(color: number): string {
 }
 
 /**
- * Caption scale that keeps a signpost's area name on the tilted plank. The board
- * displays kind.w * placementScale world-units wide and the plank spans ~72% of
- * that; long names (KERRISDALE, ALDERGROVE) overflow at the base font size, so
- * shrink until they fit. `imageScale` (the board's sprite scale, placementScale
- * included) stays the ceiling so a short name is never enlarged. `captionWidth`
- * is the Text object's unscaled width. Shared by renderSignpost and the dressEdit
- * reposition path so a hand-resized board re-fits identically.
+ * Caption scale that keeps a fingerpost's destination name on the arrow SHAFT.
+ * The board displays kind.w * placementScale world-units wide and the writable
+ * shaft (excluding the arrowhead) spans SIGNPOST_ARROW_WRITABLE_FRACTION of that;
+ * long names (KERRISDALE, ALDERGROVE) overflow at the base font size, so shrink
+ * until they fit. `imageScale` (the board's sprite scale, placementScale included)
+ * stays the ceiling so a short name is never enlarged. `captionWidth` is the Text
+ * object's unscaled width. Shared by renderSignposts and the dressEdit reposition
+ * path so a hand-resized board re-fits identically.
  */
 function signpostCaptionFit(
   captionWidth: number,
@@ -200,8 +203,17 @@ function signpostCaptionFit(
   imageScale: number,
   placementScale: number,
 ): number {
-  const budget = kind.w * placementScale * 0.72;
+  const budget = kind.w * placementScale * SIGNPOST_ARROW_WRITABLE_FRACTION;
   return captionWidth > 0 ? Math.min(imageScale, budget / captionWidth) : imageScale;
+}
+
+/** Horizontal offset (world px) from a fingerpost's centre to its arrow SHAFT
+ * centre, so the caption sits centred on the shaft rather than the whole board.
+ * The native art's head points right (shaft centre left of board centre); a
+ * flipped board mirrors that, so the offset flips sign with `flip`. */
+function signpostShaftOffset(kind: PropKind, imageScale: number, flip: boolean): number {
+  const dx = (SIGNPOST_ARROW_SHAFT_CENTER_FRACTION - 0.5) * kind.w * imageScale;
+  return flip ? -dx : dx;
 }
 
 /** Linear blend of two 0xRRGGBB colours (t=0 -> a, t=1 -> b). */
@@ -871,7 +883,7 @@ export class LocationScene extends Phaser.Scene {
       this.createFlatGround(tilemap, palette);
       this.propColliders = [...this.propColliders, ...this.renderOutdoorExteriors()];
       this.propColliders = [...this.propColliders, ...this.renderOutdoorProps(tilemap)];
-      this.propColliders = [...this.propColliders, ...this.renderSignpost(tilemap)];
+      this.propColliders = [...this.propColliders, ...this.renderSignposts(tilemap)];
     } else {
       const palette = getOutdoorPalette(this.location.id);
       this.cameras.main.setBackgroundColor(
@@ -2203,12 +2215,12 @@ export class LocationScene extends Phaser.Scene {
       }
     }
 
-    // The signpost hotspot now has a diegetic prop; its "E - Read the signpost"
-    // proximity prompt is guidance enough, so skip the translucent debug rect
-    // (unless the collider-debug overlay is on).
-    const signpostId = getSignpost(this.location.id)?.interactionId;
+    // The signpost hotspots now have diegetic fingerpost props; the "E - Read the
+    // signpost" proximity prompt is guidance enough, so skip the translucent debug
+    // rect (unless the collider-debug overlay is on).
+    const signpostIds = new Set(getSignposts(this.location.id).map((s) => s.interactionId));
     for (const interaction of this.interactions) {
-      if (interaction.id === signpostId && !this.showColliderDebug) {
+      if (signpostIds.has(interaction.id) && !this.showColliderDebug) {
         continue;
       }
       this.createWorldMarker(interaction, 0xf1d79a, this.getObjectLabel(interaction));
@@ -2411,92 +2423,102 @@ export class LocationScene extends Phaser.Scene {
     }
     if (label) {
       const boardY = anchor.y - kind.h * scale * 0.72;
-      // Re-run the caption auto-fit so a resized board keeps the name on the
-      // plank (same math as renderSignpost; label.width is the unscaled width).
+      const shaftX = anchor.x + signpostShaftOffset(kind, scale, Boolean(placement.flip));
+      // Re-run the caption auto-fit so a resized board keeps the name on the arrow
+      // shaft (same math as renderSignposts; label.width is the unscaled width).
       label
-        .setPosition(anchor.x, boardY)
+        .setPosition(shaftX, boardY)
         .setScale(signpostCaptionFit(label.width, kind, scale, placement.scale ?? 1))
         .setDepth(anchor.y + 0.1);
     }
   }
 
-  // The visible signpost prop for a named area: the blank painted board with the
-  // area name rendered ONTO it in-game (so a drop-in board art needs no baked
-  // text). Bottom-anchored + y-sorted like the other standing props.
-  private renderSignpost(tilemap: Phaser.Tilemaps.Tilemap): PropColliderRect[] {
+  // The directional fingerposts for a named area: a flat front-facing post with a
+  // blank arrow board, the destination name rendered ONTO its shaft in-game (so a
+  // drop-in board art needs no baked text). Bottom-anchored + y-sorted like the
+  // other standing props; a left-pointing sign flips the sprite but not the text.
+  private renderSignposts(tilemap: Phaser.Tilemaps.Tilemap): PropColliderRect[] {
     // Position/flip/scale come from the authored outdoor layout when the author
-    // hand-moved the board in dressEdit; interactionId + label stay in TS.
-    const sign = getOutdoorSignpost(this.location.id);
-    if (!sign) {
+    // hand-moved a board in dressEdit; interactionId + label stay in TS.
+    const signs = getOutdoorSignposts(this.location.id);
+    if (signs.length === 0) {
       return [];
     }
-    const kind = PROP_KINDS.signpost;
+    const kind = PROP_KINDS[SIGNPOST_PROP_NAME];
     const key = this.ensurePropTexture(kind);
-    const anchor = this.getProjection().project(sign.mapX, sign.mapY);
     const source = this.textures.get(key).getSourceImage() as { width: number };
-    const placementScale = sign.scale ?? 1;
-    const scale = (kind.w / (source.width || kind.w)) * placementScale;
-    const image = this.add
-      .image(anchor.x, anchor.y, key)
-      .setOrigin(0.5, 1)
-      .setScale(scale)
-      .setDepth(anchor.y);
-    if (sign.flip) {
-      image.setFlipX(true);
-    }
-    // Caption centred on the board (upper ~72% of the sprite). Depth just above
-    // the board so the player still occludes it when standing in front.
-    const boardY = anchor.y - kind.h * scale * 0.72;
-    const caption = this.add
-      .text(anchor.x, boardY, sign.label, {
-        color: '#3c2a17',
-        fontSize: '16px',
-        fontStyle: '800',
-        fontFamily: 'Georgia, "Times New Roman", serif',
-      })
-      .setOrigin(0.5, 0.5)
-      .setDepth(anchor.y + 0.1);
-    // Auto-fit: the board displays at kind.w * placementScale world-units wide
-    // (the sprite scale normalises any source art to kind.w, then the per-
-    // placement dressEdit scale multiplies it), but the tilted plank the name
-    // sits on only spans ~72% of that. Long names (KERRISDALE, ALDERGROVE)
-    // overflow the plank at the base font size, so shrink the caption until it
-    // fits — the base `scale` stays the ceiling, so a name already within the
-    // plank is never enlarged.
-    caption.setScale(signpostCaptionFit(caption.width, kind, scale, placementScale));
-
-    // Handle for the dressEdit editor: dragging moves the board + its caption
-    // together; the linked interaction rect (dialogue hotspot) is shown as a
-    // faint gold outline while selected and is edited separately in M-mode.
-    this.outdoorPropHandles.push({
-      image,
-      label: caption,
-      placement: {
-        id: SIGNPOST_PLACEMENT_ID,
-        name: 'signpost',
-        mapX: sign.mapX,
-        mapY: sign.mapY,
-        flip: sign.flip,
-        scale: sign.scale,
-      },
-      kind,
-      signpostInteractionId: sign.interactionId,
-    });
-
-    if (!kind.collider) {
-      return [];
-    }
-    const cw = kind.collider.w * placementScale;
-    const ch = kind.collider.h * placementScale;
-    const rect: PropColliderRect = {
-      x: sign.mapX - cw / 2,
-      y: sign.mapY - ch,
-      width: cw,
-      height: ch,
-    };
     const openEdges = new Set((this.location.edgeExits ?? []).map((exit) => exit.edge));
     const corridor = this.buildCorridorMask(tilemap, openEdges);
-    return this.colliderHitsCorridor(rect, corridor) ? [] : [rect];
+    const colliders: PropColliderRect[] = [];
+
+    for (const sign of signs) {
+      const anchor = this.getProjection().project(sign.mapX, sign.mapY);
+      const placementScale = sign.scale ?? 1;
+      const scale = (kind.w / (source.width || kind.w)) * placementScale;
+      const image = this.add
+        .image(anchor.x, anchor.y, key)
+        .setOrigin(0.5, 1)
+        .setScale(scale)
+        .setDepth(anchor.y);
+      if (sign.flip) {
+        image.setFlipX(true);
+      }
+      // Caption centred on the arrow SHAFT (upper ~72% of the sprite, offset from
+      // centre so it clears the arrowhead). The text is a separate object that is
+      // never flipped, so a left-pointing sign still reads upright. Depth just
+      // above the board so the player occludes it when standing in front.
+      const boardY = anchor.y - kind.h * scale * 0.72;
+      const shaftX = anchor.x + signpostShaftOffset(kind, scale, Boolean(sign.flip));
+      const caption = this.add
+        .text(shaftX, boardY, sign.label, {
+          color: '#3c2a17',
+          fontSize: '16px',
+          fontStyle: '800',
+          fontFamily: 'Georgia, "Times New Roman", serif',
+        })
+        .setOrigin(0.5, 0.5)
+        .setDepth(anchor.y + 0.1);
+      // Auto-fit: the board displays at kind.w * placementScale world-units wide,
+      // but the writable arrow shaft (arrowhead excluded) spans only
+      // SIGNPOST_ARROW_WRITABLE_FRACTION of that. Long names (KERRISDALE,
+      // ALDERGROVE) overflow at the base font size, so shrink the caption until it
+      // fits — the base `scale` stays the ceiling, so a short name is never grown.
+      caption.setScale(signpostCaptionFit(caption.width, kind, scale, placementScale));
+
+      // Handle for the dressEdit editor: dragging moves the board + its caption
+      // together; the linked dialogue hotspot is shown as a faint gold outline
+      // while selected and is edited separately in M-mode.
+      this.outdoorPropHandles.push({
+        image,
+        label: caption,
+        placement: {
+          id: sign.id,
+          name: SIGNPOST_PROP_NAME,
+          mapX: sign.mapX,
+          mapY: sign.mapY,
+          flip: sign.flip,
+          scale: sign.scale,
+        },
+        kind,
+        signpostInteractionId: sign.interactionId,
+      });
+
+      if (!kind.collider) {
+        continue;
+      }
+      const cw = kind.collider.w * placementScale;
+      const ch = kind.collider.h * placementScale;
+      const rect: PropColliderRect = {
+        x: sign.mapX - cw / 2,
+        y: sign.mapY - ch,
+        width: cw,
+        height: ch,
+      };
+      if (!this.colliderHitsCorridor(rect, corridor)) {
+        colliders.push(rect);
+      }
+    }
+    return colliders;
   }
 
   // Resolves a prop's texture key: the loaded PNG when present, else a painted
@@ -2659,23 +2681,47 @@ export class LocationScene extends Phaser.Scene {
         rrect(w * 0.83, h * 0.24, w * 0.05, h * 0.28, 3, '#8a6033');
         break;
       }
-      case 'signpost': {
-        const postW = w * 0.14;
-        rrect(cx - postW / 2, h * 0.4, postW, h * 0.6, postW * 0.35, '#7a5a34');
-        // Blank board (light wood) — the area name is drawn over this in-game.
-        rrect(w * 0.08, h * 0.14, w * 0.84, h * 0.34, 8, '#d8b57e');
-        rrect(w * 0.08, h * 0.14, w * 0.84, h * 0.06, 8, '#e6c891');
+      case 'signpost-arrow': {
+        // Flat, front-facing fingerpost: a straight-on post with ONE arrow-shaped
+        // board pointing RIGHT (the engine flips the whole texture for the
+        // left-pointing sign). The blank shaft carries the destination name, drawn
+        // in-game; keep the shaft geometry aligned with the writable-fraction
+        // (0.6) and shaft-centre-fraction (0.44) constants in outdoorScenery.
+        const boardTop = h * 0.15;
+        const boardBot = h * 0.4;
+        const boardMid = (boardTop + boardBot) / 2;
+        const shaftL = w * 0.1;
+        const shaftR = w * 0.74; // arrowhead base
+        const tipX = w * 0.95; // arrowhead point
+        const arrowPath = (): void => {
+          ctx.beginPath();
+          ctx.moveTo(shaftL, boardTop);
+          ctx.lineTo(shaftR, boardTop);
+          ctx.lineTo(tipX, boardMid);
+          ctx.lineTo(shaftR, boardBot);
+          ctx.lineTo(shaftL, boardBot);
+          ctx.closePath();
+        };
+        // Post seen straight-on, running down behind the board.
+        const postW = w * 0.09;
+        rrect(cx - postW / 2, h * 0.28, postW, h * 0.7, postW * 0.4, '#7a5a34');
+        ell(cx, h * 0.28, postW * 0.62, postW * 0.34, '#8a6a40');
+        // Arrow board body (light wood), with a top highlight strip + outline.
+        arrowPath();
+        ctx.fillStyle = '#d8b57e';
+        ctx.fill();
+        ctx.save();
+        arrowPath();
+        ctx.clip();
+        rrect(shaftL, boardTop, tipX - shaftL, (boardBot - boardTop) * 0.24, 2, '#e6c891');
+        ctx.restore();
+        arrowPath();
         ctx.strokeStyle = 'rgba(90,64,34,0.55)';
         ctx.lineWidth = 3;
-        ctx.strokeRect(w * 0.1, h * 0.16, w * 0.8, h * 0.3);
-        // Little pointing arrow tip.
-        ctx.beginPath();
-        ctx.moveTo(w * 0.92, h * 0.2);
-        ctx.lineTo(w * 1.0, h * 0.31);
-        ctx.lineTo(w * 0.92, h * 0.42);
-        ctx.closePath();
-        ctx.fillStyle = '#c9a56e';
-        ctx.fill();
+        ctx.stroke();
+        // A couple of dark nails where the board crosses the post.
+        ell(cx - postW * 0.05, boardTop + (boardBot - boardTop) * 0.3, 2.2, 2.2, 'rgba(70,50,28,0.7)');
+        ell(cx - postW * 0.05, boardTop + (boardBot - boardTop) * 0.7, 2.2, 2.2, 'rgba(70,50,28,0.7)');
         break;
       }
       case 'lantern-string': {

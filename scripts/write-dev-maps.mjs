@@ -46,10 +46,11 @@ const maps = [
     height: YARD_H,
     openEdges: ['east'],
     // House composed at the top-center of the yard (door center 512,192); the
-    // open east edge is the road back to the neighbourhood.
+    // open east edge is the road back to the neighbourhood. No signpost here —
+    // the directional fingerposts live only in Guildford (main-outside).
     spawns: [point(1, 'start', 512, 460), point(2, 'from-friend-b', 512, 320)],
     exits: [rect(3, 'to-friend-b', 'exit', 448, 150, 128, 84)],
-    interactables: [rect(4, 'friendtwo-signpost', 'dialogue', 640, 400, 96, 96)],
+    interactables: [],
   },
   {
     file: 'friendone-yard.tmj',
@@ -57,9 +58,10 @@ const maps = [
     height: YARD_H,
     openEdges: ['west'],
     // Mirror of ____'s yard: house top-center, open west edge back to the road.
+    // No signpost here — the directional fingerposts live only in Guildford.
     spawns: [point(1, 'start', 512, 460), point(2, 'from-friend-a', 512, 320)],
     exits: [rect(3, 'to-friend-a', 'exit', 448, 150, 128, 84)],
-    interactables: [rect(4, 'friendone-signpost', 'dialogue', 288, 400, 96, 96)],
+    interactables: [],
   },
   {
     file: 'clearing.tmj',

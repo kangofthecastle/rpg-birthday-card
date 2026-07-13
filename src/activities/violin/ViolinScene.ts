@@ -118,7 +118,7 @@ const PRACTICE_TRAIL_MS =
 const WINDOW = { x: 14, y: 52, w: 66, h: 150 } as const;
 const WINDOW_LIGHT = { x: WINDOW.x + WINDOW.w / 2, y: WINDOW.y + WINDOW.h * 0.62 };
 
-const CAPTION_TEXT = 'she finally hears how it ends.';
+const CAPTION_TEXT = 'Do you hear them?';
 const CAPTION_FADE_MS = 1400;
 const CAPTION_HOLD_MS = 1800;
 
@@ -1601,13 +1601,13 @@ export class ViolinScene extends Phaser.Scene {
       // Handoff flows straight into the next listen, so it wears the same prompt
       // — the beat reads as the piece drawing breath, not a pause.
       this.titleText.setText('listen…');
-      this.helperText.setText('The piece plays itself through.');
+      this.helperText.setText('');
     } else if (phase === 'echo') {
       this.titleText.setText('now you — play it back');
       this.helperText.setText(
         this.modes.mistakesAllowed
           ? 'One slip is forgiven — play the right note to carry on.'
-          : 'A wrong note just waits, then plays again.',
+          : '',
       );
     } else if (phase === 'finale') {
       this.titleText.setText('');

@@ -1210,14 +1210,14 @@ body.minigame-active .collection-panel {
   /* Sits just beneath the mute button in the top-right corner. */
   top: 72px;
   right: 20px;
-  /* Box-fit knobs (defaults = current look). Art size and font sizes are NOT
-     controlled here — these only tune how closely the box hugs its content. */
-  --panel-w: 220px; /* outer box width (border-box) */
-  --panel-pad: 14px; /* outer padding all round */
-  --head-gap: 8px; /* gap under the "Letters" heading */
-  --stack-h: 92px; /* height of the letter-stack row */
-  --stack-top: 12px; /* art offset from the top of that row */
-  --caption-gap: 8px; /* gap above the "n of m collected" caption */
+  /* Box-fit knobs (____'s "tight" pick — the box hugs its content; art size
+     and font sizes are NOT controlled here). */
+  --panel-w: 196px; /* outer box width (border-box) */
+  --panel-pad: 8px; /* outer padding all round */
+  --head-gap: 3px; /* gap under the "Letters" heading */
+  --stack-h: 72px; /* height of the letter-stack row */
+  --stack-top: 7px; /* art offset from the top of that row */
+  --caption-gap: 3px; /* gap above the "n of m collected" caption */
   width: var(--panel-w);
   padding: var(--panel-pad);
   /* Own stacking context (below the mute button z-200, above the game) so the

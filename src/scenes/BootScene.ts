@@ -34,6 +34,12 @@ import {
   SHORE_WATER_URL,
 } from '../content/galaxyScene';
 import { FRIEND_ONE_SPRITE } from '../content/homeNpcs';
+import {
+  FRIEND_TWO_GENERATED_ROWS,
+  FRIEND_TWO_PARTIAL_FRAMES,
+  friendtwoRowStripUrl,
+  friendtwoRowTextureKey,
+} from '../content/friendtwoPartialSprite';
 
 const DOORMAT_DROP_URL = '/assets/doormat.png';
 
@@ -73,12 +79,22 @@ export class BootScene extends Phaser.Scene {
     });
     this.load.image('friendtwo-room-props', '/assets/props/friendtwo-room-props.png');
 
-    // ____, the NPC who waits at the galaxy water for the final conversation
-    // (and who also stands in his own home, friend-b).
+    // ____, the NPC who waits at the galaxy water for the final conversation.
+    // The galaxy staging still uses his original full 4-dir atlas.
     this.load.spritesheet(FRIEND_TWO_SPRITE.key, FRIEND_TWO_SPRITE.url, {
       frameWidth: FRIEND_TWO_SPRITE.frameWidth,
       frameHeight: FRIEND_TWO_SPRITE.frameHeight,
     });
+
+    // ____ standing idle in his own home (friend-b) now uses the newer partial
+    // frame set: one 1536×256 strip per generated row (idle all four facings +
+    // walk-south), loaded as separate spritesheets keyed per row.
+    for (const row of FRIEND_TWO_GENERATED_ROWS) {
+      this.load.spritesheet(friendtwoRowTextureKey(row), friendtwoRowStripUrl(row), {
+        frameWidth: FRIEND_TWO_PARTIAL_FRAMES.frameWidth,
+        frameHeight: FRIEND_TWO_PARTIAL_FRAMES.frameHeight,
+      });
+    }
 
     // ____, standing idle in her home (friend-a) at her tea table.
     this.load.spritesheet(FRIEND_ONE_SPRITE.key, FRIEND_ONE_SPRITE.url, {

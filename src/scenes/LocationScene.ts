@@ -13,6 +13,12 @@ import {
 } from '../content/galaxyScene';
 import { HOME_HOST_NPCS, resolveHomeNpcPosition } from '../content/homeNpcs';
 import {
+  FRIEND_TWO_GENERATED_ROWS,
+  FRIEND_TWO_PARTIAL_FRAMES,
+  friendtwoRowAnimationKey,
+  friendtwoRowTextureKey,
+} from '../content/friendtwoPartialSprite';
+import {
   RECIPIENT_ANIMATION_SOURCE_FACING,
   RECIPIENT_FLIP_X_BY_FACING,
   RECIPIENT_IDLE_ANIMATIONS,
@@ -1978,6 +1984,12 @@ export class LocationScene extends Phaser.Scene {
     if (!npc || !this.textures.exists(npc.sprite.key)) {
       return;
     }
+    // ____'s home billboard runs on the partial frame set (one strip per row).
+    // Register every generated row up front so the idle-south clip the billboard
+    // plays — and any other row a future direction switch resolves to — is live.
+    if (npc.id === 'friendtwo') {
+      this.createFriendTwoPartialAnimations();
+    }
     const cfg = npc.sprite;
     if (!this.anims.exists(cfg.idleAnimationKey)) {
       this.anims.create({
@@ -2008,6 +2020,35 @@ export class LocationScene extends Phaser.Scene {
 
     // Expose the placed NPC to the dressEdit editor so it can be dragged/saved.
     this.homeHostNpcHandle = { id: npc.id, sprite, mapX, mapY };
+  }
+
+  /**
+   * Register ____'s partial-frame-set animations — one looping clip per
+   * generated row (idle for all four facings + walk-south), each built from that
+   * row's own 6-frame strip. The friend-b billboard only ever plays idle-south,
+   * but registering every generated row means any key resolveFriendTwoRow() returns
+   * has a live clip to play (walk-west/east/north resolve back to idle by design,
+   * so they never need a clip of their own). Idempotent via the exists guards.
+   */
+  private createFriendTwoPartialAnimations(): void {
+    for (const row of FRIEND_TWO_GENERATED_ROWS) {
+      const key = friendtwoRowAnimationKey(row);
+      const textureKey = friendtwoRowTextureKey(row);
+      if (this.anims.exists(key) || !this.textures.exists(textureKey)) {
+        continue;
+      }
+      this.anims.create({
+        key,
+        frames: this.anims.generateFrameNumbers(textureKey, {
+          start: 0,
+          end: FRIEND_TWO_PARTIAL_FRAMES.framesPerRow - 1,
+        }),
+        frameRate: row.startsWith('walk-')
+          ? FRIEND_TWO_PARTIAL_FRAMES.walkFrameRate
+          : FRIEND_TWO_PARTIAL_FRAMES.idleFrameRate,
+        repeat: -1,
+      });
+    }
   }
 
   // Once every letter is held the outdoor world subtly awakens: a warm golden

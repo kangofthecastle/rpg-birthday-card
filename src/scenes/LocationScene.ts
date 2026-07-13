@@ -1203,8 +1203,14 @@ export class LocationScene extends Phaser.Scene {
     // Targeted to main-outside's south edge only; the edge stays fully walkable
     // (the corridor mask below reads the unfiltered openEdges) and the south edge
     // is still an OPEN edge here, so no hedge is drawn across the route mouth.
-    const pathEdges =
-      this.location.id === 'main-outside'
+    // The twilight clearing carries NO worn path at all — you arrive off the road
+    // and the space reads as untouched water's-edge grass. So it gets an empty
+    // path mask / no path edges (walkability is unchanged — that comes from the
+    // separate corridor mask below, which still reads the full openEdges).
+    const isClearing = this.location.id === 'clearing';
+    const pathEdges = isClearing
+      ? new Set<string>()
+      : this.location.id === 'main-outside'
         ? new Set([...openEdges].filter((edge) => edge !== 'south'))
         : openEdges;
 
@@ -1213,6 +1219,12 @@ export class LocationScene extends Phaser.Scene {
     // fallback (see outdoorGround.ts). The path cell mask is the same 4-connected
     // centre->edge/door routing the corridor mask uses, so paths and walkability
     // agree. The clearing then layers its dusk decoration, shore and cranes.
+    const pathMask = isClearing
+      ? new Array<boolean>(cols * rows).fill(false)
+      : this.rasterizePathCells(cols, rows, tile, width, height, pathEdges);
+    const doorOffsets = isClearing
+      ? undefined
+      : this.doorRouteOffsets(cols, rows, tile, width, height);
     buildOutdoorGround(this, {
       width,
       height,
@@ -1223,7 +1235,9 @@ export class LocationScene extends Phaser.Scene {
       openEdges,
       pathOpenEdges: pathEdges,
       exits: this.exits,
-      pathMask: this.rasterizePathCells(cols, rows, tile, width, height, pathEdges),
+      pathMask,
+      pathCellDx: doorOffsets?.dx,
+      pathCellDy: doorOffsets?.dy,
       dusk: this.location.id === 'clearing',
       seed: this.location.id,
     });
@@ -1292,6 +1306,46 @@ export class LocationScene extends Phaser.Scene {
     }
     markCell(origin.c, origin.r);
     return mask;
+  }
+
+  // Per-cell sub-tile draw offsets (map px) that slide each door's VERTICAL
+  // approach leg so its painted band centres on the door's true x-centre instead
+  // of the tile column the mask snapped it to. Door rects here sit exactly on a
+  // tile boundary, so `Math.floor(cx / tile)` lands the road half a tile to one
+  // side of the door; this shifts the overlay back by that remainder. Mirrors the
+  // door-leg routing in rasterizePathCells (the L approaches every door
+  // vertically). The junction cell at the map centre is left un-shifted so the
+  // crossroads stays put — the band's width easily spans the small jog where the
+  // shifted leg meets it. Walkability is unaffected (that reads the plain mask).
+  private doorRouteOffsets(
+    cols: number,
+    rows: number,
+    tile: number,
+    width: number,
+    height: number,
+  ): { dx: number[]; dy: number[] } {
+    const dx = new Array<number>(cols * rows).fill(0);
+    const dy = new Array<number>(cols * rows).fill(0);
+    const cellOf = (px: number, py: number): { c: number; r: number } => ({
+      c: Math.min(cols - 1, Math.max(0, Math.floor(px / tile))),
+      r: Math.min(rows - 1, Math.max(0, Math.floor(py / tile))),
+    });
+    const origin = cellOf(width / 2, height / 2);
+    for (const exit of this.exits) {
+      const targetX = exit.x + exit.width / 2;
+      const targetY = exit.y + exit.height / 2;
+      const end = cellOf(targetX, targetY);
+      const legDx = targetX - (end.c * tile + tile / 2);
+      if (legDx === 0) continue;
+      const stepR = Math.sign(end.r - origin.r);
+      // Shift the vertical leg (end column, from just past the junction to the
+      // door row). Skip the origin/junction cell so the crossroads holds.
+      for (let r = origin.r; ; r += stepR) {
+        if (r !== origin.r) dx[r * cols + end.c] = legDx;
+        if (r === end.r || stepR === 0) break;
+      }
+    }
+    return { dx, dy };
   }
 
   // A dark-water band along the clearing's south edge (~2 tiles). Always present;
@@ -3057,18 +3111,15 @@ export class LocationScene extends Phaser.Scene {
       drawPine(width - 16 - i * 30 - rng() * 10, tile * (0.7 + rng() * 0.3), tile * (1.0 + rng() * 0.7));
     }
 
-    // Sakura petals drifting over the grass (not on the path lane or the shore).
+    // Sakura petals drifting over the grass (kept off the shore band only). The
+    // clearing no longer carries a worn path, so petals scatter across the whole
+    // grass including the centre — no path-shaped bare lane to route around.
     const petals = this.add.graphics().setDepth(-18);
     const pinks = [0xf4c2d4, 0xecaac4, 0xf6ccdb, 0xd79ec8];
     const shoreTop = height - tile * 2;
-    const pathXMin = width / 2 - tile * 0.7;
-    const pathXMax = width / 2 + tile * 0.7;
     for (let i = 0; i < 90; i += 1) {
       const px = rng() * width;
       const py = tile * 0.6 + rng() * (shoreTop - tile * 0.6);
-      if (px > pathXMin && px < pathXMax) {
-        continue;
-      }
       petals.fillStyle(pinks[Math.floor(rng() * pinks.length)], 0.55 + rng() * 0.35);
       const r = 1.6 + rng() * 2.4;
       petals.fillEllipse(px, py, r * 1.8, r);

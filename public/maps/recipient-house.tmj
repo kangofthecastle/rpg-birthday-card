@@ -808,46 +808,46 @@
           "id": 4,
           "name": "recipient-violin",
           "type": "easterEgg",
-          "x": 240,
-          "y": 300,
-          "width": 160,
-          "height": 140
+          "x": 236,
+          "y": 234,
+          "width": 174,
+          "height": 181
         },
         {
           "id": 6,
           "name": "recipient-mango-rice",
           "type": "easterEgg",
-          "x": 1111,
-          "y": 646,
-          "width": 160,
-          "height": 140
+          "x": 1092,
+          "y": 627,
+          "width": 164,
+          "height": 144
         },
         {
           "id": 7,
           "name": "recipient-photo-wall",
           "type": "easterEgg",
-          "x": 562,
-          "y": 64,
-          "width": 160,
-          "height": 140
+          "x": 499,
+          "y": 61,
+          "width": 228,
+          "height": 98
         },
         {
           "id": 8,
           "name": "recipient-bed",
           "type": "easterEgg",
-          "x": 290,
-          "y": 750,
-          "width": 180,
-          "height": 150
+          "x": 145,
+          "y": 555,
+          "width": 217,
+          "height": 296
         },
         {
           "id": 9,
           "name": "recipient-pc",
           "type": "activity",
-          "x": 685,
-          "y": 511,
-          "width": 160,
-          "height": 140
+          "x": 636,
+          "y": 454,
+          "width": 176,
+          "height": 156
         }
       ]
     }

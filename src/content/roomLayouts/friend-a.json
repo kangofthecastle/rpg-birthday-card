@@ -101,8 +101,8 @@
     },
     {
       "frame": "cushion",
-      "mapX": 1167,
-      "mapY": 494,
+      "mapX": 1169,
+      "mapY": 475,
       "scale": 0.62,
       "originX": 0.5,
       "originY": 0.6,
@@ -111,8 +111,8 @@
     },
     {
       "frame": "teaTable",
-      "mapX": 1050,
-      "mapY": 611,
+      "mapX": 1056,
+      "mapY": 617,
       "heightRatio": 0.88,
       "footprint": {
         "w": 96,
@@ -122,9 +122,9 @@
     },
     {
       "frame": "desk",
-      "mapX": 561,
-      "mapY": 436,
-      "heightRatio": 1.21,
+      "mapX": 578,
+      "mapY": 452,
+      "heightRatio": 1.25,
       "footprint": {
         "w": 150,
         "d": 68
@@ -134,9 +134,9 @@
     },
     {
       "frame": "plant-1",
-      "mapX": 639,
-      "mapY": 311,
-      "heightRatio": 1.1,
+      "mapX": 650,
+      "mapY": 322,
+      "heightRatio": 1.12,
       "note": "leafy floor plant (singles-only)"
     },
     {
@@ -148,13 +148,19 @@
     },
     {
       "frame": "fishbowl-table",
-      "mapX": 1058,
-      "mapY": 214,
-      "heightRatio": 0.75,
+      "mapX": 999,
+      "mapY": 240,
+      "heightRatio": 0.97,
       "note": "small side table under the koi fishbowl (singles-only; bowl sits on it after rearrange)"
     }
   ],
   "removed": [
     "fishbowl"
-  ]
+  ],
+  "npcs": {
+    "friendone": {
+      "x": 840,
+      "y": 397
+    }
+  }
 }

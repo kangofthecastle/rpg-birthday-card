@@ -1,0 +1,130 @@
+{
+  "locationId": "friendone-yard",
+  "props": [
+    {
+      "id": "tree-1#0",
+      "name": "tree-1",
+      "mapX": 892,
+      "mapY": 450,
+      "flip": true,
+      "scale": 1.12
+    },
+    {
+      "id": "tree-2#0",
+      "name": "tree-2",
+      "mapX": 922,
+      "mapY": 552,
+      "flip": true
+    },
+    {
+      "id": "tree-1#1",
+      "name": "tree-1",
+      "mapX": 118,
+      "mapY": 298,
+      "scale": 1.38
+    },
+    {
+      "id": "fence-h#0",
+      "name": "fence-h",
+      "mapX": 297,
+      "mapY": 300
+    },
+    {
+      "id": "fence-h#1",
+      "name": "fence-h",
+      "mapX": 674,
+      "mapY": 299
+    },
+    {
+      "id": "lamp-post#0",
+      "name": "lamp-post",
+      "mapX": 82,
+      "mapY": 469,
+      "scale": 0.88
+    },
+    {
+      "id": "mailbox#0",
+      "name": "mailbox",
+      "mapX": 356,
+      "mapY": 202,
+      "flip": true,
+      "scale": 0.46
+    },
+    {
+      "id": "bench#0",
+      "name": "bench",
+      "mapX": 267,
+      "mapY": 533,
+      "scale": 0.68
+    },
+    {
+      "id": "bush-1#0",
+      "name": "bush-1",
+      "mapX": 702,
+      "mapY": 419,
+      "flip": true,
+      "scale": 0.76
+    },
+    {
+      "id": "bush-1#1",
+      "name": "bush-1",
+      "mapX": 388,
+      "mapY": 518,
+      "flip": true,
+      "scale": 0.7
+    },
+    {
+      "id": "bush-1#2",
+      "name": "bush-1",
+      "mapX": 478,
+      "mapY": 493,
+      "scale": 0.62
+    },
+    {
+      "id": "bush-1#3",
+      "name": "bush-1",
+      "mapX": 140,
+      "mapY": 522,
+      "scale": 0.84
+    },
+    {
+      "id": "rock-1#0",
+      "name": "rock-1",
+      "mapX": 792,
+      "mapY": 400,
+      "flip": true
+    },
+    {
+      "id": "rock-1#1",
+      "name": "rock-1",
+      "mapX": 978,
+      "mapY": 529
+    },
+    {
+      "id": "flower-patch-2#0",
+      "name": "flower-patch-2",
+      "mapX": 14,
+      "mapY": 260
+    },
+    {
+      "id": "flower-patch-1#0",
+      "name": "flower-patch-1",
+      "mapX": 686,
+      "mapY": 187
+    },
+    {
+      "id": "flower-patch-1#1",
+      "name": "flower-patch-1",
+      "mapX": 297,
+      "mapY": 624,
+      "scale": 1.26
+    },
+    {
+      "id": "flower-patch-2#1",
+      "name": "flower-patch-2",
+      "mapX": 899,
+      "mapY": 595,
+      "scale": 1.24
+    }
+  ]
+}

@@ -1,0 +1,114 @@
+{
+  "locationId": "clearing",
+  "props": [
+    {
+      "id": "clearing-lantern-post#0",
+      "name": "clearing-lantern-post",
+      "mapX": 725,
+      "mapY": 460,
+      "scale": 0.78
+    },
+    {
+      "id": "clearing-lantern-post#1",
+      "name": "clearing-lantern-post",
+      "mapX": 300,
+      "mapY": 458,
+      "flip": true,
+      "scale": 0.78
+    },
+    {
+      "id": "clearing-lantern-string#0",
+      "name": "clearing-lantern-string",
+      "mapX": 512,
+      "mapY": 292,
+      "scale": 0.72
+    },
+    {
+      "id": "clearing-pine-1#0",
+      "name": "clearing-pine-1",
+      "mapX": 30,
+      "mapY": 394,
+      "flip": true,
+      "scale": 0.9
+    },
+    {
+      "id": "clearing-pine-2#0",
+      "name": "clearing-pine-2",
+      "mapX": 150,
+      "mapY": 128,
+      "flip": true,
+      "scale": 0.6
+    },
+    {
+      "id": "clearing-pine-2#1",
+      "name": "clearing-pine-2",
+      "mapX": 158,
+      "mapY": 340,
+      "flip": true,
+      "scale": 0.92
+    },
+    {
+      "id": "clearing-pine-1#1",
+      "name": "clearing-pine-1",
+      "mapX": 949,
+      "mapY": 250,
+      "scale": 0.78
+    },
+    {
+      "id": "clearing-pine-2#2",
+      "name": "clearing-pine-2",
+      "mapX": 918,
+      "mapY": 293,
+      "scale": 0.86
+    },
+    {
+      "id": "clearing-pine-2#3",
+      "name": "clearing-pine-2",
+      "mapX": 931,
+      "mapY": 390,
+      "scale": 0.92
+    },
+    {
+      "id": "clearing-pine-2#4",
+      "name": "clearing-pine-2",
+      "mapX": 38,
+      "mapY": 308,
+      "flip": true,
+      "scale": 1.08
+    },
+    {
+      "id": "clearing-pine-2#5",
+      "name": "clearing-pine-2",
+      "mapX": 130,
+      "mapY": 446,
+      "flip": true,
+      "scale": 0.92
+    },
+    {
+      "id": "clearing-pine-1#2",
+      "name": "clearing-pine-1",
+      "mapX": 104,
+      "mapY": 296,
+      "flip": true,
+      "scale": 1.02
+    },
+    {
+      "id": "clearing-pine-2#6",
+      "name": "clearing-pine-2",
+      "mapX": 1007,
+      "mapY": 321
+    },
+    {
+      "id": "clearing-pine-2#7",
+      "name": "clearing-pine-2",
+      "mapX": 884,
+      "mapY": 278
+    },
+    {
+      "id": "clearing-pine-1#3",
+      "name": "clearing-pine-1",
+      "mapX": 843,
+      "mapY": 436
+    }
+  ]
+}

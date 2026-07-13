@@ -808,8 +808,8 @@
           "id": 3,
           "name": "friendone-host",
           "type": "dialogue",
-          "x": 986,
-          "y": 563,
+          "x": 951,
+          "y": 513,
           "width": 128,
           "height": 96
         },

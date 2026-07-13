@@ -1,0 +1,204 @@
+{
+  "locationId": "main-outside",
+  "props": [
+    {
+      "id": "tree-1#0",
+      "name": "tree-1",
+      "mapX": 157,
+      "mapY": 312,
+      "scale": 1.76
+    },
+    {
+      "id": "tree-2#0",
+      "name": "tree-2",
+      "mapX": 384,
+      "mapY": 709,
+      "flip": true,
+      "scale": 0.86
+    },
+    {
+      "id": "tree-1#1",
+      "name": "tree-1",
+      "mapX": 1084,
+      "mapY": 813,
+      "scale": 0.98
+    },
+    {
+      "id": "tree-2#1",
+      "name": "tree-2",
+      "mapX": 1331,
+      "mapY": 343,
+      "scale": 0.96
+    },
+    {
+      "id": "fence-h#0",
+      "name": "fence-h",
+      "mapX": 529,
+      "mapY": 325
+    },
+    {
+      "id": "fence-h#1",
+      "name": "fence-h",
+      "mapX": 940,
+      "mapY": 322
+    },
+    {
+      "id": "lamp-post#0",
+      "name": "lamp-post",
+      "mapX": 604,
+      "mapY": 812,
+      "scale": 0.92
+    },
+    {
+      "id": "mailbox#0",
+      "name": "mailbox",
+      "mapX": 844,
+      "mapY": 210,
+      "scale": 0.58
+    },
+    {
+      "id": "bench#0",
+      "name": "bench",
+      "mapX": 1156,
+      "mapY": 381,
+      "scale": 0.66
+    },
+    {
+      "id": "bush-1#0",
+      "name": "bush-1",
+      "mapX": 326,
+      "mapY": 318
+    },
+    {
+      "id": "bush-1#1",
+      "name": "bush-1",
+      "mapX": 1286,
+      "mapY": 828,
+      "flip": true,
+      "scale": 0.96
+    },
+    {
+      "id": "bush-1#2",
+      "name": "bush-1",
+      "mapX": 303,
+      "mapY": 777,
+      "scale": 0.9
+    },
+    {
+      "id": "bush-1#3",
+      "name": "bush-1",
+      "mapX": 1131,
+      "mapY": 310,
+      "scale": 0.92
+    },
+    {
+      "id": "bush-1#4",
+      "name": "bush-1",
+      "mapX": 1285,
+      "mapY": 308,
+      "scale": 0.94
+    },
+    {
+      "id": "bush-1#5",
+      "name": "bush-1",
+      "mapX": 38,
+      "mapY": 228,
+      "flip": true,
+      "scale": 0.94
+    },
+    {
+      "id": "rock-1#0",
+      "name": "rock-1",
+      "mapX": 470,
+      "mapY": 390,
+      "scale": 0.44
+    },
+    {
+      "id": "rock-1#1",
+      "name": "rock-1",
+      "mapX": 424,
+      "mapY": 735,
+      "flip": true,
+      "scale": 0.66
+    },
+    {
+      "id": "rock-1#2",
+      "name": "rock-1",
+      "mapX": 1048,
+      "mapY": 818,
+      "scale": 0.36
+    },
+    {
+      "id": "flower-patch-1#0",
+      "name": "flower-patch-1",
+      "mapX": 1330,
+      "mapY": 477,
+      "scale": 1.32
+    },
+    {
+      "id": "flower-patch-2#0",
+      "name": "flower-patch-2",
+      "mapX": 930,
+      "mapY": 154,
+      "scale": 1.34
+    },
+    {
+      "id": "flower-patch-1#1",
+      "name": "flower-patch-1",
+      "mapX": 84,
+      "mapY": 485,
+      "scale": 1.42
+    },
+    {
+      "id": "flower-patch-2#1",
+      "name": "flower-patch-2",
+      "mapX": 539,
+      "mapY": 153,
+      "scale": 1.34
+    },
+    {
+      "id": "flower-patch-2#2",
+      "name": "flower-patch-2",
+      "mapX": 496,
+      "mapY": 652,
+      "scale": 1.14
+    },
+    {
+      "id": "flower-patch-1#2",
+      "name": "flower-patch-1",
+      "mapX": 955,
+      "mapY": 760,
+      "scale": 1.2
+    },
+    {
+      "id": "tree-1#2",
+      "name": "tree-1",
+      "mapX": 137,
+      "mapY": 922,
+      "scale": 1.04
+    },
+    {
+      "id": "tree-2#2",
+      "name": "tree-2",
+      "mapX": 1227,
+      "mapY": 749,
+      "flip": true,
+      "scale": 0.92
+    },
+    {
+      "id": "signpost-arrow#0",
+      "name": "signpost-arrow",
+      "mapX": 484,
+      "mapY": 378,
+      "flip": true,
+      "scale": 0.66
+    },
+    {
+      "id": "signpost-arrow#1",
+      "name": "signpost-arrow",
+      "mapX": 974,
+      "mapY": 377,
+      "scale": 0.64
+    }
+  ]
+}

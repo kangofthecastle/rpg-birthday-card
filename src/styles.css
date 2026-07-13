@@ -121,7 +121,10 @@ body {
   margin-left: 0.12em;
   background: #b6f7c1;
   box-shadow: 0 0 8px rgba(120, 245, 160, 0.6);
-  transform: translateY(0.16em);
+  /* Inline sibling of the typed text: a font-relative offset (not line-height
+   * dependent) drops the block just below the baseline so it sits over the
+   * character cell of the last glyph. */
+  vertical-align: -0.16em;
   animation: boot-screen-blink 1.05s step-end infinite;
 }
 

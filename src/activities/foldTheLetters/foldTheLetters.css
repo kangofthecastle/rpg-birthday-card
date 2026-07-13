@@ -2,69 +2,24 @@
  * plus a full-mount sail-away cinematic. Owns its own classes so it can be tuned
  * independently of the other activities. */
 
-/* Doubled class raises specificity so this beats the generic `.activity-panel`
- * width from styles.css (that shared 560px cap loads after this module CSS and
- * was silently shrinking the panel — the "tiny amount of screen" complaint). */
-.activity-panel.activity-panel--fold {
-  display: flex;
-  flex-direction: column;
-  /* Near-fullscreen, mirroring RETAKE.EXE's .activity-panel--valorant-split so
-   * the ritual plays large instead of inheriting the generic modal width. */
-  width: min(1680px, calc(100vw - 8px));
-  max-height: calc(100vh - 8px);
-  padding: clamp(8px, 1.2vw, 18px);
-  overflow: hidden;
-}
+/* The panel chrome now comes from the shared .activity-shell (styles.css) —
+ * title top-left, standard 16:9 viewport, controls strip, X close. Only the
+ * canvas + sail-away rules below are fold-specific. */
 
-.activity-panel--fold h2 {
-  flex: none;
-  letter-spacing: 0.06em;
-}
-
-.fold-caption {
-  flex: none;
-  min-height: 2.6em;
-  margin: 0 0 10px;
-  opacity: 0.86;
-  font-size: 0.98rem;
-  line-height: 1.4;
-}
-
-.activity-panel--fold .activity-actions {
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.fold-stage {
-  display: flex;
-  flex: 1 1 auto;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  min-height: 200px;
-  /* 16/10 host, capped so the panel's title + caption + actions always fit; the
-   * panel width drives it on wide viewports (16:10 → height = width * 0.625). */
-  max-height: min(calc(100vh - 200px), calc((100vw - 16px) * 0.625));
-  aspect-ratio: 16 / 10;
-  overflow: hidden;
-  border: 2px solid rgba(241, 200, 138, 0.5);
-  background: #171019;
-}
-
-/* The canvas FITS (contain) within the stage box, keeping its 16:10 aspect and
- * centred. On wide/short viewports the stage is capped shorter than 16:10; a
- * canvas that filled width would keep its bitmap-aspect height, run PAST the
- * stage and get bottom-cropped by overflow:hidden — hiding the waterline and the
- * whole assembled boat. `width:100%` grows it to fill, `max-height:100%` +
- * `aspect-ratio` cap the height and pull the width back in so the FULL 640x400
- * scene always stays on-canvas (letterboxed with side bars, never cropped). The
- * canvas element box stays equal to the drawn area, so pointer→logical mapping
- * is unchanged. */
+/* The canvas FITS (contain) within the standard shell viewport, keeping its
+ * 16:10 aspect and centred with black pillarbox bars. The AUTHORITATIVE sizing
+ * is done in JS (FoldStage's ResizeObserver contain-fit — the custom-canvas
+ * equivalent of the Phaser games' Scale.FIT) because a CSS percentage height
+ * does not resolve reliably inside the shell's auto-sized grid track: the
+ * canvas fell back to width-driven sizing and overflowed the viewport's
+ * bottom, cropping the waterline/boat. The max constraints below are only the
+ * no-JS fallback — they can never force an overflow in either axis. The canvas
+ * element box always equals the drawn area, so the pointer→logical mapping
+ * (toCanvas + the smoke tests' boundingBox math) is unchanged. */
 .fold-stage__canvas {
   display: block;
-  height: 100%;
-  width: auto;
   max-width: 100%;
+  max-height: 100%;
   aspect-ratio: 16 / 10;
   touch-action: none;
   cursor: pointer;

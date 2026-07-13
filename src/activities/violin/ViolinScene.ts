@@ -1144,6 +1144,12 @@ export class ViolinScene extends Phaser.Scene {
 
   // Six rounded key caps along the bottom; the expected key glows and any held
   // key depresses subtly. Caps are drawn each frame; letters/names are Text.
+  // LEGEND_CAP_Y keeps the WHOLE row inside the 360-logical canvas: socket
+  // shadow bottom = CAP_Y + 3 + capH(34) = 357 < 360. At the old 332 it ran to
+  // 369, so the key bottoms and sub-labels were clipped at the canvas edge.
+  // The cap top (320) stays clear of the helper line centred at y=306.
+  private static readonly LEGEND_CAP_Y = 320;
+
   private legendCapX(index: number): number {
     const capW = 46;
     const gap = 10;
@@ -1154,7 +1160,7 @@ export class ViolinScene extends Phaser.Scene {
 
   private createLegend(): void {
     this.legendGfx = this.add.graphics().setDepth(30);
-    const capY = 332;
+    const capY = ViolinScene.LEGEND_CAP_Y;
     this.legendLetters = [];
     this.legendNames = [];
     VIOLIN_PITCHES.forEach((pitch, index) => {
@@ -1190,7 +1196,7 @@ export class ViolinScene extends Phaser.Scene {
     g.clear();
     const capW = 46;
     const capH = 34;
-    const capY = 332;
+    const capY = ViolinScene.LEGEND_CAP_Y;
     const expected = expectedPitchId(this.modelState);
     const echoing = this.modelState.phase === 'echo';
 

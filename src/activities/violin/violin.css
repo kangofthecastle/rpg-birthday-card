@@ -1,88 +1,19 @@
-/* Panel chrome for "the piece on the stand". A wide music-stand view mirroring
- * the develop/photo activities' proportions, but with its own warm framing so
- * the dusk-room canvas sits inside a lamplit mat rather than a bare border. */
+/* Panel accents for "The piece on the stand". The layout chrome (title,
+ * standard 16:9 viewport, controls strip, X close) comes from the shared
+ * .activity-shell in styles.css; only the violin's warm lamplit panel body and
+ * its Phaser host live here. */
 
-/* Doubled class raises specificity so this beats the generic `.activity-panel`
- * width from styles.css (that shared 560px cap loads after this module CSS and
- * was silently shrinking the panel — the "tiny space" the owner saw). */
-.activity-panel.activity-panel--violin {
-  display: flex;
-  flex-direction: column;
-  /* Near-fullscreen, mirroring RETAKE.EXE's .activity-panel--valorant-split so
-   * the piece plays large instead of inheriting the generic modal width. */
-  width: min(1680px, calc(100% - 8px));
-  max-height: calc(100% - 8px);
-  padding: clamp(8px, 1.2vw, 18px);
-  overflow: auto;
-  /* A faintly warmer panel body than the shared dark, echoing the lamplight. */
+/* A faintly warmer panel body than the shared dark, echoing the lamplight. */
+.activity-shell.activity-shell--violin {
   background:
     radial-gradient(120% 90% at 18% 12%, rgba(94, 58, 40, 0.28), transparent 60%),
     rgba(27, 22, 26, 0.95);
-}
-
-.activity-panel--violin h2 {
-  flex: none;
-  margin: 0 0 6px;
-  letter-spacing: 0.05em;
-  font-style: italic;
-  color: #ffe6b0;
-  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5);
-}
-
-.violin-game__caption {
-  flex: none;
-  margin: 0 0 12px;
-  max-width: 62ch;
-  opacity: 0.82;
-  font-size: 0.95rem;
-  font-style: italic;
-  line-height: 1.45;
-}
-
-.activity-panel--violin .activity-actions {
-  flex: none;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-top: 12px;
-  justify-content: flex-end;
-}
-
-/* Cancel reads as the quiet, secondary way out; keep it consistent with the
- * shared .activity-actions button look but a touch subdued. */
-.activity-panel--violin .activity-actions button {
-  min-width: 130px;
-  border-radius: 3px;
-  letter-spacing: 0.02em;
-}
-
-.violin-game {
-  display: grid;
-  flex: 1 1 auto;
-  width: 100%;
-  min-height: 180px;
-  /* 16/9 host, capped so the panel's title + caption + actions always fit — the
-   * width of the panel drives it on wide viewports (like the valorant-split host),
-   * with a little extra vertical headroom for the caption line above the canvas. */
-  max-height: min(calc(100% - 200px), calc((100% - 16px) * 0.5625));
-  aspect-ratio: 16 / 9;
-  place-items: stretch;
-  overflow: hidden;
-  /* A warm wooden mat + inner shadow so the canvas reads as a framed window
-   * onto the dusk room rather than a flat rectangle. */
-  padding: 3px;
-  border: 2px solid rgba(241, 200, 138, 0.55);
-  border-radius: 4px;
-  background: linear-gradient(160deg, #3a2a20, #241a20);
-  box-shadow:
-    inset 0 0 26px rgba(0, 0, 0, 0.55),
-    0 6px 22px rgba(0, 0, 0, 0.4);
 }
 
 .violin-game__host {
   width: 100%;
   height: 100%;
   min-height: 0;
-  border-radius: 2px;
   overflow: hidden;
 }
 

@@ -387,6 +387,8 @@ export class FoldStage {
 
   private readonly images: Partial<Record<string, HTMLImageElement>> = {};
 
+  private resizeObserver?: ResizeObserver;
+
   constructor(
     private readonly canvas: HTMLCanvasElement,
     callbacks: FoldStageCallbacks,
@@ -404,6 +406,34 @@ export class FoldStage {
     canvas.addEventListener('pointermove', this.handlePointerMove);
     canvas.addEventListener('pointerup', this.handlePointerUp);
     canvas.addEventListener('pointercancel', this.handlePointerUp);
+
+    // Contain-fit the canvas ELEMENT inside its parent viewport box (the
+    // standard activity-shell 16:9 viewport): scale the 16:10 stage to the
+    // limiting dimension, centered by the viewport, with the viewport
+    // background showing as pillarbox/letterbox bars in the remainder. Done in
+    // JS (the custom-canvas equivalent of the Phaser games' Scale.FIT) because
+    // a CSS percentage height does not resolve reliably inside the shell — the
+    // canvas fell back to width-driven sizing and overflowed the box's bottom,
+    // cropping the waterline. Sizing the element box directly (instead of
+    // object-fit) keeps the drawn area exactly equal to the element box, so
+    // the pointer→logical mapping in toCanvas() and the smoke tests'
+    // boundingBox math stay valid at every window size.
+    const viewport = canvas.parentElement;
+    if (viewport && typeof ResizeObserver !== 'undefined') {
+      const fit = (): void => {
+        const boxWidth = viewport.clientWidth;
+        const boxHeight = viewport.clientHeight;
+        if (boxWidth <= 0 || boxHeight <= 0) {
+          return;
+        }
+        const scale = Math.min(boxWidth / LOGICAL_WIDTH, boxHeight / LOGICAL_HEIGHT);
+        canvas.style.width = `${LOGICAL_WIDTH * scale}px`;
+        canvas.style.height = `${LOGICAL_HEIGHT * scale}px`;
+      };
+      this.resizeObserver = new ResizeObserver(fit);
+      this.resizeObserver.observe(viewport);
+      fit();
+    }
 
     void this.loadPieces();
     this.startLoop();
@@ -843,6 +873,8 @@ export class FoldStage {
     if (this.rafId !== undefined) {
       cancelAnimationFrame(this.rafId);
     }
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = undefined;
     this.canvas.removeEventListener('pointerdown', this.handlePointerDown);
     this.canvas.removeEventListener('pointermove', this.handlePointerMove);
     this.canvas.removeEventListener('pointerup', this.handlePointerUp);

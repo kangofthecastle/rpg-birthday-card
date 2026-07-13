@@ -493,6 +493,17 @@ export class LocationScene extends Phaser.Scene {
   private dressEditFrozen = false;
   private propColliders: PropColliderRect[] = [];
   private propColliderBodies: Phaser.GameObjects.Rectangle[] = [];
+  // Base (non-zone) colliders captured at createMap so the dev zone editor can
+  // recombine them with freshly-authored zones on a live rebuild. Outdoors this
+  // holds the scenery footprints (zones are additive); interiors leave it empty
+  // (a zones file REPLACES footprints).
+  private sceneryColliders: PropColliderRect[] = [];
+  // Debug outlines (purple authored polygons / red effective rects) tracked so a
+  // live zone rebuild can tear them down and redraw.
+  private colliderDebugGraphics: Phaser.GameObjects.Graphics[] = [];
+  // The player-vs-prop-colliders collider, kept so a live rebuild can drop and
+  // re-add it against the rebuilt body set.
+  private propColliderCollider?: Phaser.Physics.Arcade.Collider;
   private zonesFile?: CollisionZonesFile;
   private showColliderDebug = false;
   private debugMarkers = false;
@@ -943,6 +954,8 @@ export class LocationScene extends Phaser.Scene {
 
     this.propColliders = [];
     this.propColliderBodies = [];
+    this.sceneryColliders = [];
+    this.colliderDebugGraphics = [];
     this.outdoorPropHandles = [];
     let contentBounds: ScreenBounds | undefined;
 
@@ -982,6 +995,7 @@ export class LocationScene extends Phaser.Scene {
       ];
       // Hand-drawn polygon zones ADD to the scenery colliders outdoors (unlike
       // interiors, where they replace footprint colliders).
+      this.sceneryColliders = scenery;
       this.propColliders = this.addOutdoorZoneColliders(scenery);
     } else {
       const palette = getOutdoorPalette(this.location.id);
@@ -989,7 +1003,9 @@ export class LocationScene extends Phaser.Scene {
         palette ? colorToHex(palette.background) : '#17211b',
       );
       this.createDevBackdrop(tilemap, palette);
-      this.propColliders = this.addOutdoorZoneColliders(this.renderOutdoorExteriors());
+      const scenery = this.renderOutdoorExteriors();
+      this.sceneryColliders = scenery;
+      this.propColliders = this.addOutdoorZoneColliders(scenery);
     }
 
     const ground = tilemap.createLayer('Ground', [floorTileset, wallTileset], 0, 0);
@@ -1165,6 +1181,7 @@ export class LocationScene extends Phaser.Scene {
         );
         outline.lineStyle(2, 0x8b5cf6, 0.95);
         outline.strokePoints(polygon, true);
+        this.colliderDebugGraphics.push(outline);
       }
     }
 
@@ -1189,7 +1206,55 @@ export class LocationScene extends Phaser.Scene {
         outline.fillPoints(polygon, true);
         outline.lineStyle(2, 0xff3366, 0.9);
         outline.strokePoints(polygon, true);
+        this.colliderDebugGraphics.push(outline);
       }
+    }
+  }
+
+  // Dev-only hook (used ONLY by the ?editZones=1 zone editor). Rebuilds the
+  // zone-derived collision in place from the editor's current in-memory polygons
+  // so saved zones take effect immediately without a page reload. Mirrors
+  // createMap's semantics EXACTLY — interiors REPLACE footprint colliders,
+  // outdoor areas ADD zone rects to the (unchanged) scenery colliders — so a live
+  // rebuild is identical to a save-then-reload cold load. Also refreshes the
+  // purple-authored / red-effective debug overlay in the same pass.
+  //
+  // propDepthOverrides are NOT re-applied live: props are depth-sorted once at
+  // render time, so re-applying would mean re-rendering the dressing (invasive).
+  // Depth-override edits still persist to disk and take effect on the next reload.
+  rebuildZoneColliders(zonesFile: CollisionZonesFile): void {
+    if (!import.meta.env.DEV) {
+      return;
+    }
+    this.zonesFile = zonesFile;
+
+    // Tear down the previous zone-derived bodies, their debug outlines, and the
+    // player collider that referenced them.
+    this.propColliderCollider?.destroy();
+    this.propColliderCollider = undefined;
+    for (const body of this.propColliderBodies) {
+      body.destroy();
+    }
+    this.propColliderBodies = [];
+    for (const graphics of this.colliderDebugGraphics) {
+      graphics.destroy();
+    }
+    this.colliderDebugGraphics = [];
+
+    // Recompute colliders using the SAME branching createMap uses: dressed
+    // interiors replace footprints with the rasterised zones; everything else
+    // (outdoor) adds the zones to the captured scenery colliders.
+    this.propColliders = this.dressing
+      ? this.rasterizeZones(zonesFile)
+      : this.addOutdoorZoneColliders(this.sceneryColliders);
+
+    this.createPropColliderBodies();
+
+    if (this.player && this.propColliderBodies.length > 0) {
+      this.propColliderCollider = this.physics.add.collider(
+        this.player,
+        this.propColliderBodies,
+      );
     }
   }
 
@@ -2359,7 +2424,10 @@ export class LocationScene extends Phaser.Scene {
     }
 
     if (this.propColliderBodies.length > 0) {
-      this.physics.add.collider(this.player, this.propColliderBodies);
+      this.propColliderCollider = this.physics.add.collider(
+        this.player,
+        this.propColliderBodies,
+      );
     }
 
     this.controller = new PlayerController(this, this.player, {

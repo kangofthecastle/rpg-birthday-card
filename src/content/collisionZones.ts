@@ -39,6 +39,20 @@ export function getCollisionZones(locationId: string): CollisionZonesFile | unde
   return ZONES_BY_LOCATION[locationId];
 }
 
+// Dev-only: the zone editor's Save writes src/content/collisionZones/<id>.json,
+// which is eagerly globbed into the module graph above. Without an HMR boundary
+// here, Vite responds to that write with a FULL PAGE RELOAD — snapping the player
+// back to spawn and forcing the author to walk back to the zone (the exact
+// iteration pain the live-rebuild path exists to remove). Self-accepting makes
+// this module the update boundary, so the file change re-executes only this
+// module (harmlessly rebuilding the lookup) instead of reloading the page; the
+// running scene keeps the colliders the editor rebuilt in place from its
+// in-memory polygons. A manual browser refresh still cold-loads the fresh file.
+// import.meta.hot is undefined in production builds, so this compiles out.
+if (import.meta.hot) {
+  import.meta.hot.accept();
+}
+
 /** Validates the shape of a zones payload (used by the dev save endpoint). */
 export function isValidZonesFile(value: unknown): value is CollisionZonesFile {
   if (typeof value !== 'object' || value === null) {

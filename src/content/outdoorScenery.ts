@@ -306,6 +306,15 @@ export const OUTDOOR_PROPS: Readonly<Record<string, readonly PropPlacement[]>> =
     { name: 'flower-patch-2', mapX: 860, mapY: 250 },
     { name: 'flower-patch-2', mapX: 700, mapY: 700 },
     { name: 'flower-patch-1', mapX: 1130, mapY: 470 },
+    // Two more trees filling the sparse lower field (below the row-6 E–W road,
+    // y 384–448) so Guildford — the biggest area — reads as balanced against its
+    // busier top. Both well clear of the col-11 door leg (x 680–790), the road
+    // band, ____'s house/door (x 672–800, y 148–236), the fingerposts (460/948,
+    // 364), the edges, spawns and every existing prop. Appended LAST so they take
+    // fresh ids (tree-1#2 / tree-2#2) and auto-merge into the saved layout without
+    // shifting the occurrence indices of the trees above. Fine-place in dressEdit.
+    { name: 'tree-1', mapX: 250, mapY: 575 },
+    { name: 'tree-2', mapX: 1055, mapY: 560, flip: true },
   ],
   'friendtwo-yard': [
     { name: 'tree-2', mapX: 140, mapY: 470 },

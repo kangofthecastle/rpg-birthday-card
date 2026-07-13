@@ -1203,6 +1203,16 @@ body {
   object-fit: contain;
   image-rendering: pixelated;
   filter: drop-shadow(1px 2px 1.5px rgba(30, 18, 10, 0.5));
+  /* Display-only per-keepsake rotation. Lives on the img — the fan's
+     --spread/--tilt transforms sit on the parent button, so this composes
+     additively in both the collapsed stack and the hovered fan. */
+  transform: rotate(var(--art-rotate, 0deg));
+}
+
+/* Per-keepsake art rotation knobs (see data-keepsake-id in collectionPanel).
+   One-line tweak per asset; only the sheet music has one so far. */
+.letter-stack__item[data-keepsake-id='golden-hour-photo'] {
+  --art-rotate: 0deg;
 }
 
 /* Label stays in the DOM (accessible name + smoke-test text); the visible

@@ -123,6 +123,9 @@ export function createCollectionPanel(
     item.type = 'button';
     item.className = 'letter-stack__item';
     item.dataset.letterIndex = String(index);
+    // Styling hook: lets styles.css give an individual keepsake's art a
+    // display-only rotation (--art-rotate) without touching the asset.
+    item.dataset.keepsakeId = entry.keepsakeId;
     item.style.setProperty('--i', String(index));
     item.setAttribute('role', 'listitem');
     item.setAttribute('aria-label', `Re-read ${entry.label}`);

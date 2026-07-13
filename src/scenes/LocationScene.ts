@@ -11,7 +11,7 @@ import {
   SHORE_WATER_KEY,
   FRIEND_TWO_SPRITE,
 } from '../content/galaxyScene';
-import { HOME_HOST_NPCS } from '../content/homeNpcs';
+import { HOME_HOST_NPCS, resolveHomeNpcPosition } from '../content/homeNpcs';
 import {
   RECIPIENT_ANIMATION_SOURCE_FACING,
   RECIPIENT_FLIP_X_BY_FACING,
@@ -29,7 +29,12 @@ import {
   type PlayerFacing,
 } from '../assets/recipientSpriteConfig';
 import { getLocation } from '../content/locations';
-import { getRoomDressing, getRoomLayoutRemoved, type RoomDressing } from '../content/roomDressing';
+import {
+  getRoomDressing,
+  getRoomLayoutNpcs,
+  getRoomLayoutRemoved,
+  type RoomDressing,
+} from '../content/roomDressing';
 import {
   renderExitDoormat,
   renderInteriorAwakening,
@@ -41,7 +46,7 @@ import {
 } from '../game/roomRenderer';
 // Type-only: erased at runtime, so the dressEditor module stays lazily imported
 // (its startDressEditor is loaded via dynamic import only under ?dressEdit=1).
-import type { OutdoorEditHandle } from '../game/dressEditor';
+import type { NpcEditHandle, OutdoorEditHandle } from '../game/dressEditor';
 import { getCollisionZones, type CollisionZonesFile } from '../content/collisionZones';
 import { rasterizePolygonsToRects, type Polygon } from '../game/collisionGeometry';
 import type {
@@ -452,6 +457,10 @@ export class LocationScene extends Phaser.Scene {
   // props + signpost render; the signpost handle also carries its label + linked
   // interaction id (for the gold-rect pairing hint).
   private outdoorPropHandles: OutdoorEditHandle[] = [];
+  // The room's home host NPC (____/____) as a dressEdit handle, so ?dressEdit=1
+  // can drag it. Set when createHomeHostNpc places the sprite; undefined in rooms
+  // (or outdoor areas) with no resident.
+  private homeHostNpcHandle?: NpcEditHandle;
   /** Alpha-measured signpost board geometry, cached per texture key (measuring
    * reads the whole texture once). Keeps caption fit texture-driven. */
   private signpostGeometryCache = new Map<string, SignpostBoardGeometry>();
@@ -659,6 +668,7 @@ export class LocationScene extends Phaser.Scene {
         dressing,
         propHandles,
         propDepthOverrides,
+        npcHandles: this.homeHostNpcHandle ? [this.homeHostNpcHandle] : [],
         mapJson: this.getMapJson(),
         mapUrl: this.location.mapUrl,
         removed: getRoomLayoutRemoved(this.location.id),
@@ -1956,7 +1966,12 @@ export class LocationScene extends Phaser.Scene {
       });
     }
 
-    const point = this.getProjection().project(npc.mapX, npc.mapY);
+    // Feet position: an authored dressEdit override (roomLayouts/<id>.json `npcs`
+    // section, keyed by NPC id) wins over the TS default, mirroring how props take
+    // their JSON layout over the TS fallback.
+    const { mapX, mapY } = resolveHomeNpcPosition(npc, getRoomLayoutNpcs(this.location.id));
+
+    const point = this.getProjection().project(mapX, mapY);
     const sprite = this.add
       .sprite(point.x, point.y, cfg.key, cfg.idleDownStartFrame)
       .setOrigin(cfg.origin.x, cfg.origin.y)
@@ -1965,6 +1980,9 @@ export class LocationScene extends Phaser.Scene {
     if (this.anims.exists(cfg.idleAnimationKey)) {
       sprite.play(cfg.idleAnimationKey);
     }
+
+    // Expose the placed NPC to the dressEdit editor so it can be dragged/saved.
+    this.homeHostNpcHandle = { id: npc.id, sprite, mapX, mapY };
   }
 
   // Once every letter is held the outdoor world subtly awakens: a warm golden

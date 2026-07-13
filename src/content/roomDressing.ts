@@ -766,6 +766,21 @@ export interface RoomLayoutFile {
    * for consistency and to guard against any future auto-merge behavior.
    */
   readonly removed?: readonly string[];
+  /**
+   * Optional per-resident NPC position overrides, keyed by the home NPC's stable
+   * id (see homeNpcs.ts — e.g. `friendone`, `friendtwo`). Written by the dressEdit editor
+   * when a room's home NPC is dragged; the NPC placement in LocationScene reads
+   * this override when present and falls back to the TS default otherwise (same
+   * JSON-overrides-TS philosophy as `props`). Absent in older saved layouts, which
+   * therefore keep their TS-default NPC positions unchanged.
+   */
+  readonly npcs?: Readonly<Record<string, NpcPosition>>;
+}
+
+/** A home NPC's feet position in room map coordinates (dressEdit override). */
+export interface NpcPosition {
+  readonly x: number;
+  readonly y: number;
 }
 
 const LAYOUT_MODULES = import.meta.glob<RoomLayoutFile>('./roomLayouts/*.json', {
@@ -823,6 +838,15 @@ function withLayoutOverride(locationId: string, dressing: RoomDressing): RoomDre
 /** Frame ids the author has tombstoned (deliberately removed) for a room. */
 export function getRoomLayoutRemoved(locationId: string): readonly string[] {
   return LAYOUTS_BY_LOCATION[locationId]?.removed ?? [];
+}
+
+/**
+ * Authored per-resident NPC position overrides for a room (empty when the layout
+ * has no `npcs` section). Keyed by home NPC id; LocationScene uses an entry's
+ * x/y in place of the TS-default feet position when present.
+ */
+export function getRoomLayoutNpcs(locationId: string): Readonly<Record<string, NpcPosition>> {
+  return LAYOUTS_BY_LOCATION[locationId]?.npcs ?? {};
 }
 
 /**
@@ -939,6 +963,30 @@ export function isValidRoomLayoutFile(value: unknown): value is RoomLayoutFile {
   }
   if (file.removed !== undefined) {
     if (!Array.isArray(file.removed) || file.removed.some((id) => typeof id !== 'string')) {
+      return false;
+    }
+  }
+  if (file.npcs !== undefined && !isValidNpcsSection(file.npcs)) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * A layout's optional `npcs` section: a plain object mapping each home NPC id to
+ * a `{ x, y }` position (both numbers). Rejects arrays, null, and malformed
+ * position values so a bad Save payload never reaches disk.
+ */
+function isValidNpcsSection(value: unknown): value is Record<string, NpcPosition> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false;
+  }
+  for (const pos of Object.values(value as Record<string, unknown>)) {
+    if (typeof pos !== 'object' || pos === null) {
+      return false;
+    }
+    const p = pos as Record<string, unknown>;
+    if (typeof p.x !== 'number' || typeof p.y !== 'number') {
       return false;
     }
   }

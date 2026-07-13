@@ -6,6 +6,7 @@ import {
   computeRemovedTombstones,
   getPropColliders,
   getRoomDressing,
+  getRoomLayoutNpcs,
   getRoomLayoutRemoved,
   isSinglesOnlyProp,
   isValidRoomLayoutFile,
@@ -14,6 +15,7 @@ import {
   propOverrideUrl,
   type RoomDressing,
 } from '../../src/content/roomDressing';
+import { HOME_HOST_NPCS, resolveHomeNpcPosition } from '../../src/content/homeNpcs';
 
 const SHEET_SIZE = 1024;
 
@@ -307,6 +309,70 @@ describe('room layout overrides', () => {
     expect(isValidRoomLayoutFile({ locationId: 'x', props: [], removed: [] })).toBe(true);
     expect(isValidRoomLayoutFile({ locationId: 'x', props: [], removed: 'armchair' })).toBe(false);
     expect(isValidRoomLayoutFile({ locationId: 'x', props: [], removed: [1] })).toBe(false);
+  });
+});
+
+describe('home NPC position overrides', () => {
+  // dressEdit writes each home NPC's dragged feet position into the room layout's
+  // optional `npcs` section (keyed by NPC id). LocationScene reads that override
+  // when present, and falls back to the TS default when absent — the same
+  // JSON-overrides-TS rule the props follow.
+
+  it('accepts an optional `npcs` position map, rejecting bad shapes', () => {
+    // A save carrying an npcs section round-trips through the validator...
+    const payload = {
+      locationId: 'friend-a',
+      props: [{ frame: 'bed', mapX: 1, mapY: 2 }],
+      npcs: { friendone: { x: 900, y: 540 } },
+    };
+    expect(isValidRoomLayoutFile(payload)).toBe(true);
+    // ...and survives the JSON round-trip the dev endpoint persists/reloads.
+    expect(isValidRoomLayoutFile(JSON.parse(JSON.stringify(payload)))).toBe(true);
+    // Empty section and multiple residents are fine.
+    expect(isValidRoomLayoutFile({ locationId: 'x', props: [], npcs: {} })).toBe(true);
+    expect(
+      isValidRoomLayoutFile({
+        locationId: 'x',
+        props: [],
+        npcs: { friendone: { x: 1, y: 2 }, friendtwo: { x: 3, y: 4 } },
+      }),
+    ).toBe(true);
+    // Bad shapes are rejected: array, non-object position, missing/non-number x/y.
+    expect(isValidRoomLayoutFile({ locationId: 'x', props: [], npcs: [] })).toBe(false);
+    expect(isValidRoomLayoutFile({ locationId: 'x', props: [], npcs: { friendone: 5 } })).toBe(false);
+    expect(isValidRoomLayoutFile({ locationId: 'x', props: [], npcs: { friendone: null } })).toBe(false);
+    expect(isValidRoomLayoutFile({ locationId: 'x', props: [], npcs: { friendone: { x: 1 } } })).toBe(
+      false,
+    );
+    expect(
+      isValidRoomLayoutFile({ locationId: 'x', props: [], npcs: { friendone: { x: 'no', y: 2 } } }),
+    ).toBe(false);
+  });
+
+  it('applies an override position over the TS default, per NPC id', () => {
+    const friendone = HOME_HOST_NPCS['friend-a'];
+    const resolved = resolveHomeNpcPosition(friendone, { friendone: { x: 912, y: 544 } });
+    expect(resolved).toEqual({ mapX: 912, mapY: 544 });
+    // An override for a DIFFERENT id doesn't touch this NPC (falls back).
+    const other = resolveHomeNpcPosition(friendone, { friendtwo: { x: 1, y: 2 } });
+    expect(other).toEqual({ mapX: friendone.mapX, mapY: friendone.mapY });
+  });
+
+  it('falls back to the TS default when no override is present', () => {
+    const friendtwo = HOME_HOST_NPCS['friend-b'];
+    expect(resolveHomeNpcPosition(friendtwo, {})).toEqual({
+      mapX: friendtwo.mapX,
+      mapY: friendtwo.mapY,
+    });
+    // The shipped layouts carry no npcs section yet, so the loader returns {} and
+    // every resident keeps its TS-default feet position.
+    for (const [locationId, npc] of Object.entries(HOME_HOST_NPCS)) {
+      const overrides = getRoomLayoutNpcs(locationId);
+      expect(resolveHomeNpcPosition(npc, overrides)).toEqual({
+        mapX: npc.mapX,
+        mapY: npc.mapY,
+      });
+    }
   });
 });
 

@@ -34,6 +34,16 @@ interface MutableZone {
   points: [number, number][];
 }
 
+/**
+ * Structural view of the host LocationScene's dev-only live-rebuild hook. Kept as
+ * a local structural type (rather than importing LocationScene) so the lazily
+ * loaded editor stays decoupled from the scene module. Optional so the call is a
+ * no-op if the host scene ever lacks the hook.
+ */
+interface ZoneColliderRebuildScene {
+  rebuildZoneColliders?(zonesFile: CollisionZonesFile): void;
+}
+
 const HANDLE_RADIUS = 7;
 const CLOSE_SNAP_PX = 14;
 const OVERLAY_DEPTH = 1_000_000;
@@ -459,7 +469,13 @@ class ZoneEditor {
         body: JSON.stringify(payload),
       });
       if (res.ok) {
-        this.toast('Saved ✓ reload to apply collision');
+        // Apply the just-authored zones to the running scene immediately so the
+        // author can test collision without a reload. The rebuild uses these
+        // same in-memory polygons (no need to re-read the file we just wrote) and
+        // mirrors createMap's semantics, so live == save-then-reload.
+        const scene = this.scene as unknown as ZoneColliderRebuildScene;
+        scene.rebuildZoneColliders?.(payload);
+        this.toast('Saved ✓ applied live');
       } else {
         this.toast(`Save failed (${res.status})`);
       }

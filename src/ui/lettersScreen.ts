@@ -172,7 +172,10 @@ export function showLettersScreen(
   goHome.type = 'button';
   goHome.className = 'letters-screen__go-home';
   goHome.textContent = 'go home';
-  goHome.hidden = mode !== 'archive' || !options.onGoHome;
+  // With no authored letters, never trap the player on an empty terminal screen:
+  // the quiet return-home action is available immediately. Once real letters
+  // exist, ending mode continues to reveal it only after all are read.
+  goHome.hidden = !options.onGoHome || (mode === 'ending' && letters.length > 0);
   if (options.onGoHome) {
     goHome.addEventListener('click', () => {
       if (mode === 'archive') {

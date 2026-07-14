@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  VIOLIN_FINALE_PHRASES,
   VIOLIN_PHRASES,
   VIOLIN_PITCHES,
   VIOLIN_RHYTHM_MS,
@@ -8,6 +9,7 @@ import {
 } from '../../../src/activities/violin/melody';
 import {
   FINALE_LEAD_IN_MS,
+  FINALE_PHRASE_GAP_MS,
   HANDOFF_MS,
   MIN_TEMPO_SCALE,
   advanceViolin,
@@ -82,54 +84,79 @@ describe('melody data', () => {
     expect(VIOLIN_FINALE_CAPTION).toBe('Follow the light');
   });
 
-  it('transcribes measures 1–9 from the supplied score in short musical phrases', () => {
+  it('uses measures 1–5 for the interactive game in 4–6-note pages', () => {
     expect(VIOLIN_PHRASES.map((phrase) => phrase.notes.map((note) => note.pitchId))).toEqual([
-      ['a4', 'g4'],
-      ['f4', 'g4', 'a4', 'bb4'],
-      ['c5', 'a4', 'g4', 'f4'],
+      ['a4', 'g4', 'f4', 'g4'],
+      ['a4', 'bb4', 'c5', 'a4', 'g4', 'f4'],
+      ['e4', 'd4', 'e4', 'f4'],
+      ['c4', 'd4', 'c4', 'bb3'],
+      ['a3', 'c4', 'f4', 'a4'],
+      ['g4', 'fs4', 'g4', 'd4', 'f4'],
+      ['e4', 'e4', 'f4', 'g4', 'a4', 'g4'],
+    ]);
+
+    const { dottedEighth, sixteenth, quarter, tripletEighth } = VIOLIN_RHYTHM_MS;
+    expect(VIOLIN_PHRASES.map((phrase) => phrase.notes.map((note) => note.durationMs))).toEqual([
+      [dottedEighth, sixteenth, dottedEighth, sixteenth],
+      [dottedEighth, sixteenth, quarter, tripletEighth, tripletEighth, tripletEighth],
+      [dottedEighth, sixteenth, dottedEighth, sixteenth],
+      [quarter, tripletEighth, tripletEighth, tripletEighth],
+      [dottedEighth, sixteenth, dottedEighth, sixteenth],
+      [dottedEighth, sixteenth, dottedEighth, sixteenth, dottedEighth],
+      [sixteenth, dottedEighth, sixteenth, quarter, dottedEighth, sixteenth],
+    ]);
+    expect(VIOLIN_PHRASES.every((phrase) => phrase.notes.length <= 6)).toBe(true);
+    expect(VIOLIN_PHRASES.every((phrase) => phrase.notes.length >= 4)).toBe(true);
+  });
+
+  it('retains the complete measures 1–9 passage for the finale replay', () => {
+    expect(
+      VIOLIN_FINALE_PHRASES.map((phrase) => phrase.notes.map((note) => note.pitchId)),
+    ).toEqual([
+      ['a4', 'g4', 'f4', 'g4'],
+      ['a4', 'bb4', 'c5', 'a4', 'g4', 'f4'],
       ['e4', 'd4', 'e4', 'f4'],
       ['c4', 'd4', 'c4', 'bb3'],
       ['a3', 'c4', 'f4', 'a4'],
       ['g4', 'fs4', 'g4', 'd4'],
       ['f4', 'e4', 'e4', 'f4'],
-      ['g4', 'a4', 'g4'],
-      ['f4', 'g4', 'a4', 'bb4'],
-      ['c5', 'a4', 'g4', 'f4'],
+      ['g4', 'a4', 'g4', 'f4', 'g4', 'a4'],
+      ['bb4', 'c5', 'a4', 'g4', 'f4'],
       ['e4', 'd4', 'e4', 'f4'],
       ['c4', 'd4', 'c4', 'bb3'],
-      ['a3', 'c4', 'f4', 'a4'],
-      ['g4', 'fs4', 'g4', 'bb4', 'e4'],
-      ['f4', 'e4', 'e4'],
+      ['a3', 'c4', 'f4', 'a4', 'g4', 'fs4'],
+      ['g4', 'bb4', 'e4', 'f4', 'e4', 'e4'],
     ]);
 
     const { dottedEighth, dottedHalf, sixteenth, quarter, tripletEighth } =
       VIOLIN_RHYTHM_MS;
-    expect(VIOLIN_PHRASES.map((phrase) => phrase.notes.map((note) => note.durationMs))).toEqual([
-      [dottedEighth, sixteenth],
+    expect(
+      VIOLIN_FINALE_PHRASES.map((phrase) => phrase.notes.map((note) => note.durationMs)),
+    ).toEqual([
+      [dottedEighth, sixteenth, dottedEighth, sixteenth],
+      [dottedEighth, sixteenth, quarter, tripletEighth, tripletEighth, tripletEighth],
       [dottedEighth, sixteenth, dottedEighth, sixteenth],
       [quarter, tripletEighth, tripletEighth, tripletEighth],
       [dottedEighth, sixteenth, dottedEighth, sixteenth],
-      [quarter, tripletEighth, tripletEighth, tripletEighth],
       [dottedEighth, sixteenth, dottedEighth, sixteenth],
       [dottedEighth, sixteenth, dottedEighth, sixteenth],
-      [dottedEighth, sixteenth, dottedEighth, sixteenth],
-      [quarter, dottedEighth, sixteenth],
-      [dottedEighth, sixteenth, dottedEighth, sixteenth],
-      [quarter, tripletEighth, tripletEighth, tripletEighth],
+      [quarter, dottedEighth, sixteenth, dottedEighth, sixteenth, dottedEighth],
+      [sixteenth, quarter, tripletEighth, tripletEighth, tripletEighth],
       [dottedEighth, sixteenth, dottedEighth, sixteenth],
       [quarter, tripletEighth, tripletEighth, tripletEighth],
-      [dottedEighth, sixteenth, dottedEighth, sixteenth],
-      [tripletEighth, tripletEighth, tripletEighth, dottedEighth, sixteenth],
-      [dottedHalf, dottedEighth, sixteenth],
+      [dottedEighth, sixteenth, dottedEighth, sixteenth, tripletEighth, tripletEighth],
+      [tripletEighth, dottedEighth, sixteenth, dottedHalf, dottedEighth, sixteenth],
     ]);
-    expect(VIOLIN_PHRASES.every((phrase) => phrase.notes.length <= 6)).toBe(true);
-    expect(VIOLIN_PHRASES.every((phrase) => phrase.notes.length >= 2)).toBe(true);
+    expect(VIOLIN_FINALE_PHRASES.flatMap((phrase) => phrase.notes)).toHaveLength(61);
+    expect(VIOLIN_PHRASES.flatMap((phrase) => phrase.notes)).toEqual(
+      VIOLIN_FINALE_PHRASES.flatMap((phrase) => phrase.notes).slice(0, 33),
+    );
   });
 
   it('maps every pitch to a unique key and every note to a known pitch', () => {
     const keys = VIOLIN_PITCHES.map((pitch) => pitch.key);
     expect(new Set(keys).size).toBe(keys.length);
-    for (const phrase of VIOLIN_PHRASES) {
+    for (const phrase of VIOLIN_FINALE_PHRASES) {
       for (const note of phrase.notes) {
         expect(getPitch(note.pitchId)).toBeDefined();
       }
@@ -175,10 +202,13 @@ describe('violinModel — playback', () => {
   });
 
   it('preserves the printed dotted-half sustain in measure 9', () => {
-    const phrase = VIOLIN_PHRASES.at(-1)!;
-    expect(noteStartMs(phrase, 1, 1)).toBe(VIOLIN_RHYTHM_MS.dottedHalf);
-    expect(playbackLitCount(phrase, VIOLIN_RHYTHM_MS.dottedHalf - 1, 1)).toBe(1);
-    expect(playbackLitCount(phrase, VIOLIN_RHYTHM_MS.dottedHalf, 1)).toBe(2);
+    const phrase = VIOLIN_FINALE_PHRASES.at(-1)!;
+    const resolveIndex = 3;
+    const resolveStart = noteStartMs(phrase, resolveIndex, 1);
+    expect(phrase.notes[resolveIndex].durationMs).toBe(VIOLIN_RHYTHM_MS.dottedHalf);
+    expect(noteStartMs(phrase, resolveIndex + 1, 1) - resolveStart).toBe(
+      VIOLIN_RHYTHM_MS.dottedHalf,
+    );
   });
 
   it('opens the echo once playback (plus its tail) has elapsed', () => {
@@ -398,12 +428,14 @@ describe('violinModel — finale (whole-piece replay)', () => {
     expect(isFinalPhrase(state)).toBe(true);
     const inFinale = echoWholePhrase(state);
     expect(inFinale.phase).toBe('finale');
+    expect(inFinale.phraseIndex).toBe(0);
+    expect(getPhrase(inFinale)).toBe(VIOLIN_FINALE_PHRASES[0]);
     return inFinale;
   }
 
   it('builds a timeline that covers every note of the piece in order', () => {
     const timeline = finaleTimeline();
-    const totalNotes = VIOLIN_PHRASES.reduce((n, phrase) => n + phrase.notes.length, 0);
+    const totalNotes = VIOLIN_FINALE_PHRASES.reduce((n, phrase) => n + phrase.notes.length, 0);
     expect(timeline).toHaveLength(totalNotes);
     // Start times are strictly increasing (one continuous line).
     for (let i = 1; i < timeline.length; i += 1) {
@@ -412,7 +444,21 @@ describe('violinModel — finale (whole-piece replay)', () => {
     // Phrases appear in order, first note of the piece after the lead-in beat.
     expect(timeline[0].phraseIndex).toBe(0);
     expect(timeline[0].startMs).toBe(FINALE_LEAD_IN_MS);
-    expect(timeline[timeline.length - 1].phraseIndex).toBe(VIOLIN_PHRASES.length - 1);
+    expect(timeline[timeline.length - 1].phraseIndex).toBe(
+      VIOLIN_FINALE_PHRASES.length - 1,
+    );
+  });
+
+  it('adds no silence at page boundaries during the whole-piece replay', () => {
+    expect(FINALE_PHRASE_GAP_MS).toBe(0);
+    const timeline = finaleTimeline();
+    for (let i = 1; i < timeline.length; i += 1) {
+      const previous = timeline[i - 1];
+      const current = timeline[i];
+      if (current.phraseIndex !== previous.phraseIndex) {
+        expect(current.startMs).toBe(previous.startMs + previous.durationMs);
+      }
+    }
   });
 
   it('pages the staff through every phrase as the piece replays', () => {
@@ -426,14 +472,14 @@ describe('violinModel — finale (whole-piece replay)', () => {
     expect(litNoteCount(early)).toBe(1);
 
     // More notes of phrase 0 ignite in sequence.
-    const phrase0 = VIOLIN_PHRASES[0];
+    const phrase0 = VIOLIN_FINALE_PHRASES[0];
     const twoNotesIn = advanceViolin(early, phrase0.notes[0].durationMs + 5);
     expect(twoNotesIn.phraseIndex).toBe(0);
     expect(litNoteCount(twoNotesIn)).toBeGreaterThan(litNoteCount(early));
 
     // Near the very end the staff has paged all the way to the last phrase.
     const nearEnd = advanceViolin(state, finaleTotalMs() - 1);
-    expect(nearEnd.phraseIndex).toBe(VIOLIN_PHRASES.length - 1);
+    expect(nearEnd.phraseIndex).toBe(VIOLIN_FINALE_PHRASES.length - 1);
     expect(litNoteCount(nearEnd)).toBe(getPhrase(nearEnd)!.notes.length);
   });
 

@@ -611,8 +611,25 @@ describe('sampled violin notes', () => {
     expect(ctx.bufferSources).toHaveLength(1);
     const [source] = ctx.bufferSources;
     expect(source.playbackRate.value).toBeCloseTo(466.16 / 440, 5);
-    expect(source.start).toHaveBeenCalledOnce();
+    expect(source.start).toHaveBeenCalledWith(ctx.currentTime);
     expect(source.stop).toHaveBeenCalledOnce();
+  });
+
+  it('skips the recorded bow attack for a connected note', async () => {
+    vi.useFakeTimers();
+    stubAudioContext();
+    stubFetchSucceedsOnFirstTry();
+    const audio = await import('../../src/game/audio');
+
+    audio.initAudio();
+    await flushAsync();
+    const ctx = createdContexts[0];
+
+    audio.playViolinNote(440, 450, { connected: true });
+
+    const [source] = ctx.bufferSources;
+    expect(source.start).toHaveBeenCalledWith(ctx.currentTime, expect.any(Number));
+    expect(source.start.mock.calls[0][1]).toBeGreaterThanOrEqual(0.08);
   });
 
   it('uses the synth immediately while samples are still unavailable', async () => {

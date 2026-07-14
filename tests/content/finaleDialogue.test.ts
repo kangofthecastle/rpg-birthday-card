@@ -4,7 +4,7 @@ import { FINALE_CONVERSATION } from '../../src/content/finaleDialogue';
 describe('finale dialogue', () => {
   it('uses the edited ____ reveal in display order', () => {
     expect(FINALE_CONVERSATION.map(({ speaker, text }) => ({ speaker, text }))).toEqual([
-      { speaker: '____', text: 'I knew you would make it—you always do.' },
+      { speaker: '____', text: 'I knew you would make it — you always do.' },
       { speaker: '____', text: '____? It was you?' },
       {
         speaker: '____',

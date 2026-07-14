@@ -23,7 +23,7 @@ import type { DialogueLine } from './types';
 export const FINALE_CONVERSATION: readonly DialogueLine[] = [
   {
     speaker: '____',
-    text: 'I knew you would make it—you always do.',
+    text: 'I knew you would make it — you always do.',
     portraitId: 'portrait-friend-b',
   },
   {

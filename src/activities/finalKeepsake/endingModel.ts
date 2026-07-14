@@ -14,25 +14,8 @@ import type { DialogueLine } from '../../content/types';
  */
 export const ENDING_KEEPSAKE_ID = 'ending-light';
 
-/**
- * The two short letters that arrive over the ocean-galaxy, in order. ____
- * first, then ____ answering the game's quiet question. Restraint is the
- * point — keep them short.
- */
-export const FINAL_ENDING_LETTERS: readonly (readonly DialogueLine[])[] = [
-  [
-    {
-      speaker: '____',
-      text: '',
-    },
-  ],
-  [
-    {
-      speaker: '____',
-      text: 'When we’re together, the rest of it washes away, and everything is going to be okay.',
-    },
-  ],
-];
+/** Optional short terminal letters. Empty until authored copy is supplied. */
+export const FINAL_ENDING_LETTERS: readonly (readonly DialogueLine[])[] = [];
 
 /** The quiet line that fades in once every letter has been read. Lowercase. */
 export const HAPPY_BIRTHDAY_LINE = 'happy birthday, recipient.';

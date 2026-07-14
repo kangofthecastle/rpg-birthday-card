@@ -4,11 +4,12 @@
 // starting state, elapsed time, and key presses, so it unit-tests in isolation
 // and drives the scene reproducibly. This is a perfect-pitch echo, not falling
 // notes: each phrase PLAYS first (time-driven), then ____ ECHOES it back on
-// the six mapped keys. There is no fail state — a wrong key gently wavers and
+// the mapped keys. There is no fail state — a wrong key gently wavers and
 // the phrase simply plays itself again, a little slower each time (floor 70%),
 // so it can never soft-lock. The song waits for her.
 
 import {
+  VIOLIN_FINALE_PHRASES,
   VIOLIN_PHRASES,
   getPitch,
   getPitchByKey,
@@ -21,12 +22,12 @@ import {
 //   handoff  → the instant she lands a phrase's LAST note: a short beat so that
 //              last ring is heard, then straight into the next phrase's playback.
 //              No dead air, no waiting state.
-//   finale   → she has just echoed the whole piece; now it pours back through as
-//              one continuous line (every phrase auto-played in sequence), a
-//              richer swell underneath, golden light filling the room.
+//   finale   → she has echoed measures 1–5; now the complete measures 1–9
+//              passage pours through as one continuous line, a richer swell
+//              underneath, golden light filling the room.
 //   complete → done.
-// There is no takeover: ____ plays every note of every phrase herself, the last
-// phrase included. The finale is the reward, not an interruption.
+// There is no takeover during the interactive passage: ____ plays every one of
+// its notes herself. The expanded finale is the reward, not an interruption.
 export type ViolinPhase = 'playback' | 'echo' | 'handoff' | 'finale' | 'complete';
 export type ViolinResult = 'none' | 'ring' | 'waver';
 
@@ -43,9 +44,9 @@ export const HANDOFF_MS = 500;
 /** Lead-in beat at the top of the finale before the whole-piece replay begins,
  * so her final note rings and the swell can bloom in first. */
 export const FINALE_LEAD_IN_MS = 640;
-/** Breath between phrases during the finale replay — enough to phrase the line,
- * short enough that the piece still reads as one continuous sweep. */
-export const FINALE_PHRASE_GAP_MS = 240;
+/** Page boundaries are visual/input groupings only; the finale melody stays
+ * continuous across them with no inserted silence. */
+export const FINALE_PHRASE_GAP_MS = 0;
 /** Hold after the finale's last note (swell ringing, golden light at full pour)
  * before the piece is marked complete. */
 export const FINALE_HOLD_MS = 2600;
@@ -90,7 +91,10 @@ export function createViolinState(): ViolinState {
 }
 
 export function getPhrase(state: ViolinState): ViolinPhrase | undefined {
-  return VIOLIN_PHRASES[state.phraseIndex];
+  const phrases = state.phase === 'finale' || state.phase === 'complete'
+    ? VIOLIN_FINALE_PHRASES
+    : VIOLIN_PHRASES;
+  return phrases[state.phraseIndex];
 }
 
 export function isFinalPhrase(state: ViolinState): boolean {
@@ -110,13 +114,13 @@ export interface FinaleNote {
 }
 
 /** The finale plays the entire piece back as one continuous line: every phrase in
- * order, notes at their authored durations, a small breath between phrases. This
+ * order, notes at their authored durations, with no gap at page boundaries. This
  * is the deterministic timeline both the swell scheduling and the staff lighting
  * read from. */
 export function finaleTimeline(): FinaleNote[] {
   const out: FinaleNote[] = [];
   let t = FINALE_LEAD_IN_MS;
-  VIOLIN_PHRASES.forEach((phrase, phraseIndex) => {
+  VIOLIN_FINALE_PHRASES.forEach((phrase, phraseIndex) => {
     phrase.notes.forEach((note, noteIndex) => {
       t += note.delayBeforeMs ?? 0;
       out.push({
@@ -294,7 +298,7 @@ export function advanceViolin(state: ViolinState, deltaMs: number): ViolinState 
         ...state,
         phase: 'complete',
         elapsedMs: finaleTotalMs(),
-        phraseIndex: VIOLIN_PHRASES.length - 1,
+        phraseIndex: VIOLIN_FINALE_PHRASES.length - 1,
         finished: true,
       };
     }
@@ -351,6 +355,7 @@ export function pressViolinKey(
           ...state,
           echoIndex: nextEcho,
           phase: 'finale',
+          phraseIndex: 0,
           elapsedMs: 0,
           lastResult: 'ring',
           recovering: false,
@@ -397,7 +402,9 @@ export function isPieceComplete(state: ViolinState): boolean {
 /** 0..1 fraction of the piece done, counting phrases and (roughly) the swell,
  * for warming the room art between phrases. */
 export function getPieceProgress(state: ViolinState): number {
+  if (state.phase === 'finale' || state.phase === 'complete') {
+    return 1;
+  }
   const total = VIOLIN_PHRASES.length;
-  const finaleBonus = state.phase === 'finale' || state.phase === 'complete' ? 1 : 0;
-  return Math.min(1, (state.phraseIndex + finaleBonus) / total);
+  return Math.min(1, state.phraseIndex / total);
 }

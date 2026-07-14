@@ -106,6 +106,8 @@ const SFX_BUS_LEVEL_DB = -3;
 const DEFAULT_MUSIC_FADE_MS = 1200;
 const MUTE_FADE_MS = 150;
 const SFX_CLEANUP_SLACK_MS = 60;
+/** Skip the recorded bow-on-string transient when a note continues a phrase. */
+const CONNECTED_VIOLIN_SAMPLE_OFFSET_SECONDS = 0.11;
 
 const MUTE_STORAGE_KEY = 'a-game-audio-muted';
 
@@ -401,14 +403,15 @@ export async function playAudioFileAndWait(
 
 export interface PlayViolinNoteOptions {
   volume?: number;
+  /** True when this note follows another in the same musical line. Connected
+   * notes enter after the sample's bow attack so the phrase sounds legato. */
+  connected?: boolean;
 }
 
-/** Plays a single sustained, warm violin-ish note at an arbitrary frequency
+/** Plays a single sampled violin note at an arbitrary frequency
  * through the SFX bus. Used by "the piece on the stand" activity so each pitch
  * ____ hears and echoes rings out cleanly. Safe before init / without audio
- * support (no-op). Falls through to the synthesized tone in `audioSynth.ts`;
- * there is no per-note file (the drop-in `sfx-violin-*` recordings cover the
- * miss and the final swell instead). */
+ * support (no-op), with an immediate synthesized fallback while samples load. */
 export function playViolinNote(
   frequency: number,
   durationMs: number,
@@ -427,7 +430,14 @@ export function playViolinNote(
   const selected = selectViolinSample(frequency, durationMs);
   const buffer = violinSampleBuffers.get(selected.url);
   const durationEstimateMs = buffer
-    ? playSampledViolinNote(ctx, voiceGain, buffer, selected, durationMs)
+    ? playSampledViolinNote(
+        ctx,
+        voiceGain,
+        buffer,
+        selected,
+        durationMs,
+        options.connected ?? false,
+      )
     : playViolinTone(ctx, voiceGain, { frequency, durationMs });
   setTimeout(() => {
     try {
@@ -444,11 +454,12 @@ function playSampledViolinNote(
   buffer: AudioBuffer,
   selected: SelectedViolinSample,
   durationMs: number,
+  connected: boolean,
 ): number {
   const startAt = ctx.currentTime;
   const isShort = selected.articulation === 'spiccato';
   const soundingMs = isShort ? Math.max(durationMs, 360) : Math.max(durationMs, 80);
-  const attackMs = isShort ? 4 : 18;
+  const attackMs = connected ? 5 : isShort ? 4 : 18;
   const releaseMs = isShort ? 90 : Math.min(180, Math.max(100, durationMs * 0.28));
   const sustainEnd = startAt + soundingMs / 1000;
   const releaseEnd = sustainEnd + releaseMs / 1000;
@@ -466,7 +477,11 @@ function playSampledViolinNote(
   envelope.gain.setValueAtTime(isShort ? 0.5 : 0.55, sustainEnd);
   envelope.gain.linearRampToValueAtTime(0.0001, releaseEnd);
 
-  source.start(startAt);
+  if (connected) {
+    source.start(startAt, CONNECTED_VIOLIN_SAMPLE_OFFSET_SECONDS);
+  } else {
+    source.start(startAt);
+  }
   source.stop(releaseEnd + 0.02);
   source.onended = () => {
     source.disconnect();

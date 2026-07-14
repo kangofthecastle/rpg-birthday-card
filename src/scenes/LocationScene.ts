@@ -135,6 +135,7 @@ import {
   shouldShowHomeNpc,
   VIOLIN_ACTIVITY_ID,
   INTRO_COMPLETE_BEAT_ID,
+  FINAL_SPOT_ARRIVAL_BEAT_ID,
   FRIEND_ONE_PC_READY_BEAT_ID,
   VIOLIN_CALLED_BEAT_ID,
 } from '../game/storyProgression';
@@ -684,6 +685,7 @@ export class LocationScene extends Phaser.Scene {
     document.body.dataset.runMode = this.state.mode ?? 'story';
     delete document.body.dataset.interiorAwakened;
     delete document.body.dataset.introPcBuzz;
+    delete document.body.dataset.introPcGlitch;
     this.createMap();
     this.createPlayer();
     this.createFriendOneFollower();
@@ -722,6 +724,9 @@ export class LocationScene extends Phaser.Scene {
     }
 
     void this.runEnterBeats();
+    if (this.location.id === 'final-spot' && !this.autoStartActivityId) {
+      void this.runFinalSpotArrivalBeat();
+    }
     this.maybeStartZoneEditor();
     this.maybeStartDressEditor();
     this.maybeAutoStartActivity();
@@ -887,10 +892,41 @@ export class LocationScene extends Phaser.Scene {
       if (beat.id === INTRO_COMPLETE_BEAT_ID) {
         this.time.delayedCall(INTRO_PC_BUZZ_DELAY_MS, () => {
           playSfx('sfx-pc-fail', { volume: 0.9 });
+          this.glitchRecipientPcVisual();
           document.body.dataset.introPcBuzz = 'played';
+          document.body.dataset.introPcGlitch = 'played';
         });
       }
     }
+  }
+
+  private glitchRecipientPcVisual(): void {
+    const desk = this.propHandles.find(({ placement }) => placement.frame === 'desk')?.image;
+    if (!desk) {
+      return;
+    }
+    this.tweens.add({
+      targets: desk,
+      alpha: { from: 1, to: 0.55 },
+      duration: 85,
+      yoyo: true,
+      repeat: 3,
+    });
+  }
+
+  private async runFinalSpotArrivalBeat(): Promise<void> {
+    if (
+      this.location.id !== 'final-spot' ||
+      this.state.endingCompleted ||
+      hasSeenBeat(this.state, FINAL_SPOT_ARRIVAL_BEAT_ID)
+    ) {
+      return;
+    }
+    await this.pauseForDialogue([
+      { speaker: '____', text: 'Where am I? Who is that?', portraitId: 'portrait-recipient' },
+    ]);
+    this.state = markBeatSeen(this.state, FINAL_SPOT_ARRIVAL_BEAT_ID);
+    this.registry.set('runState', this.state);
   }
 
   update(_time: number, delta: number): void {
@@ -984,7 +1020,7 @@ export class LocationScene extends Phaser.Scene {
     if (storyBlock) {
       this.nudgeAwayFromEdge(edgeExit.edge);
       playSfx('sfx-story-hum', { volume: 0.22 });
-      await this.pauseForDialogue([{ text: storyBlock }]);
+      await this.pauseForDialogue([storyBlock]);
       this.edgeCooldownUntil = this.time.now + EDGE_ARRIVAL_COOLDOWN_MS;
       this.edgeTriggerBusy = false;
       return;
@@ -2725,11 +2761,14 @@ export class LocationScene extends Phaser.Scene {
   }
 
   private playViolinMotif(fragment: readonly MotifNote[], volume: number): void {
-    fragment.forEach((note) => {
+    fragment.forEach((note, noteIndex) => {
       const pitch = getPitch(note.pitchId);
       if (!pitch) return;
       this.time.delayedCall(note.delayMs, () => {
-        playViolinNote(pitch.frequency, note.durationMs, { volume });
+        playViolinNote(pitch.frequency, note.durationMs, {
+          volume,
+          connected: noteIndex > 0,
+        });
       });
     });
   }
@@ -2740,12 +2779,13 @@ export class LocationScene extends Phaser.Scene {
       durationMs: number,
       delayMs: number,
       onPlay?: () => void,
+      connected = false,
     ): void => {
       const pitch = getPitch(pitchId);
       if (!pitch) return;
       this.violinCueTimers.push(
         this.time.delayedCall(delayMs, () => {
-          playViolinNote(pitch.frequency, durationMs, { volume: 0.34 });
+          playViolinNote(pitch.frequency, durationMs, { volume: 0.34, connected });
           onPlay?.();
         }),
       );
@@ -2789,7 +2829,13 @@ export class LocationScene extends Phaser.Scene {
     };
     const violinDelayMs = 2800;
     createViolinInvitationSchedule().forEach((note) =>
-      scheduleNote(note.pitchId, note.durationMs, violinDelayMs + note.atMs, emitNote),
+      scheduleNote(
+        note.pitchId,
+        note.durationMs,
+        violinDelayMs + note.atMs,
+        emitNote,
+        note.delayMs > 0,
+      ),
     );
     // Let the exact refrain fragment's final tone breathe for a fraction of a
     // beat, then have ____ react without requiring the player to touch the
@@ -4383,6 +4429,13 @@ export class LocationScene extends Phaser.Scene {
     marker.lineStyle(3, color, 0.9);
     marker.strokePoints(polygon, true);
 
+    // The clearing shore already has the normal proximity prompt at the bottom
+    // of the screen. Keep its subtle water hotspot, but do not stamp a second,
+    // oversized white label directly onto the scene.
+    if (object.id === 'clearing-shore') {
+      return;
+    }
+
     this.add
       .text(center.x, center.y - 10, label, {
         color: '#1b1f1f',
@@ -4691,7 +4744,7 @@ export class LocationScene extends Phaser.Scene {
       const storyBlock = getStoryTravelBlock(exit.destinationLocationId, this.state);
       if (storyBlock) {
         playSfx('sfx-story-hum', { volume: 0.22 });
-        await this.pauseForDialogue([{ text: storyBlock }]);
+        await this.pauseForDialogue([storyBlock]);
         return;
       }
       if (exit.requiresFinalUnlock && !isFinalSpotUnlocked(this.state)) {
@@ -4751,16 +4804,7 @@ export class LocationScene extends Phaser.Scene {
     if (interaction.id === 'recipient-pc') {
       const pcStory = resolveRecipientPcStory(this.state);
       playSfx('sfx-pc-fail');
-      const desk = this.propHandles.find(({ placement }) => placement.frame === 'desk')?.image;
-      if (desk) {
-        this.tweens.add({
-          targets: desk,
-          alpha: { from: 1, to: 0.55 },
-          duration: 85,
-          yoyo: true,
-          repeat: 3,
-        });
-      }
+      this.glitchRecipientPcVisual();
       if (pcStory.playNotification) {
         const priorCount = Number(document.body.dataset.phoneNotificationCount ?? '0');
         document.body.dataset.phoneNotificationCount = String(priorCount + 1);
@@ -4813,7 +4857,6 @@ export class LocationScene extends Phaser.Scene {
       return;
     }
     await this.pauseForDialogue([
-      { speaker: '____', text: 'Where am I? Who is that?', portraitId: 'portrait-recipient' },
       { speaker: '____', text: 'You... who are you?', portraitId: 'portrait-recipient' },
       { speaker: 'Omen', text: '~~', portraitId: 'portrait-omen' },
     ]);
@@ -4965,6 +5008,7 @@ export class LocationScene extends Phaser.Scene {
           this.state = completeLocation(this.state, recordedCompletion);
           this.registry.set('runState', this.state);
           await this.revealGalaxyArrival(activityMount);
+          await this.runFinalSpotArrivalBeat();
           restoreHud();
           return;
         }

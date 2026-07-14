@@ -72,6 +72,26 @@ const SFX_BY_EVENT: Readonly<Record<SfxEvent, SfxKey>> = {
   dryfire: 'sfx-dryfire',
 };
 
+// Scene-local mix for the synthesized RETAKE layer. These cues previously all
+// ran at full gain; the overlapping defuse bed in particular stacked multiple
+// half-second voices every 300 ms. Keep transient feedback readable while
+// placing the repeated spike/defuse sounds well underneath the reference clips.
+const SFX_VOLUME_BY_EVENT: Readonly<Record<SfxEvent, number>> = {
+  shot: 0.5,
+  heart: 0.5,
+  beep: 0.4,
+  tick: 0.32,
+  checkpoint: 0.48,
+  teleport: 0.5,
+  complete: 0.5,
+  detonate: 0.5,
+  clutch: 0.5,
+  reload: 0.5,
+  death: 0.5,
+  dryfire: 0.45,
+};
+const DEFUSE_LOOP_VOLUME = 0.25;
+
 export interface SplitSceneCallbacks {
   readonly onReady: () => Promise<void>;
   readonly onComplete: () => void;
@@ -1141,7 +1161,9 @@ export class SplitScene extends Phaser.Scene {
       // defusing so the defuse bed reads clearly over it.
       if (now >= this.nextBeepAt) {
         const frac = spikeTimeRemainingMs(this.state) / SPLIT_CONFIG.spikeTimerMs;
-        playAudioSfx('sfx-spike-beep', { volume: defusing ? 0.35 : 1 });
+        playAudioSfx('sfx-spike-beep', {
+          volume: defusing ? SFX_VOLUME_BY_EVENT.beep * 0.4 : SFX_VOLUME_BY_EVENT.beep,
+        });
         this.nextBeepAt = now + Math.max(90, 90 + frac * 560);
       }
 
@@ -1150,13 +1172,19 @@ export class SplitScene extends Phaser.Scene {
         // (longer) voices overlap into one continuous bed; its pitch/brightness
         // climb with defuse progress.
         if (now >= this.nextDefuseLoopAt) {
-          playAudioSfx('sfx-defuse-loop', { rate: 1 + progress * 0.7, volume: 1 });
+          playAudioSfx('sfx-defuse-loop', {
+            rate: 1 + progress * 0.7,
+            volume: DEFUSE_LOOP_VOLUME,
+          });
           this.nextDefuseLoopAt = now + 300;
         }
         // Faster, louder, climbing ticks layered on top of the hum (was a lone
         // quiet tick every 450ms — that didn't read).
         if (now >= this.nextDefuseTickAt) {
-          playAudioSfx('sfx-defuse-tick', { rate: 1 + progress * 0.5, volume: 1 });
+          playAudioSfx('sfx-defuse-tick', {
+            rate: 1 + progress * 0.5,
+            volume: SFX_VOLUME_BY_EVENT.tick,
+          });
           this.nextDefuseTickAt = now + 220;
         }
       } else {
@@ -1609,7 +1637,7 @@ export class SplitScene extends Phaser.Scene {
   }
 
   private playSfx(key: SfxEvent): void {
-    playAudioSfx(SFX_BY_EVENT[key]);
+    playAudioSfx(SFX_BY_EVENT[key], { volume: SFX_VOLUME_BY_EVENT[key] });
   }
 
   // ------------------------------------------------------------------

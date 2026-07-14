@@ -1,5 +1,5 @@
 export const FISHING_METER_HEIGHT = 360;
-export const CATCH_BAR_HEIGHT = 92;
+export const CATCH_BAR_HEIGHT = 80;
 export const FISH_TARGET_HEIGHT = 28;
 
 const CATCH_BAR_RISE_PER_SECOND = 320;
@@ -48,37 +48,37 @@ export const FRIEND_ONE_FISH_SEQUENCE: readonly FishConfig[] = [
     id: 'pond-drifter',
     label: 'Pond Drifter',
     isSpecial: false,
-    speedPerSecond: 54,
-    directionChangeMs: 1600,
+    speedPerSecond: 66,
+    directionChangeMs: 1350,
     burstEveryMs: 0,
     burstDurationMs: 0,
     burstSpeedMultiplier: 1,
-    catchRatePerSecond: 0.44,
-    drainRatePerSecond: 0.12,
+    catchRatePerSecond: 0.38,
+    drainRatePerSecond: 0.17,
   },
   {
     id: 'reed-darter',
     label: 'Reed Darter',
     isSpecial: false,
-    speedPerSecond: 82,
-    directionChangeMs: 1050,
-    burstEveryMs: 0,
-    burstDurationMs: 0,
-    burstSpeedMultiplier: 1,
-    catchRatePerSecond: 0.38,
-    drainRatePerSecond: 0.16,
+    speedPerSecond: 94,
+    directionChangeMs: 900,
+    burstEveryMs: 2600,
+    burstDurationMs: 260,
+    burstSpeedMultiplier: 1.35,
+    catchRatePerSecond: 0.34,
+    drainRatePerSecond: 0.22,
   },
   {
     id: 'glowing-koi',
     label: 'Glowing Koi',
     isSpecial: true,
-    speedPerSecond: 105,
-    directionChangeMs: 780,
-    burstEveryMs: 1800,
-    burstDurationMs: 360,
-    burstSpeedMultiplier: 1.65,
-    catchRatePerSecond: 0.32,
-    drainRatePerSecond: 0.2,
+    speedPerSecond: 120,
+    directionChangeMs: 650,
+    burstEveryMs: 1500,
+    burstDurationMs: 420,
+    burstSpeedMultiplier: 1.75,
+    catchRatePerSecond: 0.28,
+    drainRatePerSecond: 0.3,
   },
 ] as const;
 

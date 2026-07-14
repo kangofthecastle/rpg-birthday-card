@@ -5,11 +5,13 @@ import {
   isBoatFolded,
   type RunState,
 } from './runState';
+import type { DialogueLine } from '../content/types';
 
 export const INTRO_COMPLETE_BEAT_ID = 'recipient-intro';
 export const FRIEND_ONE_TEXT_READ_BEAT_ID = 'friendone-text-read';
 export const FRIEND_ONE_PC_READY_BEAT_ID = 'friendone-pc-ready';
 export const VIOLIN_CALLED_BEAT_ID = 'violin-called';
+export const FINAL_SPOT_ARRIVAL_BEAT_ID = 'final-spot-arrival';
 export const FRIEND_TWO_HOUSE_ENTERED_BEAT_ID = 'friendtwo-house-entered';
 export const FISHING_ACTIVITY_ID = 'friendone-pc-fishing';
 export const RETAKE_ACTIVITY_ID = 'valorant-split';
@@ -41,7 +43,7 @@ export function getCanonicalStoryMilestone(state: RunState): CanonicalStoryMiles
 export function getStoryTravelBlock(
   destinationLocationId: string,
   state: RunState,
-): string | undefined {
+): DialogueLine | undefined {
   if (state.endingCompleted) {
     return undefined;
   }
@@ -52,7 +54,10 @@ export function getStoryTravelBlock(
     !hasSeenBeat(state, FRIEND_ONE_TEXT_READ_BEAT_ID) &&
     !fishingComplete
   ) {
-    return 'Your PC is humming. Best check on it.';
+    return {
+      text: 'Your PC is humming. Best check on it.',
+      portraitId: 'inspect-recipient-pc',
+    };
   }
 
   return undefined;

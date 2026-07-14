@@ -1,11 +1,10 @@
 // The piece on ____'s music stand — melody data.
 //
 // Measures 1–9 of the user-supplied “Do You Hear the People Sing?” score are
-// transcribed here as the playable violin passage. Printed measures are split
-// at beat-group boundaries so the listen-and-echo turns stay small (2–5 notes,
-// with a hard ceiling of 6). This file remains the single pitch/rhythm source
-// for the minigame, the invitation and awakening cues, and the ending's
-// sheet-roll plucks.
+// transcribed here as one canonical passage. The interactive game uses measures
+// 1–5 in 4–6-note pages; the finale replay expands into the complete measures
+// 1–9 passage. This file remains the single pitch/rhythm source for both, plus
+// the invitation and awakening cues and the ending's sheet-roll plucks.
 
 export interface ViolinPitch {
   /** Stable id referenced by notes. */
@@ -98,26 +97,21 @@ export const VIOLIN_RHYTHM_MS = {
 const { dottedEighth, dottedHalf, sixteenth, quarter, tripletEighth } =
   VIOLIN_RHYTHM_MS;
 
-export const VIOLIN_PHRASES: readonly ViolinPhrase[] = [
+export const VIOLIN_FINALE_PHRASES: readonly ViolinPhrase[] = [
   {
-    id: 'm1-opening',
+    id: 'page-1-opening',
     notes: [
       { pitchId: 'a4', durationMs: dottedEighth },
       { pitchId: 'g4', durationMs: sixteenth },
-    ],
-  },
-  {
-    id: 'm2-rise',
-    notes: [
       { pitchId: 'f4', durationMs: dottedEighth },
       { pitchId: 'g4', durationMs: sixteenth },
-      { pitchId: 'a4', durationMs: dottedEighth },
-      { pitchId: 'bb4', durationMs: sixteenth },
     ],
   },
   {
-    id: 'm2-turn',
+    id: 'page-2-rise-and-turn',
     notes: [
+      { pitchId: 'a4', durationMs: dottedEighth },
+      { pitchId: 'bb4', durationMs: sixteenth },
       { pitchId: 'c5', durationMs: quarter },
       { pitchId: 'a4', durationMs: tripletEighth },
       { pitchId: 'g4', durationMs: tripletEighth },
@@ -125,7 +119,7 @@ export const VIOLIN_PHRASES: readonly ViolinPhrase[] = [
     ],
   },
   {
-    id: 'm3-fall',
+    id: 'page-3-fall',
     notes: [
       { pitchId: 'e4', durationMs: dottedEighth },
       { pitchId: 'd4', durationMs: sixteenth },
@@ -134,7 +128,7 @@ export const VIOLIN_PHRASES: readonly ViolinPhrase[] = [
     ],
   },
   {
-    id: 'm3-turn',
+    id: 'page-4-turn',
     notes: [
       { pitchId: 'c4', durationMs: quarter },
       { pitchId: 'd4', durationMs: tripletEighth },
@@ -143,7 +137,7 @@ export const VIOLIN_PHRASES: readonly ViolinPhrase[] = [
     ],
   },
   {
-    id: 'm4-climb',
+    id: 'page-5-climb',
     notes: [
       { pitchId: 'a3', durationMs: dottedEighth },
       { pitchId: 'c4', durationMs: sixteenth },
@@ -152,7 +146,7 @@ export const VIOLIN_PHRASES: readonly ViolinPhrase[] = [
     ],
   },
   {
-    id: 'm4-chromatic-turn',
+    id: 'page-6-chromatic-turn',
     notes: [
       { pitchId: 'g4', durationMs: dottedEighth },
       { pitchId: 'fs4', durationMs: sixteenth },
@@ -161,7 +155,7 @@ export const VIOLIN_PHRASES: readonly ViolinPhrase[] = [
     ],
   },
   {
-    id: 'm5-answer',
+    id: 'page-7-answer',
     notes: [
       { pitchId: 'f4', durationMs: dottedEighth },
       { pitchId: 'e4', durationMs: sixteenth },
@@ -170,25 +164,20 @@ export const VIOLIN_PHRASES: readonly ViolinPhrase[] = [
     ],
   },
   {
-    id: 'm5-lift',
+    id: 'page-8-lift-and-rise',
     notes: [
       { pitchId: 'g4', durationMs: quarter },
       { pitchId: 'a4', durationMs: dottedEighth },
       { pitchId: 'g4', durationMs: sixteenth },
-    ],
-  },
-  {
-    id: 'm6-rise',
-    notes: [
       { pitchId: 'f4', durationMs: dottedEighth },
       { pitchId: 'g4', durationMs: sixteenth },
       { pitchId: 'a4', durationMs: dottedEighth },
-      { pitchId: 'bb4', durationMs: sixteenth },
     ],
   },
   {
-    id: 'm6-turn',
+    id: 'page-9-rise-and-turn',
     notes: [
+      { pitchId: 'bb4', durationMs: sixteenth },
       { pitchId: 'c5', durationMs: quarter },
       { pitchId: 'a4', durationMs: tripletEighth },
       { pitchId: 'g4', durationMs: tripletEighth },
@@ -196,7 +185,7 @@ export const VIOLIN_PHRASES: readonly ViolinPhrase[] = [
     ],
   },
   {
-    id: 'm7-fall',
+    id: 'page-10-fall',
     notes: [
       { pitchId: 'e4', durationMs: dottedEighth },
       { pitchId: 'd4', durationMs: sixteenth },
@@ -205,7 +194,7 @@ export const VIOLIN_PHRASES: readonly ViolinPhrase[] = [
     ],
   },
   {
-    id: 'm7-turn',
+    id: 'page-11-turn',
     notes: [
       { pitchId: 'c4', durationMs: quarter },
       { pitchId: 'd4', durationMs: tripletEighth },
@@ -214,27 +203,22 @@ export const VIOLIN_PHRASES: readonly ViolinPhrase[] = [
     ],
   },
   {
-    id: 'm8-climb',
+    id: 'page-12-climb',
     notes: [
       { pitchId: 'a3', durationMs: dottedEighth },
       { pitchId: 'c4', durationMs: sixteenth },
       { pitchId: 'f4', durationMs: dottedEighth },
       { pitchId: 'a4', durationMs: sixteenth },
+      { pitchId: 'g4', durationMs: tripletEighth },
+      { pitchId: 'fs4', durationMs: tripletEighth },
     ],
   },
   {
-    id: 'm8-turn',
+    id: 'page-13-resolution',
     notes: [
-      { pitchId: 'g4', durationMs: tripletEighth },
-      { pitchId: 'fs4', durationMs: tripletEighth },
       { pitchId: 'g4', durationMs: tripletEighth },
       { pitchId: 'bb4', durationMs: dottedEighth },
       { pitchId: 'e4', durationMs: sixteenth },
-    ],
-  },
-  {
-    id: 'm9-resolve',
-    notes: [
       { pitchId: 'f4', durationMs: dottedHalf },
       { pitchId: 'e4', durationMs: dottedEighth },
       { pitchId: 'e4', durationMs: sixteenth },
@@ -242,13 +226,26 @@ export const VIOLIN_PHRASES: readonly ViolinPhrase[] = [
   },
 ] as const;
 
-const OPENING_NOTE_STREAM = VIOLIN_PHRASES.flatMap((phrase) => phrase.notes);
+const FULL_NOTE_STREAM = VIOLIN_FINALE_PHRASES.flatMap((phrase) => phrase.notes);
+
+/** Measures 1–5, regrouped for the listen-and-echo game. These pages are views
+ * into the canonical full stream, so shortening the game cannot alter or
+ * duplicate the finale's notes. Measure 5 ends at exclusive index 33. */
+export const VIOLIN_PHRASES: readonly ViolinPhrase[] = [
+  { id: 'game-page-1-opening', notes: FULL_NOTE_STREAM.slice(0, 4) },
+  { id: 'game-page-2-rise-and-turn', notes: FULL_NOTE_STREAM.slice(4, 10) },
+  { id: 'game-page-3-fall', notes: FULL_NOTE_STREAM.slice(10, 14) },
+  { id: 'game-page-4-turn', notes: FULL_NOTE_STREAM.slice(14, 18) },
+  { id: 'game-page-5-climb', notes: FULL_NOTE_STREAM.slice(18, 22) },
+  { id: 'game-page-6-chromatic-answer', notes: FULL_NOTE_STREAM.slice(22, 27) },
+  { id: 'game-page-7-lift', notes: FULL_NOTE_STREAM.slice(27, 33) },
+] as const;
 
 /** The score's first four sounded notes, shared by all autonomous cues. */
-export const VIOLIN_THEME_MOTIF: readonly ViolinNote[] = OPENING_NOTE_STREAM.slice(0, 4);
+export const VIOLIN_THEME_MOTIF: readonly ViolinNote[] = FULL_NOTE_STREAM.slice(0, 4);
 
 /** The first six sounded notes for the six sheet-roll note thresholds. */
-export const VIOLIN_SHEET_ROLL_MOTIF: readonly ViolinNote[] = OPENING_NOTE_STREAM.slice(0, 6);
+export const VIOLIN_SHEET_ROLL_MOTIF: readonly ViolinNote[] = FULL_NOTE_STREAM.slice(0, 6);
 
 const PITCH_BY_ID = new Map(VIOLIN_PITCHES.map((pitch) => [pitch.id, pitch]));
 const PITCH_BY_KEY = new Map(VIOLIN_PITCHES.map((pitch) => [pitch.key, pitch]));

@@ -27,6 +27,23 @@ describe('fishingModel', () => {
     expect(third.burstSpeedMultiplier).toBeGreaterThan(1);
   });
 
+  it('applies the harder tuning progressively across all three fish', () => {
+    const [first, second, third] = FRIEND_ONE_FISH_SEQUENCE;
+
+    expect(CATCH_BAR_HEIGHT).toBe(80);
+    expect(first.speedPerSecond).toBeGreaterThan(54);
+    expect(second.speedPerSecond).toBeGreaterThan(82);
+    expect(third.speedPerSecond).toBeGreaterThan(105);
+    expect(second.burstEveryMs).toBeGreaterThan(0);
+    expect([first, second, third].map((fish) => fish.catchRatePerSecond)).toEqual([
+      0.38,
+      0.34,
+      0.28,
+    ]);
+    expect(first.drainRatePerSecond).toBeLessThan(second.drainRatePerSecond);
+    expect(second.drainRatePerSecond).toBeLessThan(third.drainRatePerSecond);
+  });
+
   it('raises the catch bar while held and lowers it when released', () => {
     const fish = FRIEND_ONE_FISH_SEQUENCE[0];
     const initial = createFishingRound(fish, {
@@ -100,7 +117,7 @@ describe('fishingModel', () => {
 
     expect(getFishingCompletion(incomplete)).toBe(false);
 
-    const complete = updateFishingRound(incomplete, fish, { holdActive: false }, 1000);
+    const complete = updateFishingRound(incomplete, fish, { holdActive: false }, 50);
 
     expect(complete.progress).toBe(1);
     expect(getFishingCompletion(complete)).toBe(true);

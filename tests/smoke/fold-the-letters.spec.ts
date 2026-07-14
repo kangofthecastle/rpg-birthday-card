@@ -157,36 +157,27 @@ test('makes the boat with real gestures and arrives at the lantern clearing WITH
   // All three distinct verbs were genuinely exercised.
   expect(sawHoist && sawRoll && sawKindle).toBe(true);
 
-  // Begin observing the short test-mode arrival overlay before waiting on the
-  // destination attribute. Under full-suite load the ~230ms frame sequence can
-  // otherwise complete between those two sequential assertions.
-  const endingFramesVisible = expect(page.locator('[data-ending-frames]')).toBeVisible({
-    timeout: 15000,
-  });
-
   // The ritual carries her INTO the lantern clearing (the travelTo integration).
   await expect(page.locator('body')).toHaveAttribute('data-location-id', 'final-spot', {
     timeout: 15000,
   });
 
-  // The boat lands IN the ending: the arrival frame-sequence transition AUTO-plays
-  // (no interim walk or E-press) …
-  await endingFramesVisible;
-
-  // … then it hands off to the live, playable galaxy scene. Walk up to Omen at
-  // the warm glow and open the identity reveal — proving control is restored.
+  // The short transition itself is asserted by the skip-path test below. Once it
+  // has handed off, ____ reacts automatically before the player walks to Omen.
   const arrivalQuestion = page.getByText('Where am I? Who is that?');
   const identityQuestion = page.getByText('You... who are you?');
-  const conversationLine = page.getByText('I knew you would make it—you always do.');
-  for (let step = 0; step < 80 && !(await arrivalQuestion.isVisible().catch(() => false)); step += 1) {
+  const conversationLine = page.getByText('I knew you would make it — you always do.');
+  await expect(arrivalQuestion).toBeVisible();
+  await page.getByRole('button', { name: 'Continue' }).click();
+
+  await page.locator('canvas').first().click();
+  for (let step = 0; step < 80 && !(await identityQuestion.isVisible().catch(() => false)); step += 1) {
     await page.keyboard.down('ArrowUp');
     await page.waitForTimeout(90);
     await page.keyboard.up('ArrowUp');
     await page.keyboard.press('E', { delay: 20 });
     await page.waitForTimeout(40);
   }
-  await expect(arrivalQuestion).toBeVisible();
-  await page.getByRole('button', { name: 'Continue' }).click();
   await expect(identityQuestion).toBeVisible();
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.getByText('~~')).toBeVisible();

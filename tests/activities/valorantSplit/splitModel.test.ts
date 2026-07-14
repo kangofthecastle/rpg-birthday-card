@@ -639,6 +639,52 @@ describe('difficulty tuning (max five meaner bots)', () => {
     expect(SPLIT_CONFIG.enemy.strafePeriodMs).toBeGreaterThan(0);
   });
 
+  it('only enters and maintains an aim cycle with a real line of sight', () => {
+    // The long platform barrier spans x 405..555, y 190..234, directly between
+    // this bot and ____. A bot already aiming must cancel rather than drawing a
+    // telegraph/firing into the impenetrable prop.
+    const blocked = withState({
+      enemies: [
+        enemyAt(
+          { x: 480, y: 140 },
+          { ai: 'telegraphing', stateTimerMs: SPLIT_CONFIG.enemy.telegraphMs },
+        ),
+      ],
+      teammate: { ...createSplitState(1).teammate, present: false },
+    });
+
+    const cancelled = tickSplit(blocked, IDLE_INPUT, 16);
+
+    expect(cancelled.enemies[0].ai).toBe('advancing');
+    expect(cancelled.enemies[0].stateTimerMs).toBe(SPLIT_CONFIG.enemy.reacquireMs);
+    expect(collect(cancelled.events, 'enemy-shot')).toHaveLength(0);
+  });
+
+  it('fires promptly once a clear angle is available', () => {
+    const base = createSplitState(1);
+    let state = withState({
+      player: { ...base.player, pos: { x: 800, y: 400 }, invulnMs: 1e7 },
+      enemies: [
+        enemyAt(
+          { x: 800, y: 150 },
+          { stateTimerMs: SPLIT_CONFIG.enemy.advanceMs },
+        ),
+      ],
+      teammate: { ...base.teammate, present: false },
+    });
+    let elapsedMs = 0;
+    let shots = 0;
+
+    while (elapsedMs < 1000 && shots === 0) {
+      state = tickSplit(state, IDLE_INPUT, 16);
+      elapsedMs += 16;
+      shots += collect(state.events, 'enemy-shot').length;
+    }
+
+    expect(shots).toBe(1);
+    expect(elapsedMs).toBeLessThan(750);
+  });
+
   it('never spawns more than five bots across a long defused round (3 + 2, no extra waves)', () => {
     // Sit ____ on the spike, invulnerable, holding the defuse the entire time so
     // the two-bot ambush drops on the first tap. This is the worst case for spawn

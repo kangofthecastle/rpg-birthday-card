@@ -90,11 +90,12 @@ export const SPLIT_CONFIG = {
     // flip per shot, death restarts (not permadeath), ____ softens targets,
     // and the player has full spawn protection each round.
     bodyHp: 4,
-    speed: 80, // was 62
-    advanceMs: 700, // was 850
-    pauseMs: 170, // was 280
-    telegraphMs: 185, // was 300 — sharper reaction time
-    hitChance: 0.47, // was 0.38
+    speed: 84, // was 62
+    advanceMs: 440, // shorter interval between valid firing opportunities
+    pauseMs: 90, // commit to the shot quickly once ____ is visible
+    telegraphMs: 135, // brief but still readable aim warning
+    reacquireMs: 110, // fast LOS recheck while moving around solid cover
+    hitChance: 0.49, // still just under a coin flip per shot
     range: 580,
     // While advancing, each bot weaves side-to-side (perpendicular to its
     // approach vector) so it's harder to line up a clean headshot. This is a
@@ -1112,16 +1113,31 @@ function updateEnemies(state: SplitState, seconds: number, deltaMs: number): Spl
       }
 
       if (timer <= 0) {
-        ai = 'pausing';
-        timer = config.pauseMs;
+        // Do not begin an aiming cycle until ____ is genuinely shootable. The
+        // old state machine telegraphed through cover, then silently discarded
+        // the blocked shot and waited a full advance cycle before trying again.
+        if (canEnemyEngage(next, pos)) {
+          ai = 'pausing';
+          timer = config.pauseMs;
+        } else {
+          timer = config.reacquireMs;
+        }
       }
     } else if (ai === 'pausing') {
-      if (timer <= 0) {
+      if (!canEnemyEngage(next, pos)) {
+        ai = 'advancing';
+        timer = config.reacquireMs;
+      } else if (timer <= 0) {
         ai = 'telegraphing';
         timer = config.telegraphMs;
       }
     } else if (ai === 'telegraphing') {
-      if (timer <= 0) {
+      // ____ reaching impenetrable cover cancels the aim immediately. The bot
+      // resumes moving to reacquire a real angle instead of firing at the wall.
+      if (!canEnemyEngage(next, pos)) {
+        ai = 'advancing';
+        timer = config.reacquireMs;
+      } else if (timer <= 0) {
         // Fire at ____, then reset to advancing.
         next = resolveEnemyFire(next, index, pos);
         ai = 'advancing';
@@ -1133,6 +1149,14 @@ function updateEnemies(state: SplitState, seconds: number, deltaMs: number): Spl
   });
 
   return next;
+}
+
+function canEnemyEngage(state: SplitState, enemyPos: Vec2): boolean {
+  return (
+    state.holdFireMs <= 0 &&
+    distance(enemyPos, state.player.pos) <= SPLIT_CONFIG.enemy.range &&
+    hasLineOfSight(enemyPos, state.player.pos)
+  );
 }
 
 function resolveEnemyFire(state: SplitState, index: number, enemyPos: Vec2): SplitState {

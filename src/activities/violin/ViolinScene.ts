@@ -3,6 +3,7 @@ import { playSfx, playViolinNote } from '../../game/audio';
 import { isImageUrl } from '../../game/assetProbe';
 import { fnv1a, mulberry32 } from '../../game/rng';
 import {
+  VIOLIN_FINALE_PHRASES,
   VIOLIN_PHRASES,
   VIOLIN_PITCHES,
   getPitch,
@@ -521,7 +522,7 @@ export class ViolinScene extends Phaser.Scene {
       const note = phrase?.notes[echoedIndex];
       const pitch = note ? getPitch(note.pitchId) : undefined;
       if (pitch && note) {
-        playViolinNote(pitch.frequency, note.durationMs);
+        playViolinNote(pitch.frequency, note.durationMs, { connected: echoedIndex > 0 });
       }
       this.glowStrength = 1;
     } else if (after.lastResult === 'waver') {
@@ -562,7 +563,7 @@ export class ViolinScene extends Phaser.Scene {
           for (let i = Math.max(0, from); i < litNow; i += 1) {
             const pitch = getPitch(phrase.notes[i].pitchId);
             if (pitch) {
-              playViolinNote(pitch.frequency, phrase.notes[i].durationMs);
+              playViolinNote(pitch.frequency, phrase.notes[i].durationMs, { connected: i > 0 });
             }
           }
         }
@@ -596,8 +597,8 @@ export class ViolinScene extends Phaser.Scene {
     this.warmStage = WARM_STAGES.length - 1;
     this.spawnFinaleMotes();
 
-    // The whole piece she just played pours back through as one continuous line.
-    // Every note of every phrase is scheduled on the finale clock; the model
+    // The opening she just played blooms into the complete passage as one
+    // continuous line. Every note is scheduled on the finale clock; the model
     // (driven in update) pages the staff and lights each mark to match. The
     // richer swell blooms underneath — retriggered at phrase boundaries so the
     // warm layer carries the entire replay, never thinning out.
@@ -614,7 +615,7 @@ export class ViolinScene extends Phaser.Scene {
       }
     }
 
-    for (const note of timeline) {
+    for (const [timelineIndex, note] of timeline.entries()) {
       const pitch = getPitch(note.pitchId);
       if (!pitch) {
         continue;
@@ -622,7 +623,7 @@ export class ViolinScene extends Phaser.Scene {
       const frequency = pitch.frequency;
       const durationMs = note.durationMs;
       this.time.delayedCall(note.startMs, () => {
-        playViolinNote(frequency, durationMs + 160);
+        playViolinNote(frequency, durationMs + 160, { connected: timelineIndex > 0 });
         this.glowStrength = 1;
       });
     }
@@ -1438,7 +1439,10 @@ export class ViolinScene extends Phaser.Scene {
   // player reads the key directly on the note. The longest phrase has six notes,
   // so six labels cover every phrase. They live inside the tilted sheet.
   private createNoteLabels(): void {
-    const max = VIOLIN_PHRASES.reduce((n, phrase) => Math.max(n, phrase.notes.length), 0);
+    const max = [...VIOLIN_PHRASES, ...VIOLIN_FINALE_PHRASES].reduce(
+      (n, phrase) => Math.max(n, phrase.notes.length),
+      0,
+    );
     this.noteKeyLabels = Array.from({ length: max }, () => {
       const label = this.add
         .text(0, 0, '', {

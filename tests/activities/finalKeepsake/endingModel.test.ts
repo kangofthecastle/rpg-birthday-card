@@ -15,28 +15,8 @@ describe('ending copy', () => {
     expect(ENDING_KEEPSAKE_ID).toBe('ending-light');
   });
 
-  it('keeps the two final letters short and in ____-then-____ order', () => {
-    expect(FINAL_ENDING_LETTERS).toHaveLength(2);
-    expect(FINAL_ENDING_LETTERS[0][0].speaker).toBe('____');
-    expect(FINAL_ENDING_LETTERS[1][0].speaker).toBe('____');
-    // Restraint: neither letter runs long.
-    for (const letter of FINAL_ENDING_LETTERS) {
-      expect(letter.length).toBeLessThanOrEqual(2);
-      for (const line of letter) {
-        expect(line.text.length).toBeLessThan(160);
-      }
-    }
-  });
-
-  it('keeps ____’s terminal letter empty until her final copy is supplied', () => {
-    expect(FINAL_ENDING_LETTERS[0]).toEqual([{ speaker: '____', text: '' }]);
-  });
-
-  it('answers the quiet question in ____’s letter', () => {
-    const friendtwo = FINAL_ENDING_LETTERS[1].map((line) => line.text).join(' ');
-    expect(friendtwo.toLowerCase()).toContain('washes away');
-    expect(friendtwo.toLowerCase()).toContain('going to be okay');
-    expect(FINAL_ENDING_LETTERS[1]).toHaveLength(1);
+  it('contains no starter or placeholder terminal letters', () => {
+    expect(FINAL_ENDING_LETTERS).toEqual([]);
   });
 
   it('keeps the happy-birthday line lowercase and quiet', () => {

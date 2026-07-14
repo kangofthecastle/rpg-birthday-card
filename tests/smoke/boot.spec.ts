@@ -51,6 +51,7 @@ test('cold open plays, then lands in ____’s room with the unpowered PC and ___
   await expect(page.locator('body')).toHaveAttribute('data-intro-pc-buzz', 'played', {
     timeout: 2500,
   });
+  await expect(page.locator('body')).toHaveAttribute('data-intro-pc-glitch', 'played');
 
   // The PC is dark and fails to boot, then ____'s phone message supplies the
   // first destination. The room was rearranged

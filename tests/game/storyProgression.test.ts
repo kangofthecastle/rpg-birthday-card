@@ -48,7 +48,10 @@ describe('canonical story progression', () => {
 
   it('gates destinations on their canonical prerequisites', () => {
     let state = createInitialRunState('recipient-house');
-    expect(getStoryTravelBlock('main-outside', state)).toContain('PC');
+    expect(getStoryTravelBlock('main-outside', state)).toEqual({
+      text: 'Your PC is humming. Best check on it.',
+      portraitId: 'inspect-recipient-pc',
+    });
 
     state = markBeatSeen(state, FRIEND_ONE_TEXT_READ_BEAT_ID);
     expect(getStoryTravelBlock('main-outside', state)).toBeUndefined();

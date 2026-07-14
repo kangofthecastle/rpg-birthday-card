@@ -73,6 +73,7 @@ async function walkToViolin(page: import('@playwright/test').Page): Promise<void
 // through the test-mode skip button (mirrors the friendone/valorant smokes), seeding
 // the two friend keepsakes so the violin unlocks (as ending.spec does).
 test('plays the piece on the stand through test mode', async ({ page }) => {
+  test.setTimeout(60_000);
   await page.goto(
     '/?testMode=1&locationId=recipient-house&spawnId=near-pc&seedKeepsakes=glowing-koi-scale,defused-spike-charm',
   );
@@ -137,8 +138,8 @@ test('plays the piece on the stand through test mode', async ({ page }) => {
 // capture swallowed the echo before the violin's separate Phaser game saw it).
 // The scene mirrors its model state onto the panel dataset (data-violin-state /
 // -phrase / -echo) so the test waits deterministically under CPU contention
-// rather than screenshot-matching. Phrase 1 is the score's two-note opening
-// A G = keys L K; she plays every note herself (no takeover), then a short
+// rather than screenshot-matching. Phrase 1 is the score's four-note opening
+// A G F G = keys L K H K; she plays every note herself (no takeover), then a short
 // handoff beat flips the phrase index as phrase 2 begins.
 test('echoes phrase 1 on the mapped keys, recovering from a wrong note', async ({
   page,
@@ -191,8 +192,10 @@ test('echoes phrase 1 on the mapped keys, recovering from a wrong note', async (
   await expect(panel).toHaveAttribute('data-violin-state', 'echo', { timeout: 20000 });
   await expect(panel).toHaveAttribute('data-violin-phrase', '0');
 
-  // Echo the exact opening figure (A G = L K), one note at a time, waiting on
-  // the echo cursor between presses. The second note lands the whole phrase.
+  // Echo the exact opening figure (A G F G = L K H K), one note at a time,
+  // waiting on the echo cursor between presses. The fourth note lands the page.
   await pressUntil('KeyL', 'data-violin-echo', '1');
+  await pressUntil('KeyK', 'data-violin-echo', '2');
+  await pressUntil('KeyH', 'data-violin-echo', '3');
   await pressUntil('KeyK', 'data-violin-phrase', '1');
 });

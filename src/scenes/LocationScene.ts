@@ -2987,12 +2987,11 @@ export class LocationScene extends Phaser.Scene {
     this.spawnLightMotes(tune);
   }
 
-  // Post-violin awakening for a dressed interior (recipient-house): golden light
-  // shafts stream through the window and the exit doormat shines, once every
-  // keepsake is held. Applied statically on entry (animate:false) and
-  // dynamically the instant the violin completes (animate:true, a ~1.5s fade-in
-  // so the beat lands while ____ is still at the stand). Idempotent per scene
-  // life via `interiorAwakened`; scoped to dressed rooms and the final unlock.
+  // Post-violin awakening for dressed interiors: every room gets golden window
+  // shafts, while only ____'s room also gets the open-edge spill and awakened
+  // exit doormat. Applied statically on entry (animate:false) and dynamically
+  // the instant the violin completes (animate:true, a ~1.5s fade-in so the beat
+  // lands while ____ is still at the stand). Idempotent per scene life.
   private applyInteriorAwakening(options: { animate: boolean }): void {
     if (this.interiorAwakened) {
       return;
@@ -3015,17 +3014,22 @@ export class LocationScene extends Phaser.Scene {
       x1: this.mapDims.width - inset * tile,
       y1: this.mapDims.height - inset * tile,
     };
+    const awakenDoorway = this.location.id === 'recipient-house';
     renderInteriorAwakening(
       this,
       this.dressing,
-      this.exits.map((exit) => ({
-        x: exit.x,
-        y: exit.y,
-        width: exit.width,
-        height: exit.height,
-      })),
+      awakenDoorway
+        ? this.exits.map((exit) => ({
+            x: exit.x,
+            y: exit.y,
+            width: exit.width,
+            height: exit.height,
+          }))
+        : [],
       this.projection.movementOrigin,
-      { fadeInMs: options.animate ? 1500 : 0, floorMapRect },
+      awakenDoorway
+        ? { fadeInMs: options.animate ? 1500 : 0, floorMapRect }
+        : { fadeInMs: options.animate ? 1500 : 0 },
     );
     // Mirror onto the DOM so smoke tests can assert the awakening appeared
     // (Phaser objects are not queryable from Playwright).

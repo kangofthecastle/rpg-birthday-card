@@ -4813,6 +4813,7 @@ export class LocationScene extends Phaser.Scene {
       return;
     }
     await this.pauseForDialogue([
+      { speaker: '____', text: 'Where am I? Who is that?', portraitId: 'portrait-recipient' },
       { speaker: '____', text: 'You... who are you?', portraitId: 'portrait-recipient' },
       { speaker: 'Omen', text: '~~', portraitId: 'portrait-omen' },
     ]);

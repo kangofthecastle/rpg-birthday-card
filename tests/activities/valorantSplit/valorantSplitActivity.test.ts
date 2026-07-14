@@ -57,7 +57,7 @@ describe('valorantSplitActivity', () => {
         released = true;
       });
 
-      expect(document.body.textContent).toContain('Omen? Don’t think I’ve ever seen you play him');
+      expect(document.body.textContent).toContain('Omen? Don’t think I’ve ever seen you play him.');
       expect(released).toBe(false);
       expect(playSfx).not.toHaveBeenCalledWith('sfx-omen-void');
 

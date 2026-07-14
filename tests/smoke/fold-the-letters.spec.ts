@@ -175,15 +175,18 @@ test('makes the boat with real gestures and arrives at the lantern clearing WITH
 
   // … then it hands off to the live, playable galaxy scene. Walk up to Omen at
   // the warm glow and open the identity reveal — proving control is restored.
+  const arrivalQuestion = page.getByText('Where am I? Who is that?');
   const identityQuestion = page.getByText('You... who are you?');
   const conversationLine = page.getByText('I knew you would make it—you always do.');
-  for (let step = 0; step < 80 && !(await identityQuestion.isVisible().catch(() => false)); step += 1) {
+  for (let step = 0; step < 80 && !(await arrivalQuestion.isVisible().catch(() => false)); step += 1) {
     await page.keyboard.down('ArrowUp');
     await page.waitForTimeout(90);
     await page.keyboard.up('ArrowUp');
     await page.keyboard.press('E', { delay: 20 });
     await page.waitForTimeout(40);
   }
+  await expect(arrivalQuestion).toBeVisible();
+  await page.getByRole('button', { name: 'Continue' }).click();
   await expect(identityQuestion).toBeVisible();
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.getByText('~~')).toBeVisible();

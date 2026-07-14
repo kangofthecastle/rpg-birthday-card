@@ -115,7 +115,7 @@ export function createValorantSplitActivity(
         await showDialogue([
           {
             speaker: '____',
-            text: 'Omen? Don’t think I’ve ever seen you play him',
+            text: 'Omen? Don’t think I’ve ever seen you play him.',
             portraitId: 'portrait-recipient',
           },
         ]);

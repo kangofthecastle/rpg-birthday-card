@@ -41,9 +41,11 @@ test('cold open plays, then lands in ____’s room with the unpowered PC and ___
   // Cold-open intro beat.
   await expect(page.getByText('Where am I?')).toBeVisible();
   await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(page.getByText("somebody's version of it")).toBeVisible();
+  await expect(page.getByText('This is my room?')).toBeVisible();
   await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(page.getByText('knew where everything was supposed to go')).toBeVisible();
+  await expect(page.getByText('Or... somebody’s version of it.')).toBeVisible();
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByText('Whoever put me here knows me!')).toBeVisible();
   await page.getByRole('button', { name: 'Continue' }).click();
 
   // The PC is dark and fails to boot, then ____'s phone message supplies the
@@ -66,11 +68,11 @@ test('cold open plays, then lands in ____’s room with the unpowered PC and ___
   }
   expect(pcBeatShown).toBe(true);
   await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(page.getByText('Nothing. It will not even turn on.')).toBeVisible();
+  await expect(page.getByText('Nothing. It won’t even turn on.')).toBeVisible();
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.getByText('1 NEW MESSAGE')).toBeVisible();
   await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(page.getByText(/hey!! you awake\? come over when you can/)).toBeVisible();
+  await expect(page.getByText('Heyy! Happy birthday! you still coming over today?')).toBeVisible();
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.locator('body')).toHaveAttribute('data-phone-notification-count', '1');
 
@@ -79,7 +81,7 @@ test('cold open plays, then lands in ____’s room with the unpowered PC and ___
   // and must not schedule another notification or replay ____'s message.
   await canvas.click();
   await page.keyboard.press('E', { delay: 25 });
-  await expect(page.getByText('Still nothing. The PC is still dark.')).toBeVisible();
+  await expect(page.getByText('Still nothing. The screen is dark.')).toBeVisible();
   await expect(page.getByText('1 NEW MESSAGE')).toHaveCount(0);
   await expect(page.locator('body')).toHaveAttribute('data-phone-notification-count', '1');
   await page.getByRole('button', { name: 'Continue' }).click();
@@ -95,7 +97,7 @@ test('cold open plays, then lands in ____’s room with the unpowered PC and ___
   // egg; the mango corner moved south-east, so the photo wall is the reliable
   // target from the desk.)
   await canvas.click();
-  const eggPhrases = ['photographs', 'the next good day', 'Mango sticky rice'];
+  const eggPhrases = ['photographs', 'At the end of the day', 'Mango sticky rice'];
   const dialogueText = page.locator('.dialogue-box__text');
 
   // Hold Up+Right continuously and poll, rather than pulsing short taps: under
@@ -159,4 +161,41 @@ test('cold open can be advanced by mouse clicks alone', async ({ page }) => {
 
   // The Phaser game is revealed, same as the keyboard path.
   await expect(page.locator('canvas')).toBeVisible();
+});
+
+test('the hidden password command launches the isolated cards-mode room', async ({ page }) => {
+  await page.goto('/');
+
+  const bootScreen = page.locator('.boot-screen');
+  const prompt = page.locator('.boot-screen__prompt');
+  await expect(bootScreen).toBeVisible();
+
+  // Four lines, four fast-forwards: stop at the final gate instead of letting
+  // an ordinary fifth key launch the story run.
+  for (let line = 0; line < 4; line += 1) {
+    await page.keyboard.press('Enter');
+  }
+  await expect(prompt).toBeVisible();
+
+  await page.keyboard.press('/');
+  await page.keyboard.press('p');
+  await expect(page.locator('.boot-screen__completion')).toHaveText('assword');
+  await expect(page.locator('.boot-screen__tab-hint')).toBeVisible();
+
+  await page.keyboard.press('Tab');
+  await expect(page.locator('.boot-screen__lines')).toContainText('/password\npassword:');
+  await page.keyboard.type('pewpew');
+
+  await expect(bootScreen).toHaveCount(0);
+  await expect(page.locator('canvas')).toBeVisible();
+  await expect(page.locator('body')).toHaveAttribute('data-run-mode', 'cards');
+  await expect(page.locator('body')).toHaveAttribute('data-location-id', 'recipient-house');
+  await expect(page.locator('body')).toHaveAttribute('data-pc-powered', 'true');
+  await expect(page.locator('body')).toHaveAttribute('data-interior-awakened', 'true');
+
+  const letters = page.locator('.collection-panel');
+  await expect(letters).toContainText('____’s Letter');
+  await expect(letters).toContainText('____’s Letter');
+  await expect(letters).toContainText('The Piece You Finally Played');
+  await expect(page.getByText('Where am I?')).toHaveCount(0);
 });

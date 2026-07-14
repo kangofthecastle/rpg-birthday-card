@@ -269,9 +269,6 @@ interface LocationSceneData {
   readonly autoStartActivityId?: string;
 }
 
-// The water remains impassable until ____ completes the folding ritual.
-const FINAL_LOCKED_LINE = "There's no way across the water. Not like this.";
-
 // Player yardstick (mirrors roomRenderer): ____ reads ~0.88 of her frame.
 const PLAYER_VISUAL_HEIGHT_PX = RECIPIENT_SPRITE.frameHeight * RECIPIENT_SPRITE.scale * 0.88;
 
@@ -973,6 +970,7 @@ export class LocationScene extends Phaser.Scene {
     const storyBlock = getStoryTravelBlock(edgeExit.destinationLocationId, this.state);
     if (storyBlock) {
       this.nudgeAwayFromEdge(edgeExit.edge);
+      playSfx('sfx-story-hum', { volume: 0.22 });
       await this.pauseForDialogue([{ text: storyBlock }]);
       this.edgeCooldownUntil = this.time.now + EDGE_ARRIVAL_COOLDOWN_MS;
       this.edgeTriggerBusy = false;
@@ -983,9 +981,6 @@ export class LocationScene extends Phaser.Scene {
     // the clearing never lets ____ walk across the water.
     if (edgeExit.requiresFinalUnlock && !isBoatFolded(this.state)) {
       this.nudgeAwayFromEdge(edgeExit.edge);
-      await this.pauseForDialogue([
-        { speaker: '____', text: FINAL_LOCKED_LINE, portraitId: 'portrait-recipient' },
-      ]);
       this.edgeCooldownUntil = this.time.now + EDGE_ARRIVAL_COOLDOWN_MS;
       this.edgeTriggerBusy = false;
       return;
@@ -2816,7 +2811,7 @@ export class LocationScene extends Phaser.Scene {
     await this.pauseForDialogue([
       {
         speaker: '____',
-        text: 'Did the violin just make noise on its own?',
+        text: 'Did the violin just play on its own?',
         portraitId: 'portrait-recipient',
       },
     ]);
@@ -4681,11 +4676,11 @@ export class LocationScene extends Phaser.Scene {
     if (exit) {
       const storyBlock = getStoryTravelBlock(exit.destinationLocationId, this.state);
       if (storyBlock) {
+        playSfx('sfx-story-hum', { volume: 0.22 });
         await this.pauseForDialogue([{ text: storyBlock }]);
         return;
       }
       if (exit.requiresFinalUnlock && !isFinalSpotUnlocked(this.state)) {
-        await this.pauseForDialogue([{ text: FINAL_LOCKED_LINE }]);
         return;
       }
 

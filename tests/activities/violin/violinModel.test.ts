@@ -24,6 +24,7 @@ import {
   playbackDurationMs,
   playbackLitCount,
   pressViolinKey,
+  VIOLIN_FINALE_CAPTION,
   type ViolinState,
 } from '../../../src/activities/violin/violinModel';
 
@@ -77,6 +78,10 @@ function handoffToNextEcho(state: ViolinState): ViolinState {
 }
 
 describe('melody data', () => {
+  it('uses the edited story caption for the completed-piece finale', () => {
+    expect(VIOLIN_FINALE_CAPTION).toBe('Follow the light');
+  });
+
   it('transcribes measures 1–9 from the supplied score in short musical phrases', () => {
     expect(VIOLIN_PHRASES.map((phrase) => phrase.notes.map((note) => note.pitchId))).toEqual([
       ['a4', 'g4'],

@@ -17,6 +17,7 @@ import {
   getPhrase,
   litNoteCount,
   pressViolinKey,
+  VIOLIN_FINALE_CAPTION,
   type ViolinState,
 } from './violinModel';
 import { createViolinModes, type ViolinModes } from './violinModes';
@@ -118,7 +119,6 @@ const PRACTICE_TRAIL_MS =
 const WINDOW = { x: 14, y: 52, w: 66, h: 150 } as const;
 const WINDOW_LIGHT = { x: WINDOW.x + WINDOW.w / 2, y: WINDOW.y + WINDOW.h * 0.62 };
 
-const CAPTION_TEXT = 'Follow the light';
 const CAPTION_FADE_MS = 1400;
 const CAPTION_HOLD_MS = 1800;
 
@@ -520,8 +520,8 @@ export class ViolinScene extends Phaser.Scene {
       const phrase = getPhrase(before);
       const note = phrase?.notes[echoedIndex];
       const pitch = note ? getPitch(note.pitchId) : undefined;
-      if (pitch) {
-        playViolinNote(pitch.frequency, 640);
+      if (pitch && note) {
+        playViolinNote(pitch.frequency, note.durationMs);
       }
       this.glowStrength = 1;
     } else if (after.lastResult === 'waver') {
@@ -636,7 +636,7 @@ export class ViolinScene extends Phaser.Scene {
     this.helperText.setText('');
     this.titleText.setText('');
 
-    this.captionText.setText(CAPTION_TEXT);
+    this.captionText.setText(VIOLIN_FINALE_CAPTION);
     this.tweens.add({
       targets: this.captionText,
       alpha: 1,

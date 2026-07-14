@@ -24,19 +24,19 @@ const RECIPIENT_PC_FIRST_MESSAGE: readonly DialogueLine[] = [
   { speaker: '____', text: 'Come on...', portraitId: 'portrait-recipient' },
   {
     speaker: '____',
-    text: 'Nothing. It will not even turn on.',
+    text: 'Nothing. It won’t even turn on.',
     portraitId: 'portrait-recipient',
   },
   { text: '1 NEW MESSAGE', portraitTreatment: 'phone' },
   {
     speaker: '____',
-    text: "hey!! you awake? come over when you can — I've got the pond game open and saved you a seat. we're catching another koi today 🐟",
+    text: 'Heyy! Happy birthday! you still coming over today?',
     portraitId: 'portrait-friendone',
   },
 ];
 
 const RECIPIENT_PC_STILL_DARK: readonly DialogueLine[] = [
-  { speaker: '____', text: 'Still nothing. The PC is still dark.', portraitId: 'portrait-recipient' },
+  { text: 'Still nothing. The screen is dark.', portraitId: 'inspect-recipient-pc' },
 ];
 
 const ACTIVITY_COMPLETION_STORY: Readonly<Record<string, ActivityCompletionStory>> = {
@@ -48,6 +48,7 @@ const ACTIVITY_COMPLETION_STORY: Readonly<Record<string, ActivityCompletionStory
         text: "____ said we should come over for a LAN party. Let's go!",
         portraitId: 'portrait-friendone',
       },
+      { speaker: '____', text: 'So down!', portraitId: 'portrait-recipient' },
     ],
   },
   [RETAKE_ACTIVITY_ID]: {
@@ -61,7 +62,7 @@ const ACTIVITY_COMPLETION_STORY: Readonly<Record<string, ActivityCompletionStory
     worldDialogue: [
       {
         speaker: '____',
-        text: '...wait. I know this song!',
+        text: '…wait. I know this song!',
         portraitId: 'portrait-recipient',
       },
     ],

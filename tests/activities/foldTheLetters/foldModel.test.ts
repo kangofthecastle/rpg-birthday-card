@@ -4,6 +4,8 @@ import {
   applyKindle,
   applyRoll,
   assembledComponentCount,
+  BOATIGAMI_COMPLETE_LINE,
+  BOATIGAMI_OPENING_LINE,
   commitFold,
   componentProgress,
   createRitualState,
@@ -22,12 +24,14 @@ import {
   isCatchingWind,
   isComplete,
   KINDLE_TARGET_MS,
+  LANTERN_STAVES,
   releaseFold,
   ritualProgress,
   rollNoteIndex,
   ROLL_NOTE_COUNT,
   ROLL_TARGET,
   SAIL_FOLD_CREASE,
+  SAIL_FACE_LINES,
   setFoldProgress,
   setHoistProgress,
   willCommitFold,
@@ -69,6 +73,40 @@ function assembleLantern(start: RitualState): RitualState {
 }
 
 describe('keepsake ritual model — components & verbs', () => {
+  it('keeps the edited Boatigami narrative prose in ritual order', () => {
+    expect(BOATIGAMI_OPENING_LINE).toBe(
+      'Three keepsakes, carried a long way. Give them to the water.',
+    );
+    expect(HULL_CREASES.map((crease) => crease.snippet)).toEqual([
+      '',
+      '',
+      '',
+    ]);
+    expect(FOLD_COMPONENTS[0].assembledLine).toBe(
+      'The hull holds its shape. Her words, pressed into something that floats.',
+    );
+    expect(SAIL_FOLD_CREASE.snippet).toBe('');
+    expect(SAIL_FACE_LINES).toEqual([
+      '',
+      '',
+      '',
+      '',
+    ]);
+    expect(FOLD_COMPONENTS[1].assembledLine).toBe(
+      'The sail catches, and holds. It has your back the whole way.',
+    );
+    expect(LANTERN_STAVES).toEqual([
+      '𝄞 the piece, finally played',
+      'played once, all the way through',
+    ]);
+    expect(FOLD_COMPONENTS[2].assembledLine).toBe(
+      'The music curls into a lantern, and the light comes up through the notes.',
+    );
+    expect(BOATIGAMI_COMPLETE_LINE).toBe(
+      'The boat opens out, dimensional and whole. Its lantern catches.',
+    );
+  });
+
   it('orders the three components with their own verbs and sources', () => {
     expect(FOLD_COMPONENTS.map((c) => c.id)).toEqual(['hull', 'sail', 'lantern']);
     expect(FOLD_COMPONENTS.map((c) => c.verb)).toEqual(['fold', 'hoist', 'roll']);

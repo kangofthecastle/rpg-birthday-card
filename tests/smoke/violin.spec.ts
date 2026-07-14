@@ -1,4 +1,28 @@
 import { expect, test } from '@playwright/test';
+import { VIOLIN_SAMPLE_URLS } from '../../src/game/violinSamples';
+
+test('ships decodable sampled violin anchors', async ({ page }) => {
+  await page.goto('/?testMode=1');
+
+  const decoded = await page.evaluate(async (urls) => {
+    const context = new AudioContext();
+    const results: Array<{ duration: number; ok: boolean; url: string }> = [];
+    for (const url of urls) {
+      try {
+        const response = await fetch(url);
+        const buffer = await context.decodeAudioData(await response.arrayBuffer());
+        results.push({ duration: buffer.duration, ok: response.ok, url });
+      } catch {
+        results.push({ duration: 0, ok: false, url });
+      }
+    }
+    await context.close();
+    return results;
+  }, [...VIOLIN_SAMPLE_URLS]);
+
+  expect(decoded.filter((sample) => !sample.ok)).toEqual([]);
+  expect(Math.min(...decoded.map((sample) => sample.duration))).toBeGreaterThan(0.45);
+});
 
 async function dismissContinues(
   page: import('@playwright/test').Page,
@@ -62,7 +86,7 @@ test('plays the piece on the stand through test mode', async ({ page }) => {
 
   // The invitation belongs to the violin, not its interaction hotspot: the
   // fragment plays by itself and ____ acknowledges it immediately afterward.
-  await expect(page.getByText('Did the violin just make noise on its own?')).toBeVisible({
+  await expect(page.getByText('Did the violin just play on its own?')).toBeVisible({
     timeout: 10000,
   });
   await page.getByRole('button', { name: 'Continue' }).click();
@@ -99,9 +123,9 @@ test('plays the piece on the stand through test mode', async ({ page }) => {
   await expect(rewardPaper.getByRole('img', { name: /____’s handwritten sheet music/ })).toBeVisible();
   await expect(rewardPaper).toContainText('Do You Hear the People Sing?');
   await expect(rewardPaper).not.toContainText('completed sheet music');
-  await expect(page.getByText('...wait. I know this song!')).toHaveCount(0);
+  await expect(page.getByText('…wait. I know this song!')).toHaveCount(0);
   await rewardPaper.getByRole('button', { name: 'Continue' }).click();
-  await expect(page.getByText('...wait. I know this song!')).toBeVisible();
+  await expect(page.getByText('…wait. I know this song!')).toBeVisible();
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.locator('.collection-panel')).toContainText(
     'The Piece You Finally Played',

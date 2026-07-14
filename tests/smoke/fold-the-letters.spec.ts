@@ -176,7 +176,7 @@ test('makes the boat with real gestures and arrives at the lantern clearing WITH
   // … then it hands off to the live, playable galaxy scene. Walk up to Omen at
   // the warm glow and open the identity reveal — proving control is restored.
   const identityQuestion = page.getByText('You... who are you?');
-  const conversationLine = page.getByText('make it out this far');
+  const conversationLine = page.getByText('I knew you would make it—you always do.');
   for (let step = 0; step < 80 && !(await identityQuestion.isVisible().catch(() => false)); step += 1) {
     await page.keyboard.down('ArrowUp');
     await page.waitForTimeout(90);

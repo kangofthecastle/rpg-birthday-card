@@ -49,6 +49,8 @@ export const FINALE_PHRASE_GAP_MS = 240;
 /** Hold after the finale's last note (swell ringing, golden light at full pour)
  * before the piece is marked complete. */
 export const FINALE_HOLD_MS = 2600;
+/** Story-facing caption revealed by the completed piece's golden-light finale. */
+export const VIOLIN_FINALE_CAPTION = 'Follow the light';
 
 export interface ViolinState {
   /** Index of the phrase currently in play (0..phrases.length - 1). */

@@ -28,10 +28,15 @@ describe('ending copy', () => {
     }
   });
 
+  it('keeps ____’s terminal letter empty until her final copy is supplied', () => {
+    expect(FINAL_ENDING_LETTERS[0]).toEqual([{ speaker: '____', text: '' }]);
+  });
+
   it('answers the quiet question in ____’s letter', () => {
     const friendtwo = FINAL_ENDING_LETTERS[1].map((line) => line.text).join(' ');
     expect(friendtwo.toLowerCase()).toContain('washes away');
     expect(friendtwo.toLowerCase()).toContain('going to be okay');
+    expect(FINAL_ENDING_LETTERS[1]).toHaveLength(1);
   });
 
   it('keeps the happy-birthday line lowercase and quiet', () => {

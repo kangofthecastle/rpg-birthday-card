@@ -23,62 +23,57 @@ import type { DialogueLine } from './types';
 export const FINALE_CONVERSATION: readonly DialogueLine[] = [
   {
     speaker: '____',
-    text: 'There you are. Knew you’d make it out this far — you always do, even when the map’s held together with tape.',
+    text: 'I knew you would make it—you always do.',
     portraitId: 'portrait-friend-b',
   },
   {
     speaker: '____',
-    text: '____? You’re… out here? At the actual edge of everything?',
+    text: '____? It was you?',
     portraitId: 'portrait-recipient',
   },
   {
     speaker: '____',
-    text: 'Somebody had to hold the seat for you. Same as always.',
+    text: 'I wanted to make sure there was always a place waiting for you. Same as always.',
     portraitId: 'portrait-friend-b',
   },
   {
     speaker: '____',
-    text: 'Did you make all of this? The roads, the houses… the whole little world?',
+    text: 'Did you make all of this? The roads, the houses… the whole world?',
     portraitId: 'portrait-recipient',
   },
   {
     speaker: '____',
-    text: 'Guilty. Every road, every dumb signpost. ____ helped — she’s better at the quiet parts than I am.',
+    text: 'Everything, even down to the blades of grass. ____ helped a bit too.',
     portraitId: 'portrait-friend-b',
   },
   {
     speaker: '____',
-    text: 'Figured if I built you a whole world, you’d actually have to walk through it. And look at that — you cleared every round.',
+    text: 'Figured if I built you a whole world, you’d have to take a moment…',
     portraitId: 'portrait-friend-b',
   },
   {
     speaker: '____',
-    text: 'It wasn’t really a game, though. Some of this year was… a lot.',
+    text: '…and reflect on how much people care about you.',
+    portraitId: 'portrait-friend-b',
+  },
+  {
+    speaker: '____',
+    text: 'This wasn’t just a game, though. Some of this year was… a lot.',
     portraitId: 'portrait-recipient',
   },
   {
     speaker: '____',
-    text: 'Yeah. I know. You planted anyway. Retook the site anyway. Sat out on that dock with ____ like there was all the time in the world.',
+    text: 'I know. As we grow older, life blurs by. It gets harder to notice the little things. Just for a moment, I wanted to create the illusion that…',
     portraitId: 'portrait-friend-b',
   },
   {
     speaker: '____',
-    text: 'And you played the piece — the whole thing, no stumbles, that last bar just ringing out into the quiet. A year you kept meaning to, and tonight you did.',
+    text: '…we had all the time in the world.',
     portraitId: 'portrait-friend-b',
   },
   {
     speaker: '____',
-    text: 'You heard that?',
-    portraitId: 'portrait-recipient',
-  },
-  {
-    speaker: '____',
-    text: 'Course I did. I was in the boat the whole way. We both were.',
-    portraitId: 'portrait-friend-b',
-  },
-  {
-    speaker: '____',
-    text: 'Anyway — I’m not the only one who wanted to say something tonight. Everyone did. Go on — read what they wrote you.',
+    text: 'Anyway — I’m not the only one who wanted to say something. Everyone did. Go on — read what they wrote you.',
     portraitId: 'portrait-friend-b',
   },
 ];

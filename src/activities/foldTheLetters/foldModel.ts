@@ -84,6 +84,12 @@ export interface FoldComponent {
 
 // --- content ---------------------------------------------------------------
 
+/** Story-facing prose that bookends the Boatigami ritual. */
+export const BOATIGAMI_OPENING_LINE =
+  'Three keepsakes, carried a long way. Give them to the water.';
+export const BOATIGAMI_COMPLETE_LINE =
+  'The boat opens out, dimensional and whole. Its lantern catches.';
+
 /**
  * ____'s letter, folded into the hull in THREE continuous folds. Each fold's
  * `fromShape` is exactly the previous fold's `toShape`, and each silhouette is
@@ -150,7 +156,7 @@ export const SAIL_FACE_LINES: readonly string[] = [
 /** ____'s sheet music — the piece she just played. These are the note letters
  * that ring out (plucked) one by one as the page rolls into the lantern. */
 export const LANTERN_STAVES: readonly string[] = [
-  '𝄞  the piece, finally played',
+  '𝄞 the piece, finally played',
   'played once, all the way through',
 ];
 

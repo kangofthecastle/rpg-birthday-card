@@ -6,6 +6,8 @@ import {
   applyKindle,
   applyRoll,
   assembledComponentCount,
+  BOATIGAMI_COMPLETE_LINE,
+  BOATIGAMI_OPENING_LINE,
   commitFold,
   componentProgress,
   createRitualState,
@@ -108,7 +110,7 @@ export const foldTheLettersActivity: ActivityModule = {
         <div class="activity-shell__viewport">
           <canvas class="fold-stage__canvas" data-fold-canvas></canvas>
         </div>
-        <p class="activity-shell__controls" data-fold-hint>Three keepsakes, carried a long way. Give them to the water.</p>
+        <p class="activity-shell__controls" data-fold-hint>${BOATIGAMI_OPENING_LINE}</p>
         ${
           isTestMode()
             ? '<div class="activity-shell__actions"><button type="button" data-fold-test-complete>Fold the boat</button></div>'
@@ -497,7 +499,7 @@ export const foldTheLettersActivity: ActivityModule = {
       }
       sailingAway = true;
       syncDataAttrs();
-      setHint('The boat opens out, dimensional and whole. Its lantern catches.');
+      setHint(BOATIGAMI_COMPLETE_LINE);
       playSfx('sfx-boat-expand');
       await wait(timing.expandMs);
       if (finished) {

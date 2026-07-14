@@ -11,12 +11,12 @@ test('completes RETAKE.EXE at ____ house through test mode', async ({ page }) =>
   await expect(page.locator('body')).toHaveAttribute('data-friendone-mode', 'waiting');
 
   // ____ stays beside ____ through the empty-house exchange. Her walk begins
-  // only after ____'s final "He did say LAN party..." line is dismissed.
+  // only after ____'s final "The LAN party waits for no one!!!" line is dismissed.
   for (let i = 0; i < 3; i += 1) {
     await page.getByRole('button', { name: 'Continue' }).click();
     await expect(page.locator('body')).toHaveAttribute('data-friendone-mode', 'waiting');
   }
-  await expect(page.getByText('He did say LAN party...')).toBeVisible();
+  await expect(page.getByText('The LAN party waits for no one!!!')).toBeVisible();
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.locator('body')).toHaveAttribute('data-friendone-mode', 'arriving');
 
@@ -34,7 +34,7 @@ test('completes RETAKE.EXE at ____ house through test mode', async ({ page }) =>
 
   await page.getByRole('button', { name: 'Defuse the spike' }).click();
 
-  await expect(page.getByText(/Sorry I had to leave before the round ended/)).toBeVisible();
+  await expect(page.getByText(/Sorry I had to bail before the round ended/)).toBeVisible();
   await expect(page.locator('.collection-panel')).not.toContainText('____’s Letter');
   await page.getByRole('button', { name: 'Continue' }).click();
 

@@ -23,17 +23,13 @@ export const FINAL_ENDING_LETTERS: readonly (readonly DialogueLine[])[] = [
   [
     {
       speaker: '____',
-      text: 'However far you cast, I’m in the boat right beside you — for the quiet days most of all.',
+      text: '',
     },
   ],
   [
     {
       speaker: '____',
-      text: 'You wondered who made this place. I did — a whole small world, built just for you.',
-    },
-    {
-      speaker: '____',
-      text: 'Because when we’re together, the rest of it washes away, and everything is going to be okay.',
+      text: 'When we’re together, the rest of it washes away, and everything is going to be okay.',
     },
   ],
 ];

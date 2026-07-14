@@ -52,7 +52,7 @@ export function getStoryTravelBlock(
     !hasSeenBeat(state, FRIEND_ONE_TEXT_READ_BEAT_ID) &&
     !fishingComplete
   ) {
-    return 'The PC is still waiting for one more try.';
+    return 'Your PC is humming. Best check on it.';
   }
 
   return undefined;

@@ -350,8 +350,10 @@ describe('file-first resolution', () => {
     audio.playMusic('music-home');
     await flushAsync();
 
-    expect(fetch).toHaveBeenCalledOnce();
     expect(fetch).toHaveBeenCalledWith('/audio/music-home.mp3');
+    expect(
+      vi.mocked(fetch).mock.calls.filter(([url]) => url === '/audio/music-home.mp3'),
+    ).toHaveLength(1);
     expect(synthSpy).not.toHaveBeenCalled();
 
     const ctx = createdContexts[0];
@@ -373,7 +375,11 @@ describe('file-first resolution', () => {
     audio.playSfx('sfx-interact');
     await flushAsync();
 
-    expect(fetch).toHaveBeenCalledTimes(2); // mp3 + ogg attempted once, not twice
+    const interactFetches = vi
+      .mocked(fetch)
+      .mock.calls.map(([url]) => url)
+      .filter((url) => String(url).startsWith('/audio/sfx-interact.'));
+    expect(interactFetches).toEqual(['/audio/sfx-interact.mp3', '/audio/sfx-interact.ogg']);
   });
 });
 
@@ -541,5 +547,55 @@ describe('playSfx', () => {
     vi.advanceTimersByTime(1000);
     // No throw / crash after cleanup timers run.
     expect(true).toBe(true);
+  });
+});
+
+describe('sampled violin notes', () => {
+  it('starts preloading every violin anchor after audio initialization', async () => {
+    stubAudioContext();
+    stubFetchAlwaysFails();
+    const [{ VIOLIN_SAMPLE_URLS }, audio] = await Promise.all([
+      import('../../src/game/violinSamples'),
+      import('../../src/game/audio'),
+    ]);
+
+    audio.initAudio();
+    await flushAsync();
+
+    for (const url of VIOLIN_SAMPLE_URLS) {
+      expect(fetch).toHaveBeenCalledWith(url);
+    }
+  });
+
+  it('plays a decoded violin sample at the selector playback rate', async () => {
+    vi.useFakeTimers();
+    stubAudioContext();
+    stubFetchSucceedsOnFirstTry();
+    const audio = await import('../../src/game/audio');
+
+    audio.initAudio();
+    await flushAsync();
+    const ctx = createdContexts[0];
+
+    audio.playViolinNote(466.16, 150);
+
+    expect(ctx.bufferSources).toHaveLength(1);
+    const [source] = ctx.bufferSources;
+    expect(source.playbackRate.value).toBeCloseTo(466.16 / 440, 5);
+    expect(source.start).toHaveBeenCalledOnce();
+    expect(source.stop).toHaveBeenCalledOnce();
+  });
+
+  it('uses the synth immediately while samples are still unavailable', async () => {
+    stubAudioContext();
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => undefined)));
+    const audio = await import('../../src/game/audio');
+
+    audio.initAudio();
+    const ctx = createdContexts[0];
+    audio.playViolinNote(440, 450);
+
+    expect(ctx.bufferSources).toHaveLength(0);
+    expect(ctx.oscillators.length).toBeGreaterThanOrEqual(3);
   });
 });

@@ -42,7 +42,7 @@ describe('story content resolution', () => {
     expect(first.playNotification).toBe(true);
     expect(first.marksBeatId).toBe(FRIEND_ONE_TEXT_READ_BEAT_ID);
     expect(first.dialogue.at(-1)?.text).toBe(
-      "hey!! you awake? come over when you can — I've got the pond game open and saved you a seat. we're catching another koi today 🐟",
+      'Heyy! Happy birthday! you still coming over today?',
     );
     expect(first.dialogue[2]).toMatchObject({
       text: '1 NEW MESSAGE',
@@ -61,13 +61,15 @@ describe('story content resolution', () => {
     expect(repeat.playNotification).toBe(false);
     expect(repeat.marksBeatId).toBeUndefined();
     expect(repeat.dialogue).toHaveLength(1);
-    expect(repeat.dialogue[0]?.text).toContain('still dark');
+    expect(repeat.dialogue[0]?.text).toBe('Still nothing. The screen is dark.');
+    expect(repeat.dialogue[0]?.speaker).toBeUndefined();
   });
 
   it('provides world dialogue after fishing and after ____ disappears', () => {
     expect(getActivityCompletionStory(FISHING_ACTIVITY_ID)?.worldDialogue.map((line) => line.text)).toEqual([
       'There. Now they have company.',
       "____ said we should come over for a LAN party. Let's go!",
+      'So down!',
     ]);
     expect(getActivityCompletionStory(RETAKE_ACTIVITY_ID)?.worldDialogue.map((line) => line.text)).toEqual([
       '____?',
@@ -80,7 +82,7 @@ describe('story content resolution', () => {
     expect(getActivityCompletionStory(VIOLIN_ACTIVITY_ID)?.worldDialogue).toEqual([
       {
         speaker: '____',
-        text: '...wait. I know this song!',
+        text: '…wait. I know this song!',
         portraitId: 'portrait-recipient',
       },
     ]);

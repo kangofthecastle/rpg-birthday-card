@@ -27,11 +27,13 @@ test('completes ____ PC fishing activity through test mode', async ({ page }) =>
   await expect(page.locator('body')).not.toHaveAttribute('data-friendone-pc-ready');
 
   await expect(page.getByText('____')).toBeVisible();
-  await expect(page.getByText('')).toBeVisible();
+  await expect(page.locator('.letter-modal__text')).toHaveText('');
   await expect(page.locator('.collection-panel')).not.toContainText('____’s Letter');
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.getByText('There. Now they have company.')).toBeVisible();
   await page.getByRole('button', { name: 'Continue' }).click();
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByText('So down!')).toBeVisible();
   await page.getByRole('button', { name: 'Continue' }).click();
 
   await expect(page.locator('.collection-panel')).toContainText('____’s Letter');

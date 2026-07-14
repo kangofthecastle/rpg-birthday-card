@@ -28,6 +28,11 @@
 
 import { MUSIC_SYNTHS, SFX_SYNTHS, playViolinTone } from './audioSynth';
 import { clamp01 } from './mathUtils';
+import {
+  VIOLIN_SAMPLE_URLS,
+  selectViolinSample,
+  type SelectedViolinSample,
+} from './violinSamples';
 
 // ---------------------------------------------------------------------------
 // Key registry
@@ -140,6 +145,11 @@ const state: AudioManagerState = {
   fileBufferCache: new Map(),
 };
 
+/** Decoded violin buffers that are ready for zero-latency note playback. The
+ * Promise cache above prevents duplicate fetches; this resolved-only map keeps
+ * a note from arriving late if its download is still in flight. */
+const violinSampleBuffers = new Map<string, AudioBuffer>();
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -180,6 +190,7 @@ export function initAudio(): void {
     state.sfxGain = sfxGain;
 
     void ctx.resume?.();
+    preloadViolinSamples();
   } catch (error) {
     debugLog(`AudioContext init failed: ${String(error)}`);
     state.ctx = null;
@@ -397,7 +408,11 @@ export function playViolinNote(
   voiceGain.gain.value = clamp01(options.volume ?? 1);
   voiceGain.connect(sfxGain);
 
-  const durationEstimateMs = playViolinTone(ctx, voiceGain, { frequency, durationMs });
+  const selected = selectViolinSample(frequency, durationMs);
+  const buffer = violinSampleBuffers.get(selected.url);
+  const durationEstimateMs = buffer
+    ? playSampledViolinNote(ctx, voiceGain, buffer, selected, durationMs)
+    : playViolinTone(ctx, voiceGain, { frequency, durationMs });
   setTimeout(() => {
     try {
       voiceGain.disconnect();
@@ -405,6 +420,44 @@ export function playViolinNote(
       // already disconnected
     }
   }, durationEstimateMs + SFX_CLEANUP_SLACK_MS);
+}
+
+function playSampledViolinNote(
+  ctx: AudioContext,
+  output: AudioNode,
+  buffer: AudioBuffer,
+  selected: SelectedViolinSample,
+  durationMs: number,
+): number {
+  const startAt = ctx.currentTime;
+  const isShort = selected.articulation === 'spiccato';
+  const soundingMs = isShort ? Math.max(durationMs, 360) : Math.max(durationMs, 80);
+  const attackMs = isShort ? 4 : 18;
+  const releaseMs = isShort ? 90 : Math.min(180, Math.max(100, durationMs * 0.28));
+  const sustainEnd = startAt + soundingMs / 1000;
+  const releaseEnd = sustainEnd + releaseMs / 1000;
+
+  const source = ctx.createBufferSource();
+  source.buffer = buffer;
+  source.playbackRate.value = selected.playbackRate;
+
+  const envelope = ctx.createGain();
+  envelope.gain.value = 0;
+  source.connect(envelope);
+  envelope.connect(output);
+  envelope.gain.setValueAtTime(0, startAt);
+  envelope.gain.linearRampToValueAtTime(isShort ? 0.5 : 0.55, startAt + attackMs / 1000);
+  envelope.gain.setValueAtTime(isShort ? 0.5 : 0.55, sustainEnd);
+  envelope.gain.linearRampToValueAtTime(0.0001, releaseEnd);
+
+  source.start(startAt);
+  source.stop(releaseEnd + 0.02);
+  source.onended = () => {
+    source.disconnect();
+    envelope.disconnect();
+  };
+
+  return (releaseEnd - startAt) * 1000;
 }
 
 /** Whether audio is currently muted. Reflects the persisted preference even
@@ -477,6 +530,16 @@ function resolveAudioFile(url: string): Promise<AudioBuffer | null> {
   const promise = resolveAudioFileUncached(url);
   state.fileBufferCache.set(url, promise);
   return promise;
+}
+
+function preloadViolinSamples(): void {
+  for (const url of VIOLIN_SAMPLE_URLS) {
+    void resolveAudioFile(url).then((buffer) => {
+      if (buffer) {
+        violinSampleBuffers.set(url, buffer);
+      }
+    });
+  }
 }
 
 async function resolveAudioFileUncached(url: string): Promise<AudioBuffer | null> {

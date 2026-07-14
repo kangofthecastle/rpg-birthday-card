@@ -70,6 +70,7 @@ export function createViolinActivity(
               <button type="button" class="violin-mode-btn" data-violin-advanced aria-pressed="false" title="Read pitch as a sound graph instead of notation">Advanced</button>
               <button type="button" class="violin-mode-btn" data-violin-practice aria-pressed="false" title="Free play — try the keys with no song or scoring">Practice</button>
               <button type="button" class="violin-mode-btn" data-violin-mistakes aria-pressed="false" title="Forgive one wrong note per note — recover by playing the right one">Mistakes allowed</button>
+              <button type="button" class="violin-mode-btn" data-violin-guidance aria-pressed="false" title="Light the next key to press while echoing">Key guidance</button>
             </div>
           </div>
           <div class="activity-shell__viewport">
@@ -99,8 +100,9 @@ export function createViolinActivity(
       const advancedButton = mount.querySelector<HTMLButtonElement>('[data-violin-advanced]');
       const practiceButton = mount.querySelector<HTMLButtonElement>('[data-violin-practice]');
       const mistakesButton = mount.querySelector<HTMLButtonElement>('[data-violin-mistakes]');
+      const guidanceButton = mount.querySelector<HTMLButtonElement>('[data-violin-guidance]');
 
-      if (!advancedButton || !practiceButton || !mistakesButton) {
+      if (!advancedButton || !practiceButton || !mistakesButton || !guidanceButton) {
         throw new Error('Unable to mount the violin activity.');
       }
 
@@ -108,10 +110,12 @@ export function createViolinActivity(
         advancedButton.setAttribute('aria-pressed', String(modes.advanced));
         practiceButton.setAttribute('aria-pressed', String(modes.practice));
         mistakesButton.setAttribute('aria-pressed', String(modes.mistakesAllowed));
-        // Advanced (the graph is forced) and Mistakes (no scoring) are moot while
-        // practising — dim them so the cluster reads honestly.
+        guidanceButton.setAttribute('aria-pressed', String(modes.keyGuidance));
+        // Advanced (the graph is forced), Mistakes (no scoring), and guidance
+        // (no expected note) are moot while practising.
         advancedButton.disabled = modes.practice;
         mistakesButton.disabled = modes.practice;
+        guidanceButton.disabled = modes.practice;
       };
 
       const toggleMode = (button: HTMLButtonElement, apply: () => void): void => {
@@ -131,6 +135,9 @@ export function createViolinActivity(
       });
       toggleMode(mistakesButton, () => {
         modes.mistakesAllowed = !modes.mistakesAllowed;
+      });
+      toggleMode(guidanceButton, () => {
+        modes.keyGuidance = !modes.keyGuidance;
       });
       syncModeButtons();
 
@@ -156,7 +163,8 @@ export function createViolinActivity(
         finish(() =>
           onComplete({
             locationId: 'recipient-house',
-            keepsakeId: 'golden-hour-photo',
+            activityId: 'recipient-violin-piece',
+            keepsakeId: 'recipient-sheet-music',
           }),
         );
       const cancelPiece = (): void => finish(onCancel);

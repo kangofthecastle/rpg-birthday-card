@@ -129,6 +129,15 @@
       "mapY": 665,
       "heightRatio": 0.92,
       "note": "bedside table (singles-only; beside the bed)"
+    },
+    {
+      "frame": "epilogue-photo",
+      "mapX": 536,
+      "mapY": -40,
+      "heightRatio": 0.378,
+      "wallShear": 0.5,
+      "fixedDepth": -20.95,
+      "note": "post-ending boat photo (independently movable in dressEdit)"
     }
   ],
   "removed": [

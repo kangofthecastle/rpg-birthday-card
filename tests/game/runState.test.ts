@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   createInitialRunState,
+  createSeededRunState,
   completeLocation,
   applyActivityCompletion,
   hasActivityCompleted,
@@ -150,15 +151,15 @@ describe('runState', () => {
 
     state = completeLocation(state, {
       locationId: 'recipient-house',
-      keepsakeId: 'golden-hour-photo',
+      keepsakeId: 'recipient-sheet-music',
     });
 
     expect(isFinalSpotUnlocked(state)).toBe(true);
   });
 
   it('derives required keepsakes from friend and home locations', () => {
-    expect(REQUIRED_FINAL_KEEPSAKE_IDS).toContain('golden-hour-photo');
-    expect(FRIEND_KEEPSAKE_IDS).not.toContain('golden-hour-photo');
+    expect(REQUIRED_FINAL_KEEPSAKE_IDS).toContain('recipient-sheet-music');
+    expect(FRIEND_KEEPSAKE_IDS).not.toContain('recipient-sheet-music');
     expect(REQUIRED_FINAL_KEEPSAKE_IDS.length).toBe(FRIEND_KEEPSAKE_IDS.length + 1);
   });
 
@@ -190,5 +191,14 @@ describe('runState', () => {
 
     expect(state.endingCompleted).toBe(false);
     expect(next.endingCompleted).toBe(true);
+  });
+
+  it('seeds the owning activities along with their keepsakes', () => {
+    const state = createSeededRunState('friend-b', [
+      'glowing-koi-scale',
+      'defused-spike-charm',
+    ]);
+
+    expect(state.completedActivityIds).toEqual(['friendone-pc-fishing', 'valorant-split']);
   });
 });

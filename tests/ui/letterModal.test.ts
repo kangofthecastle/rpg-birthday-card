@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createLetterModal, showLetterModal } from '../../src/ui/letterModal';
+import {
+  createLetterModal,
+  createSheetMusicModal,
+  showLetterModal,
+} from '../../src/ui/letterModal';
 
 beforeEach(() => {
   document.body.innerHTML = '<div id="ui-root"><aside class="collection-panel">Keepsakes</aside></div>';
@@ -37,6 +41,32 @@ describe('createLetterModal', () => {
 
     expect(modal.querySelector('.letter-modal__speaker')).toBeNull();
     expect(modal.querySelector('.letter-modal__action')?.textContent).toBe('Continue');
+  });
+});
+
+describe('createSheetMusicModal', () => {
+  it('shows the acquired score as art with an exact accessible title', () => {
+    const onAction = vi.fn();
+    const modal = createSheetMusicModal({
+      title: 'Do You Hear the People Sing?',
+      imageSrc: '/assets/activities/fold-the-letters/paper-sheetmusic.png',
+      imageAlt: '____’s handwritten sheet music',
+      onAction,
+    });
+
+    expect(modal.getAttribute('aria-label')).toBe('Do You Hear the People Sing?');
+    expect(modal.querySelector('.sheet-music-modal__title')?.textContent).toBe(
+      'Do You Hear the People Sing?',
+    );
+    const image = modal.querySelector<HTMLImageElement>('.sheet-music-modal__image');
+    expect(image?.getAttribute('src')).toBe(
+      '/assets/activities/fold-the-letters/paper-sheetmusic.png',
+    );
+    expect(image?.getAttribute('alt')).toBe('____’s handwritten sheet music');
+    expect(modal.querySelector('.letter-modal__text')).toBeNull();
+
+    modal.querySelector<HTMLButtonElement>('.letter-modal__action')?.click();
+    expect(onAction).toHaveBeenCalledOnce();
   });
 });
 

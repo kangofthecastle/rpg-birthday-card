@@ -1064,6 +1064,157 @@ function sfxDefuseCheckpoint(ctx: AudioContext, output: AudioNode, { rate, volum
   return (end - start) * 1000;
 }
 
+function sfxOmenTeleport(ctx: AudioContext, output: AudioNode, { rate, volume }: SfxSynthOptions): number {
+  const start = ctx.currentTime;
+  playNoiseBurst(ctx, output, {
+    seconds: 0.34,
+    filterType: 'bandpass',
+    filterFreq: 720 * rate,
+    filterQ: 3.2,
+    gain: 0.18 * volume,
+    attackMs: 12,
+    releaseMs: 300,
+    startAt: start,
+  });
+  const end = playTone(ctx, output, {
+    type: 'sawtooth',
+    frequency: 190 * rate,
+    endFrequency: 58 * rate,
+    gain: 0.13 * volume,
+    attackMs: 8,
+    holdMs: 40,
+    releaseMs: 360,
+    startAt: start,
+  });
+  return (end - start) * 1000;
+}
+
+function sfxStoryHum(ctx: AudioContext, output: AudioNode, { rate, volume }: SfxSynthOptions): number {
+  const start = ctx.currentTime;
+  let latest = start;
+  // A breathy, wordless fragment: enough rising contour to recur later, short
+  // enough that the melody is not yet identifiable.
+  [146.83, 164.81, 185, 196].forEach((frequency, index) => {
+    latest = Math.max(latest, playTone(ctx, output, {
+      type: 'sine',
+      frequency: frequency * rate,
+      gain: 0.075 * volume,
+      attackMs: 150,
+      holdMs: index === 3 ? 430 : 250,
+      releaseMs: 360,
+      startAt: start + index * 0.48,
+    }));
+  });
+  return (latest - start) * 1000;
+}
+
+function sfxPcFail(ctx: AudioContext, output: AudioNode, { rate, volume }: SfxSynthOptions): number {
+  const start = ctx.currentTime;
+  playNoiseBurst(ctx, output, {
+    seconds: 0.24,
+    filterType: 'lowpass',
+    filterFreq: 520,
+    gain: 0.12 * volume,
+    attackMs: 8,
+    releaseMs: 180,
+    startAt: start,
+  });
+  const end = playTone(ctx, output, {
+    type: 'sawtooth',
+    frequency: 92 * rate,
+    endFrequency: 38 * rate,
+    gain: 0.1 * volume,
+    attackMs: 25,
+    holdMs: 110,
+    releaseMs: 80,
+    startAt: start,
+  });
+  return (end - start) * 1000;
+}
+
+function sfxPhoneNotification(ctx: AudioContext, output: AudioNode, { rate, volume }: SfxSynthOptions): number {
+  const start = ctx.currentTime;
+  let latest = start;
+  [880, 1174.66].forEach((frequency, index) => {
+    latest = Math.max(latest, playTone(ctx, output, {
+      type: 'sine',
+      frequency: frequency * rate,
+      gain: 0.16 * volume,
+      attackMs: 2,
+      holdMs: 35,
+      releaseMs: 120,
+      startAt: start + index * 0.09,
+    }));
+  });
+  return (latest - start) * 1000;
+}
+
+function sfxKoiArrive(ctx: AudioContext, output: AudioNode, { rate, volume }: SfxSynthOptions): number {
+  const start = ctx.currentTime;
+  let latest = start;
+  [523.25, 659.25, 783.99].forEach((frequency, index) => {
+    latest = Math.max(latest, playTone(ctx, output, {
+      type: 'sine',
+      frequency: frequency * rate,
+      gain: 0.13 * volume,
+      attackMs: 8,
+      holdMs: 45,
+      releaseMs: 260,
+      startAt: start + index * 0.1,
+    }));
+  });
+  return (latest - start) * 1000;
+}
+
+function sfxOmenVoid(ctx: AudioContext, output: AudioNode, { rate, volume }: SfxSynthOptions): number {
+  const start = ctx.currentTime;
+  playNoiseBurst(ctx, output, {
+    seconds: 0.3,
+    filterType: 'bandpass',
+    filterFreq: 360,
+    filterQ: 5,
+    gain: 0.09 * volume,
+    attackMs: 30,
+    releaseMs: 260,
+    startAt: start,
+  });
+  const end = playTone(ctx, output, {
+    type: 'triangle',
+    frequency: 118 * rate,
+    endFrequency: 76 * rate,
+    gain: 0.08 * volume,
+    attackMs: 18,
+    holdMs: 80,
+    releaseMs: 260,
+    startAt: start,
+  });
+  return (end - start) * 1000;
+}
+
+function sfxPhotoComplete(ctx: AudioContext, output: AudioNode, { rate, volume }: SfxSynthOptions): number {
+  const start = ctx.currentTime;
+  playNoiseBurst(ctx, output, {
+    seconds: 0.025,
+    filterType: 'highpass',
+    filterFreq: 2800,
+    gain: 0.07 * volume,
+    attackMs: 1,
+    releaseMs: 20,
+    startAt: start,
+  });
+  const end = playTone(ctx, output, {
+    type: 'sine',
+    frequency: 659.25 * rate,
+    endFrequency: 783.99 * rate,
+    gain: 0.12 * volume,
+    attackMs: 4,
+    holdMs: 55,
+    releaseMs: 300,
+    startAt: start + 0.05,
+  });
+  return (end - start) * 1000;
+}
+
 function sfxDefuseComplete(ctx: AudioContext, output: AudioNode, { rate, volume }: SfxSynthOptions): number {
   // Rising resolve sting — three notes climbing to a bright, held top.
   const start = ctx.currentTime;
@@ -1508,6 +1659,12 @@ export const SFX_SYNTHS: Record<SfxKey, SfxSynthFactory> = {
   'sfx-dialogue-advance': sfxDialogueAdvance,
   'sfx-keepsake': sfxKeepsake,
   'sfx-letter-open': sfxLetterOpen,
+  'sfx-story-hum': sfxStoryHum,
+  'sfx-pc-fail': sfxPcFail,
+  'sfx-phone-notification': sfxPhoneNotification,
+  'sfx-koi-arrive': sfxKoiArrive,
+  'sfx-omen-void': sfxOmenVoid,
+  'sfx-photo-complete': sfxPhotoComplete,
   'sfx-shot': sfxShot,
   'sfx-reload': sfxReload,
   'sfx-dryfire': sfxDryfire,
@@ -1519,6 +1676,7 @@ export const SFX_SYNTHS: Record<SfxKey, SfxSynthFactory> = {
   'sfx-defuse-tick': sfxDefuseTick,
   'sfx-defuse-loop': sfxDefuseLoop,
   'sfx-defuse-checkpoint': sfxDefuseCheckpoint,
+  'sfx-omen-teleport': sfxOmenTeleport,
   'sfx-defuse-complete': sfxDefuseComplete,
   'sfx-detonate': sfxDetonate,
   'sfx-clutch': sfxClutch,

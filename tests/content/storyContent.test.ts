@@ -1,0 +1,101 @@
+import { describe, expect, it } from 'vitest';
+import {
+  getActivityCompletionStory,
+  getAvailableLocationInteractions,
+  resolveRecipientPcStory,
+} from '../../src/content/storyContent';
+import { applyActivityCompletion, createInitialRunState, markBeatSeen } from '../../src/game/runState';
+import {
+  FISHING_ACTIVITY_ID,
+  FRIEND_ONE_PC_READY_BEAT_ID,
+  FRIEND_ONE_TEXT_READ_BEAT_ID,
+  RETAKE_ACTIVITY_ID,
+  VIOLIN_ACTIVITY_ID,
+} from '../../src/game/storyProgression';
+
+describe('story content resolution', () => {
+  it('keeps ____ activities hidden until her text and hides fishing after completion', () => {
+    const fresh = createInitialRunState('recipient-house');
+    expect(getAvailableLocationInteractions('friend-a', fresh)).toEqual([]);
+
+    const invited = markBeatSeen(fresh, FRIEND_ONE_TEXT_READ_BEAT_ID);
+    expect(getAvailableLocationInteractions('friend-a', invited).map((item) => item.id)).toEqual([
+      'friendone-host',
+    ]);
+
+    const pcReady = markBeatSeen(invited, FRIEND_ONE_PC_READY_BEAT_ID);
+    expect(getAvailableLocationInteractions('friend-a', pcReady).map((item) => item.id)).toEqual([
+      'friendone-pc',
+    ]);
+
+    const finished = applyActivityCompletion(pcReady, {
+      locationId: 'friend-a',
+      activityId: FISHING_ACTIVITY_ID,
+    });
+    expect(getAvailableLocationInteractions('friend-a', finished)).toEqual([]);
+  });
+
+  it('resolves ____ PC first-use text once while keeping later checks dark and quiet', () => {
+    const first = resolveRecipientPcStory(createInitialRunState('recipient-house'));
+    expect(first.mode).toBe('first-message');
+    expect(first.playNotification).toBe(true);
+    expect(first.marksBeatId).toBe(FRIEND_ONE_TEXT_READ_BEAT_ID);
+    expect(first.dialogue.at(-1)?.text).toBe(
+      "hey!! you awake? come over when you can — I've got the pond game open and saved you a seat. we're catching another koi today 🐟",
+    );
+    expect(first.dialogue[2]).toMatchObject({
+      text: '1 NEW MESSAGE',
+      portraitTreatment: 'phone',
+    });
+    expect(first.dialogue.at(-1)).toMatchObject({
+      speaker: '____',
+      portraitId: 'portrait-friendone',
+    });
+    expect(first.dialogue.at(-1)?.portraitTreatment).toBeUndefined();
+
+    const repeat = resolveRecipientPcStory(
+      markBeatSeen(createInitialRunState('recipient-house'), FRIEND_ONE_TEXT_READ_BEAT_ID),
+    );
+    expect(repeat.mode).toBe('still-dark');
+    expect(repeat.playNotification).toBe(false);
+    expect(repeat.marksBeatId).toBeUndefined();
+    expect(repeat.dialogue).toHaveLength(1);
+    expect(repeat.dialogue[0]?.text).toContain('still dark');
+  });
+
+  it('provides world dialogue after fishing and after ____ disappears', () => {
+    expect(getActivityCompletionStory(FISHING_ACTIVITY_ID)?.worldDialogue.map((line) => line.text)).toEqual([
+      'There. Now they have company.',
+      "____ said we should come over for a LAN party. Let's go!",
+    ]);
+    expect(getActivityCompletionStory(RETAKE_ACTIVITY_ID)?.worldDialogue.map((line) => line.text)).toEqual([
+      '____?',
+      '...she was just here.',
+      'I should go home.',
+    ]);
+  });
+
+  it('places violin recognition after its sheet-music reward', () => {
+    expect(getActivityCompletionStory(VIOLIN_ACTIVITY_ID)?.worldDialogue).toEqual([
+      {
+        speaker: '____',
+        text: '...wait. I know this song!',
+        portraitId: 'portrait-recipient',
+      },
+    ]);
+  });
+
+  it('makes the RETAKE PC available only after fishing and removes ____ during the journey', () => {
+    const invited = markBeatSeen(createInitialRunState('friend-a'), FRIEND_ONE_TEXT_READ_BEAT_ID);
+    expect(getAvailableLocationInteractions('friend-b', invited)).toEqual([]);
+
+    const fishingDone = applyActivityCompletion(invited, {
+      locationId: 'friend-a',
+      activityId: FISHING_ACTIVITY_ID,
+    });
+    expect(getAvailableLocationInteractions('friend-b', fishingDone).map((item) => item.id)).toEqual([
+      'friend-b-host',
+      'friend-b-easter-egg',
+    ]);
+  });
+});

@@ -99,6 +99,7 @@ describe('activityRegistry', () => {
 
       expect(onComplete).toHaveBeenCalledWith({
         locationId: 'friend-a',
+        activityId: 'friendone-pc-fishing',
         keepsakeId: 'glowing-koi-scale',
       });
       expect(onComplete).toHaveBeenCalledTimes(1);
@@ -141,6 +142,7 @@ describe('activityRegistry', () => {
 
       expect(onComplete).toHaveBeenCalledWith({
         locationId: 'friend-a',
+        activityId: 'friendone-pc-fishing',
         keepsakeId: 'glowing-koi-scale',
       });
       expect(onComplete).toHaveBeenCalledTimes(1);

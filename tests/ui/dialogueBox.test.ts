@@ -21,7 +21,9 @@ describe('showDialogue', () => {
     expect(root?.querySelector('.dialogue-box')?.getAttribute('aria-live')).toBe('polite');
     expect(root?.querySelector('.dialogue-box__speaker')?.textContent).toBe('<img src=x>');
     expect(root?.querySelector('.dialogue-box__text')?.textContent).toBe('<button>Unsafe</button>');
-    expect(root?.querySelector('.dialogue-box img')).toBeNull();
+    expect(
+      root?.querySelector<HTMLImageElement>('.dialogue-box__portrait')?.getAttribute('src'),
+    ).toBe('/assets/portraits/portrait-recipient.png');
     expect(root?.querySelector('.dialogue-box__text button')).toBeNull();
 
     root?.querySelector<HTMLButtonElement>('.dialogue-box__action')?.click();
@@ -37,14 +39,17 @@ describe('showDialogue', () => {
 
     expect(root?.querySelector('.dialogue-box__speaker')).toBeNull();
     expect(root?.querySelector('.dialogue-box__portrait-frame')).not.toBeNull();
-    expect(root?.querySelector('.dialogue-box__portrait-frame--empty')).not.toBeNull();
+    expect(root?.querySelector('.dialogue-box__portrait-frame--empty')).toBeNull();
+    expect(
+      root?.querySelector<HTMLImageElement>('.dialogue-box__portrait')?.getAttribute('src'),
+    ).toBe('/assets/portraits/portrait-recipient.png');
     expect(root?.querySelector('.dialogue-box__action')?.textContent).toBe('Continue');
 
     root?.querySelector<HTMLButtonElement>('.dialogue-box__action')?.click();
     await promise;
   });
 
-  it('renders known portraits and falls back to an empty portrait frame for unknown ids', async () => {
+  it('renders known portraits and falls back to ____ instead of an empty frame', async () => {
     const known = showDialogue([
       {
         text: '____ waits beside the pond.',
@@ -63,15 +68,71 @@ describe('showDialogue', () => {
     const unknown = showDialogue([
       {
         text: 'The portrait has not arrived yet.',
-        portraitId: 'portrait-friend-a',
+        portraitId: 'portrait-never-exists',
       },
     ]);
 
-    expect(root?.querySelector('.dialogue-box__portrait')).toBeNull();
-    expect(root?.querySelector('.dialogue-box__portrait-frame--empty')).not.toBeNull();
+    expect(
+      root?.querySelector<HTMLImageElement>('.dialogue-box__portrait')?.getAttribute('src'),
+    ).toBe('/assets/portraits/portrait-recipient.png');
+    expect(root?.querySelector('.dialogue-box__portrait-frame--empty')).toBeNull();
 
     root?.querySelector<HTMLButtonElement>('.dialogue-box__action')?.click();
     await unknown;
+  });
+
+  it('renders inspected objects as contained object portraits', async () => {
+    const promise = showDialogue([
+      { text: 'The violin waits.', portraitId: 'inspect-violin' },
+    ]);
+    const root = document.querySelector<HTMLElement>('#ui-root');
+
+    expect(root?.querySelector('.dialogue-box__portrait-frame--object')).not.toBeNull();
+    const portrait = root?.querySelector<HTMLImageElement>('.dialogue-box__portrait--object');
+    expect(portrait?.getAttribute('src')).toBe('/assets/portraits/objects/violin.png');
+    expect(root?.querySelector('.dialogue-box__portrait-frame--empty')).toBeNull();
+
+    root?.querySelector<HTMLButtonElement>('.dialogue-box__action')?.click();
+    await promise;
+  });
+
+  it('renders Omen dialogue with the existing in-game Omen portrait', async () => {
+    const promise = showDialogue([
+      { speaker: 'Omen', text: '~~', portraitId: 'portrait-omen' },
+    ]);
+    const root = document.querySelector<HTMLElement>('#ui-root');
+
+    expect(
+      root?.querySelector<HTMLImageElement>('.dialogue-box__portrait')?.getAttribute('src'),
+    ).toBe('/assets/activities/valorant-split/omen.png');
+
+    root?.querySelector<HTMLButtonElement>('.dialogue-box__action')?.click();
+    await promise;
+  });
+
+  it('renders phone-treated dialogue as a softened retro feature phone', async () => {
+    const promise = showDialogue([
+      { speaker: '____', text: 'hey, come over!!', portraitTreatment: 'phone' },
+    ]);
+    const root = document.querySelector<HTMLElement>('#ui-root');
+
+    const frame = root?.querySelector('.dialogue-box__portrait-frame');
+    expect(frame?.classList.contains('dialogue-box__portrait-frame--phone')).toBe(true);
+    expect(frame?.classList.contains('dialogue-box__portrait-frame--empty')).toBe(false);
+    const phone = frame?.querySelector('.dialogue-box__phone');
+    expect(phone?.getAttribute('aria-hidden')).toBe('true');
+    expect(phone?.querySelector('.dialogue-box__phone-speaker')).not.toBeNull();
+    expect(phone?.querySelector('.dialogue-box__phone-screen')).not.toBeNull();
+    expect(phone?.querySelector('.dialogue-box__phone-envelope')).not.toBeNull();
+    expect(phone?.querySelector('svg[data-phone-mail-icon]')).not.toBeNull();
+    expect(phone?.querySelector('.dialogue-box__phone-message-mark')).not.toBeNull();
+    expect(phone?.querySelector('.dialogue-box__phone-status')).not.toBeNull();
+    expect(phone?.querySelector('.dialogue-box__phone-label')?.textContent).toBe('NEW MSG');
+    expect(phone?.querySelectorAll('.dialogue-box__phone-key').length).toBe(12);
+    expect(phone?.querySelector('[data-phone-message]')).toBeNull();
+
+    root?.querySelector<HTMLButtonElement>('.dialogue-box__action')?.click();
+    await promise;
   });
 
   it('advances through multiple lines before resolving', async () => {

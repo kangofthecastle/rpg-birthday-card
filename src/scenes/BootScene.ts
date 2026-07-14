@@ -4,6 +4,7 @@ import { LOCATIONS } from '../content/locations';
 import { createTempTextures } from '../game/createTempTextures';
 import {
   createSeededRunState,
+  markBeatSeen,
   markEndingCompleted,
   REQUIRED_FINAL_KEEPSAKE_IDS,
   type RunState,
@@ -40,6 +41,13 @@ import {
   friendtwoRowStripUrl,
   friendtwoRowTextureKey,
 } from '../content/friendtwoPartialSprite';
+import {
+  CLEARING_KOI_KEY,
+  EPILOGUE_BOAT_PHOTO_KEY,
+  FINALE_OMEN_KEY,
+  STORY_KOI_BOWL_ONE_KEY,
+  STORY_KOI_BOWL_TWO_KEY,
+} from '../content/storyAssets';
 
 const DOORMAT_DROP_URL = '/assets/doormat.png';
 
@@ -78,6 +86,28 @@ export class BootScene extends Phaser.Scene {
       frameHeight: 64,
     });
     this.load.image('friendtwo-room-props', '/assets/props/friendtwo-room-props.png');
+
+    // Narrative-state art that always ships with the story-alignment pass.
+    this.load.image(
+      STORY_KOI_BOWL_ONE_KEY,
+      '/assets/props/singles/friend-a-fishbowl-table-one-koi.png',
+    );
+    this.load.image(
+      STORY_KOI_BOWL_TWO_KEY,
+      '/assets/props/singles/friend-a-fishbowl-table-two-koi.png',
+    );
+    this.load.image(
+      CLEARING_KOI_KEY,
+      '/assets/activities/friendone-fishing/fish-glowing-koi.png',
+    );
+    this.load.image(
+      FINALE_OMEN_KEY,
+      '/assets/activities/valorant-split/omen.png',
+    );
+    this.load.image(
+      EPILOGUE_BOAT_PHOTO_KEY,
+      '/assets/photos/recipient-boat-wall-photo.png',
+    );
 
     // ____, the NPC who waits at the galaxy water for the final conversation.
     // The galaxy staging still uses his original full 4-dir atlas.
@@ -243,6 +273,20 @@ export class BootScene extends Phaser.Scene {
           ? REQUIRED_FINAL_KEEPSAKE_IDS
           : seedParam.split(',').map((id) => id.trim()).filter(Boolean);
       state = createSeededRunState(locationId, ids);
+    }
+
+    // testMode-only: seed narrative beats when an isolated smoke needs to enter
+    // a story-gated room without replaying the whole route that precedes it.
+    const seedBeats = testMode ? params.get('seedBeats') : null;
+    if (seedBeats) {
+      state = seedBeats
+        .split(',')
+        .map((id) => id.trim())
+        .filter(Boolean)
+        .reduce(
+          (current, beatId) => markBeatSeen(current, beatId),
+          state ?? createSeededRunState(locationId, []),
+        );
     }
 
     // testMode-only: seed the ending as already completed, so a smoke can land in

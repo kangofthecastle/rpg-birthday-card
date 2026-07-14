@@ -72,7 +72,7 @@ describe('assetManifest', () => {
       'public/assets/sprites/characters/friendtwo-idle-walk-4dir-v1-alpha.png',
     );
     expect(getManifestAsset('character-friendone-walk-4dir').notes).toContain(
-      'public/assets/sprites/characters/friendone-idle-walk-4dir-v1-alpha.png',
+      'public/assets/sprites/characters/friendone-idle-walk-4dir-v6-alpha.png',
     );
   });
 

@@ -207,6 +207,7 @@ export interface PlayerState {
 export interface TeammateState {
   readonly pos: Vec2;
   readonly fireCooldownMs: number;
+  readonly present: boolean;
 }
 
 export interface EnemyState {
@@ -270,6 +271,7 @@ export type SplitEvent =
   // last checkpoint).
   | { readonly type: 'defuse-interrupted' }
   | { readonly type: 'defuse-checkpoint' }
+  | { readonly type: 'teammate-departed'; readonly at: Vec2 }
   | { readonly type: 'defuse-complete' }
   // Fuse hit zero: begin the detonation overlay.
   | { readonly type: 'detonated'; readonly attempt: number }
@@ -362,6 +364,7 @@ function freshRound(
     teammate: {
       pos: SPLIT_CONFIG.teammateStart,
       fireCooldownMs: SPLIT_CONFIG.teammate.fireCooldownMs,
+      present: true,
     },
     enemies: spawnReinforcement(0, 0),
     reinforcementsSpawned: 1,
@@ -641,6 +644,10 @@ export function fireTeammateShot(state: SplitState): {
   state: SplitState;
   result: { fired: boolean; hitEnemyId: number | null };
 } {
+  if (!state.teammate.present) {
+    return { state, result: { fired: false, hitEnemyId: null } };
+  }
+
   const origin = state.teammate.pos;
   let bestIndex = -1;
   let bestDist = Number.POSITIVE_INFINITY;
@@ -1023,6 +1030,10 @@ function movePlayer(state: SplitState, input: SplitInput, seconds: number): Spli
 }
 
 function updateTeammate(state: SplitState, seconds: number, deltaMs: number): SplitState {
+  if (!state.teammate.present) {
+    return state;
+  }
+
   const config = SPLIT_CONFIG.teammate;
   const toPlayer = {
     x: state.player.pos.x - state.teammate.pos.x,
@@ -1042,7 +1053,10 @@ function updateTeammate(state: SplitState, seconds: number, deltaMs: number): Sp
   }
 
   const fireCooldownMs = Math.max(0, state.teammate.fireCooldownMs - deltaMs);
-  let next: SplitState = { ...state, teammate: { pos, fireCooldownMs } };
+  let next: SplitState = {
+    ...state,
+    teammate: { ...state.teammate, pos, fireCooldownMs },
+  };
 
   if (fireCooldownMs <= 0) {
     const shot = fireTeammateShot(next);
@@ -1183,6 +1197,14 @@ function updateDefuse(state: SplitState, input: SplitInput, deltaMs: number): Sp
   if (!checkpointReached && progressMs >= checkpointMs) {
     checkpointReached = true;
     next = pushEvent(next, { type: 'defuse-checkpoint' });
+    next = {
+      ...next,
+      teammate: { ...next.teammate, present: false },
+    };
+    next = pushEvent(next, {
+      type: 'teammate-departed',
+      at: next.teammate.pos,
+    });
   }
 
   next = { ...next, defuse: { progressMs, checkpointReached, defusing } };

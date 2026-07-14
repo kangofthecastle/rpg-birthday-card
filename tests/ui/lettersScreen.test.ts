@@ -16,6 +16,96 @@ beforeEach(() => {
 });
 
 describe('showLettersScreen', () => {
+  it('archive mode exposes a close button and resolves when dismissed', async () => {
+    const handle = showLettersScreen({
+      mode: 'archive',
+      letters: LETTERS,
+      openLetter: () => Promise.resolve(),
+    });
+
+    const close = document.querySelector<HTMLButtonElement>('.letters-screen__close');
+    expect(handle.element.dataset.lettersMode).toBe('archive');
+    expect(handle.element.getAttribute('aria-label')).toBe('Letters archive');
+    expect(close?.getAttribute('aria-label')).toBe('Close the letters archive');
+
+    close?.click();
+    await handle.closed;
+    expect(document.querySelector('.letters-screen')).toBeNull();
+  });
+
+  it('Escape closes archive mode without invoking the ending go-home action', async () => {
+    const onGoHome = vi.fn();
+    const handle = showLettersScreen({
+      mode: 'archive',
+      letters: LETTERS,
+      openLetter: () => Promise.resolve(),
+      onGoHome,
+    });
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+
+    expect(document.querySelector('.letters-screen')).toBeNull();
+    await handle.closed;
+    expect(onGoHome).not.toHaveBeenCalled();
+  });
+
+  it('does not close the archive underneath an open letter', async () => {
+    let finishLetter!: () => void;
+    const handle = showLettersScreen({
+      mode: 'archive',
+      letters: LETTERS,
+      openLetter: () =>
+        new Promise<void>((resolve) => {
+          finishLetter = resolve;
+        }),
+    });
+
+    document.querySelector<HTMLButtonElement>('.letters-screen__letter')?.click();
+    await flush();
+    document.querySelector<HTMLButtonElement>('.letters-screen__close')?.click();
+    expect(document.querySelector('.letters-screen')).not.toBeNull();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(document.querySelector('.letters-screen')).not.toBeNull();
+
+    finishLetter();
+    await flush();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await handle.closed;
+    expect(document.querySelector('.letters-screen')).toBeNull();
+  });
+
+  it('archive mode restores the supplied read state', () => {
+    showLettersScreen({
+      mode: 'archive',
+      letters: LETTERS,
+      initialReadIndices: [0],
+      openLetter: () => Promise.resolve(),
+    });
+
+    const buttons = document.querySelectorAll<HTMLButtonElement>('.letters-screen__letter');
+    expect(buttons[0]?.classList.contains('letters-screen__letter--read')).toBe(true);
+    expect(buttons[0]?.getAttribute('aria-pressed')).toBe('true');
+    expect(buttons[1]?.classList.contains('letters-screen__letter--read')).toBe(false);
+  });
+
+  it('archive mode never replays the terminal birthday or go-home reveal', async () => {
+    showLettersScreen({
+      mode: 'archive',
+      letters: LETTERS,
+      openLetter: () => Promise.resolve(),
+      onGoHome: vi.fn(),
+    });
+
+    const buttons = document.querySelectorAll<HTMLButtonElement>('.letters-screen__letter');
+    buttons[0]?.click();
+    await flush();
+    buttons[1]?.click();
+    await flush();
+
+    expect(document.querySelector('.letters-screen__birthday')?.hasAttribute('hidden')).toBe(true);
+    expect(document.querySelector('.letters-screen__go-home')?.hasAttribute('hidden')).toBe(true);
+  });
+
   it('renders one letter icon per entry with from-name labels', () => {
     showLettersScreen({ letters: LETTERS, openLetter: () => Promise.resolve() });
 

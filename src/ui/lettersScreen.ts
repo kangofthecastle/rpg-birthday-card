@@ -28,6 +28,8 @@ type OpenLetter = (
 ) => Promise<void>;
 
 export interface LettersScreenOptions {
+  /** Terminal birthday screen by default; archive mode is closable. */
+  readonly mode?: 'ending' | 'archive';
   /** Where to mount. Defaults to the shared UI root. */
   readonly host?: HTMLElement;
   /** Letters to show. Defaults to the paste-in `LETTERS` list. */
@@ -36,6 +38,8 @@ export interface LettersScreenOptions {
   readonly openLetter?: OpenLetter;
   /** Start faded-out and let the caller fade in. Defaults to false. */
   readonly fadeIn?: boolean;
+  /** Previously read letter indexes, restored when reopening the archive. */
+  readonly initialReadIndices?: readonly number[];
   /**
    * Optional quiet "go home" affordance, revealed once every letter is read.
    * When provided, a gentle button appears beside the "happy birthday" line and
@@ -46,6 +50,8 @@ export interface LettersScreenOptions {
 
 export interface LettersScreenHandle {
   readonly element: HTMLElement;
+  /** Resolves when a closable archive (or the ending's go-home action) dismisses. */
+  readonly closed: Promise<void>;
 }
 
 export function showLettersScreen(
@@ -54,21 +60,61 @@ export function showLettersScreen(
   const host = options.host ?? getUiRoot();
   const letters = options.letters ?? LETTERS;
   const openLetter = options.openLetter ?? ((lines) => showLetterModal(lines));
+  const mode = options.mode ?? 'ending';
+  let resolveClosed!: () => void;
+  const closed = new Promise<void>((resolve) => {
+    resolveClosed = resolve;
+  });
 
-  let model: LettersReadModel = createLettersRead(letters.length);
+  let model: LettersReadModel = (options.initialReadIndices ?? []).reduce(
+    (current, index) => markLetterRead(current, index),
+    createLettersRead(letters.length),
+  );
   let selectedIndex = 0;
   let opening = false;
 
   const overlay = document.createElement('section');
   overlay.className = 'letters-screen';
+  overlay.dataset.lettersMode = mode;
+  overlay.classList.add(`letters-screen--${mode}`);
   if (options.fadeIn) {
     overlay.classList.add('letters-screen--enter');
   }
   overlay.setAttribute('role', 'dialog');
-  overlay.setAttribute('aria-label', 'Letters for ____');
+  overlay.setAttribute('aria-label', mode === 'archive' ? 'Letters archive' : 'Letters for ____');
+
+  let archiveClosed = false;
+  const closeArchive = (): void => {
+    if (archiveClosed || opening) {
+      return;
+    }
+    archiveClosed = true;
+    document.removeEventListener('keydown', onArchiveKeydown, true);
+    overlay.remove();
+    resolveClosed();
+  };
+  function onArchiveKeydown(event: KeyboardEvent): void {
+    if (event.key !== 'Escape' || !overlay.isConnected || opening) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    closeArchive();
+  }
 
   const crt = document.createElement('div');
   crt.className = 'letters-screen__crt';
+
+  if (mode === 'archive') {
+    const closeButton = document.createElement('button');
+    closeButton.type = 'button';
+    closeButton.className = 'letters-screen__close';
+    closeButton.setAttribute('aria-label', 'Close the letters archive');
+    closeButton.textContent = '×';
+    closeButton.addEventListener('click', closeArchive);
+    overlay.append(closeButton);
+    document.addEventListener('keydown', onArchiveKeydown, true);
+  }
 
   const title = document.createElement('h1');
   title.className = 'letters-screen__title';
@@ -90,6 +136,10 @@ export function showLettersScreen(
     button.className = 'letters-screen__letter';
     button.dataset.letterIndex = String(index);
     button.setAttribute('aria-label', `Letter from ${letter.from}`);
+    if (isLetterRead(model, index)) {
+      button.classList.add('letters-screen__letter--read');
+      button.setAttribute('aria-pressed', 'true');
+    }
 
     const icon = document.createElement('span');
     icon.className = 'letters-screen__icon';
@@ -124,6 +174,7 @@ export function showLettersScreen(
   if (options.onGoHome) {
     goHome.addEventListener('click', () => {
       overlay.remove();
+      resolveClosed();
       options.onGoHome?.();
     });
   }
@@ -165,7 +216,7 @@ export function showLettersScreen(
     buttons[index]?.classList.add('letters-screen__letter--read');
     buttons[index]?.setAttribute('aria-pressed', 'true');
 
-    if (allLettersRead(model)) {
+    if (mode === 'ending' && allLettersRead(model)) {
       birthday.hidden = false;
       overlay.classList.add('letters-screen--complete');
       if (options.onGoHome) {
@@ -218,5 +269,5 @@ export function showLettersScreen(
 
   playMusic('music-letters', { fadeMs: 2000 });
 
-  return { element: overlay };
+  return { element: overlay, closed };
 }

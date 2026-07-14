@@ -23,7 +23,7 @@ M mutes audio. SPLIT.EXE uses the mouse to aim.
 
 Boot screen → ____'s room (her PC says NO SIGNAL) → the path → ____'s house
 (PC fishing game → Glowing Koi Scale) and ____'s house (SPLIT.EXE →
-Defused Spike Charm) → home again (her PC has woken up → Golden Hour Photo)
+Defused Spike Charm) → home again (the violin calls to her → ____'s Sheet Music)
 → the Lantern Clearing unlocks → the ending → letters.
 
 ## For ____, before gifting

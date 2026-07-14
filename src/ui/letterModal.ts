@@ -9,6 +9,14 @@ export interface LetterModalOptions {
   readonly onAction: () => void;
 }
 
+export interface SheetMusicModalOptions {
+  readonly title: string;
+  readonly imageSrc: string;
+  readonly imageAlt: string;
+  readonly actionLabel?: string;
+  readonly onAction: () => void;
+}
+
 interface ActiveLetter {
   readonly host: HTMLElement;
   readonly resolve: () => void;
@@ -91,6 +99,28 @@ export function showLetterModal(lines: readonly DialogueLine[]): Promise<void> {
   });
 }
 
+export function showSheetMusicModal(
+  content: Omit<SheetMusicModalOptions, 'onAction'>,
+): Promise<void> {
+  closeActiveLetter();
+  playSfx('sfx-letter-open');
+
+  return new Promise((resolve) => {
+    const host = getLetterHost();
+    let complete = false;
+    const finish = () => {
+      if (complete) return;
+      complete = true;
+      if (activeLetter?.host === host) activeLetter = undefined;
+      host.remove();
+      resolve();
+    };
+    activeLetter = { host, resolve: finish };
+    host.replaceChildren(createSheetMusicModal({ ...content, onAction: finish }));
+    host.querySelector<HTMLButtonElement>('.letter-modal__action')?.focus({ preventScroll: true });
+  });
+}
+
 export function createLetterModal(options: LetterModalOptions): HTMLElement {
   const modal = document.createElement('section');
   modal.className = 'letter-modal';
@@ -130,6 +160,39 @@ export function createLetterModal(options: LetterModalOptions): HTMLElement {
   paper.append(body, action);
   modal.append(paper);
 
+  return modal;
+}
+
+export function createSheetMusicModal(options: SheetMusicModalOptions): HTMLElement {
+  const modal = document.createElement('section');
+  modal.className = 'letter-modal sheet-music-modal';
+  modal.setAttribute('role', 'dialog');
+  modal.setAttribute('aria-modal', 'true');
+  modal.setAttribute('aria-label', options.title);
+
+  const paper = document.createElement('div');
+  paper.className = 'letter-modal__paper sheet-music-modal__paper';
+
+  const title = document.createElement('h2');
+  title.className = 'sheet-music-modal__title';
+  title.textContent = options.title;
+
+  const image = document.createElement('img');
+  image.className = 'sheet-music-modal__image';
+  image.src = options.imageSrc;
+  image.alt = options.imageAlt;
+
+  const action = document.createElement('button');
+  action.type = 'button';
+  action.className = 'letter-modal__action';
+  action.textContent = options.actionLabel ?? 'Continue';
+  action.addEventListener('click', (event) => {
+    event.stopPropagation();
+    options.onAction();
+  });
+
+  paper.append(title, image, action);
+  modal.append(paper);
   return modal;
 }
 

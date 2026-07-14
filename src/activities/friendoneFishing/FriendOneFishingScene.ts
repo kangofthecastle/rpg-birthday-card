@@ -53,8 +53,8 @@ const FISHING_FONT = 'Georgia, "Times New Roman", serif';
 // the dock (both rods angle up-and-right, so the line hangs from a tip that
 // sits ABOVE the hand — the previous origins sat on the forearm). The fishing
 // line is drawn from these tips down to the bobber in every frame.
-const PLAYER_ROD_TIP = { x: 205, y: 118 } as const;
-const FRIEND_ONE_ROD_TIP = { x: 262, y: 113 } as const;
+const PLAYER_ROD_TIP = { x: 182, y: 126 } as const;
+const FRIEND_ONE_ROD_TIP = { x: 272, y: 119 } as const;
 
 // The player's bobber rests here (in the open water just off the dock); the
 // pond fish steers toward it. ____'s line is decorative company.
@@ -541,7 +541,7 @@ export class FriendOneFishingScene extends Phaser.Scene {
 
     const source = this.textures.get(cfg.key).getSourceImage();
     const scale = cfg.pondWidth / Math.max(1, source.width);
-    // Side-view cutout (nose left): mirror it to the travel side and pitch it
+    // Side-view cutout (nose right): mirror it to the travel side and pitch it
     // gently toward the heading, so it always swims nose-first and upright —
     // rotating the whole sprite to the heading flipped it belly-up when it
     // headed right (the "moving backwards" bug).
@@ -682,7 +682,7 @@ export class FriendOneFishingScene extends Phaser.Scene {
     }
     const source = this.textures.get(cfg.key).getSourceImage();
     const scale = cfg.meterWidth / Math.max(1, source.width);
-    // In the meter the fish points left (canonical art orientation).
+    // In the meter the fish points right (canonical art orientation).
     this.meterFishSprite
       .setVisible(true)
       .setPosition(centerX, centerY)

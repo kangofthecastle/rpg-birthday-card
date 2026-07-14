@@ -7,7 +7,7 @@ export const FRIEND_KEEPSAKE_IDS: readonly string[] = LOCATIONS.flatMap((locatio
 );
 
 // The final spot needs every keepsake-bearing location cleared — the two friend
-// houses plus ____'s own home (the Golden Hour Photo). Stays data-driven.
+// houses plus ____'s own home (the sheet music). Stays data-driven.
 export const REQUIRED_FINAL_KEEPSAKE_IDS: readonly string[] = LOCATIONS.flatMap(
   (location) =>
     KEEPSAKE_LOCATION_KINDS.includes(location.kind) && location.keepsake
@@ -101,11 +101,19 @@ export function createSeededRunState(
       ? [location.id]
       : [],
   );
+  const completedActivityIds = LOCATIONS.flatMap((location) =>
+    location.keepsake &&
+    location.activityId &&
+    keepsakeIds.includes(location.keepsake.id)
+      ? [location.activityId]
+      : [],
+  );
 
   return {
     ...createInitialRunState(currentLocationId),
     collectedKeepsakeIds: [...keepsakeIds],
     completedLocationIds,
+    completedActivityIds,
   };
 }
 

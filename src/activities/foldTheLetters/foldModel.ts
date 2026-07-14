@@ -173,7 +173,7 @@ export const FOLD_COMPONENTS: readonly FoldComponent[] = [
     id: 'lantern',
     verb: 'roll',
     label: 'your sheet music — the lantern',
-    letterKeepsakeId: 'golden-hour-photo',
+    letterKeepsakeId: 'recipient-sheet-music',
     assembledLine: 'The music curls into a lantern, and the light comes up through the notes.',
   },
 ];

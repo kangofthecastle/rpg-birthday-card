@@ -6,7 +6,9 @@ import { expect, test } from '@playwright/test';
 test('walks from spawn to the doormat and steps outside to the neighbourhood', async ({
   page,
 }) => {
-  await page.goto('/?testMode=1&locationId=recipient-house&spawnId=front-door');
+  await page.goto(
+    '/?testMode=1&locationId=recipient-house&spawnId=front-door&seedBeats=friendone-text-read',
+  );
 
   const canvas = page.locator('canvas');
   await expect(canvas).toBeVisible();

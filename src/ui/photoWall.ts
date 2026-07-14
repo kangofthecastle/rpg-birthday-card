@@ -16,6 +16,8 @@ import { getUiRoot } from './domRoot';
 const MANIFEST_URL = '/assets/photos/manifest.json';
 const PHOTO_BASE = '/assets/photos/';
 const PLACEHOLDER_COUNT = 8;
+export const BOAT_PHOTO_SRC =
+  '/assets/photos/recipient-boat-wall-photo.png';
 // The one frame left empty on the wall, "labelled in careful handwriting" — kept
 // waiting for the next good day. Once ____ is home it glows, drawing the eye.
 const EMPTY_FRAME_CAPTION = 'for the next good day';
@@ -39,12 +41,66 @@ export interface PhotoManifest {
   readonly photos: readonly PhotoEntry[];
 }
 
+export interface MeasuredRect {
+  readonly left: number;
+  readonly top: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+export interface HeroTransform {
+  readonly translateX: number;
+  readonly translateY: number;
+  readonly scale: number;
+}
+
+/**
+ * A centered, aspect-preserving transform from the hero image to the image in
+ * the first frame. Measuring the images themselves keeps frame padding and
+ * rotation out of the geometry.
+ */
+export function calculateHeroTransform(
+  hero: MeasuredRect,
+  destination: MeasuredRect,
+): HeroTransform {
+  const scale = Math.min(
+    destination.width / Math.max(hero.width, 1),
+    destination.height / Math.max(hero.height, 1),
+  );
+  return {
+    translateX:
+      destination.left + destination.width / 2 - hero.left - (hero.width * scale) / 2,
+    translateY:
+      destination.top + destination.height / 2 - hero.top - (hero.height * scale) / 2,
+    scale,
+  };
+}
+
 export interface PhotoWallOptions {
   /** Where to mount. Defaults to the shared UI root. */
   readonly host?: HTMLElement;
   /** Injectable for tests; defaults to fetching the manifest file. */
   readonly loadManifest?: () => Promise<PhotoManifest | undefined>;
+  /** Injectable layout measurement; defaults to getBoundingClientRect(). */
+  readonly measureRect?: (element: HTMLElement) => MeasuredRect;
+  /** Injectable accessibility preference; defaults to matchMedia(). */
+  readonly prefersReducedMotion?: () => boolean;
+  /** Injectable animation driver; defaults to the Web Animations API. */
+  readonly transition?: PhotoHeroTransition;
+  /** Fires once the full-screen boat still has settled into the first frame. */
+  readonly onIntroComplete?: () => void;
 }
+
+export interface PhotoHeroTransitionContext {
+  readonly hero: HTMLElement;
+  readonly destination: HTMLElement;
+  readonly transform: HeroTransform;
+  readonly reducedMotion: boolean;
+}
+
+export type PhotoHeroTransition = (
+  context: PhotoHeroTransitionContext,
+) => Promise<void>;
 
 /** A resolved item on the wall: a real photo, or a warm placeholder. */
 interface WallItem {
@@ -53,6 +109,7 @@ interface WallItem {
   readonly src?: string;
   /** Placeholder gradient seed (stable warm variation). */
   readonly tone: number;
+  readonly storyPhoto?: 'boat';
 }
 
 async function fetchManifest(): Promise<PhotoManifest | undefined> {
@@ -70,20 +127,32 @@ async function fetchManifest(): Promise<PhotoManifest | undefined> {
 
 function resolveItems(manifest: PhotoManifest | undefined): WallItem[] {
   const photos = manifest?.photos ?? [];
+  const boat: WallItem = {
+    caption: 'the next good day',
+    src: BOAT_PHOTO_SRC,
+    tone: 0,
+    storyPhoto: 'boat',
+  };
   if (photos.length > 0) {
-    return photos.slice(0, 30).map((photo, index) => ({
-      caption: photo.caption ?? '',
-      src: photo.src.startsWith('/') || /^https?:/.test(photo.src)
-        ? photo.src
-        : `${PHOTO_BASE}${photo.src}`,
-      tone: index % PLACEHOLDER_CAPTIONS.length,
-    }));
+    return [
+      boat,
+      ...photos.slice(0, 29).map((photo, index) => ({
+        caption: photo.caption ?? '',
+        src: photo.src.startsWith('/') || /^https?:/.test(photo.src)
+          ? photo.src
+          : `${PHOTO_BASE}${photo.src}`,
+        tone: (index + 1) % PLACEHOLDER_CAPTIONS.length,
+      })),
+    ];
   }
   // Empty / missing manifest → soft placeholders so the wall feels composed.
-  return Array.from({ length: PLACEHOLDER_COUNT }, (_unused, index) => ({
-    caption: PLACEHOLDER_CAPTIONS[index % PLACEHOLDER_CAPTIONS.length],
-    tone: index % PLACEHOLDER_CAPTIONS.length,
-  }));
+  return [
+    boat,
+    ...Array.from({ length: PLACEHOLDER_COUNT }, (_unused, index) => ({
+      caption: PLACEHOLDER_CAPTIONS[index % PLACEHOLDER_CAPTIONS.length],
+      tone: index % PLACEHOLDER_CAPTIONS.length,
+    })),
+  ];
 }
 
 /** Small, stable per-index scatter so the collage looks pinned, not gridded. */
@@ -91,14 +160,56 @@ function rotationFor(index: number): number {
   return (((index * 37) % 9) - 4) * 0.7; // ~ -2.8deg .. +2.8deg
 }
 
+function prefersReducedMotion(): boolean {
+  return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+}
+
+async function runPhotoHeroTransition({
+  hero,
+  transform,
+  reducedMotion,
+}: PhotoHeroTransitionContext): Promise<void> {
+  const keyframes: Keyframe[] = reducedMotion
+    ? [{ opacity: 1 }, { opacity: 0 }]
+    : [
+        { transform: 'translate3d(0, 0, 0) scale(1)', opacity: 1 },
+        {
+          transform: `translate3d(${transform.translateX}px, ${transform.translateY}px, 0) scale(${transform.scale})`,
+          opacity: 1,
+        },
+      ];
+  const animation = hero.animate?.(keyframes, {
+    duration: reducedMotion ? 240 : 900,
+    easing: reducedMotion ? 'ease' : 'cubic-bezier(0.22, 0.72, 0.24, 1)',
+    fill: 'forwards',
+  });
+  if (animation) {
+    await animation.finished.catch(() => undefined);
+    return;
+  }
+
+  const final = keyframes[keyframes.length - 1];
+  if (final.transform) {
+    hero.style.transform = String(final.transform);
+  }
+  if (final.opacity !== undefined) {
+    hero.style.opacity = String(final.opacity);
+  }
+}
+
 export function showPhotoWall(options: PhotoWallOptions = {}): Promise<void> {
   const host = options.host ?? getUiRoot();
   const loadManifest = options.loadManifest ?? fetchManifest;
+  const measureRect = options.measureRect ?? ((element) => element.getBoundingClientRect());
+  const reducedMotion = (options.prefersReducedMotion ?? prefersReducedMotion)();
+  const transition = options.transition ?? runPhotoHeroTransition;
 
   return new Promise<void>((resolve) => {
     const overlay = document.createElement('section');
     overlay.className = 'photo-wall';
+    overlay.classList.add('photo-wall--introducing');
     overlay.dataset.photoWall = '';
+    overlay.dataset.photoIntro = 'running';
     overlay.setAttribute('role', 'dialog');
     overlay.setAttribute('aria-modal', 'true');
     overlay.setAttribute('aria-label', '____’s photo wall');
@@ -194,10 +305,16 @@ export function showPhotoWall(options: PhotoWallOptions = {}): Promise<void> {
         return;
       }
       const items = resolveItems(manifest);
+      let storyFrame: HTMLElement | undefined;
+      let storyImage: HTMLElement | undefined;
       items.forEach((item, index) => {
         const frame = document.createElement('button');
         frame.type = 'button';
         frame.className = 'photo-wall__frame';
+        if (item.storyPhoto) {
+          frame.dataset.storyPhoto = item.storyPhoto;
+          storyFrame = frame;
+        }
         const isEmptyFrame = !item.src && item.caption === EMPTY_FRAME_CAPTION;
         if (!item.src) {
           frame.classList.add('photo-wall__frame--placeholder');
@@ -205,7 +322,7 @@ export function showPhotoWall(options: PhotoWallOptions = {}): Promise<void> {
         if (isEmptyFrame) {
           frame.classList.add('photo-wall__frame--empty');
         }
-        frame.style.setProperty('--rot', `${rotationFor(index)}deg`);
+        frame.style.setProperty('--rot', item.storyPhoto ? '0deg' : `${rotationFor(index)}deg`);
         frame.style.setProperty('--tone', String(item.tone));
         frame.setAttribute(
           'aria-label',
@@ -225,7 +342,11 @@ export function showPhotoWall(options: PhotoWallOptions = {}): Promise<void> {
           frame.append(glow);
         }
 
-        frame.append(tape, buildMedia(item, false));
+        const media = buildMedia(item, false);
+        if (item.storyPhoto) {
+          storyImage = media;
+        }
+        frame.append(tape, media);
         if (item.caption) {
           const caption = document.createElement('span');
           caption.className = 'photo-wall__caption';
@@ -235,9 +356,47 @@ export function showPhotoWall(options: PhotoWallOptions = {}): Promise<void> {
         frame.addEventListener('click', () => openLightbox(item));
         board.append(frame);
       });
-    });
 
-    requestAnimationFrame(() => overlay.focus({ preventScroll: true }));
+      if (!storyFrame || !storyImage) {
+        return;
+      }
+
+      const introScrim = document.createElement('div');
+      introScrim.className = 'photo-wall__intro-scrim';
+      introScrim.dataset.photoIntroScrim = '';
+      introScrim.setAttribute('aria-hidden', 'true');
+
+      const hero = document.createElement('img');
+      hero.className = 'photo-wall__hero';
+      hero.dataset.photoHero = '';
+      hero.setAttribute('aria-hidden', 'true');
+      hero.src = BOAT_PHOTO_SRC;
+      hero.alt = '';
+      hero.decoding = 'async';
+      overlay.append(introScrim, hero);
+
+      if (reducedMotion) {
+        overlay.classList.add('photo-wall--reduced-motion');
+      }
+      const context: PhotoHeroTransitionContext = {
+        hero,
+        destination: storyImage,
+        transform: calculateHeroTransform(measureRect(hero), measureRect(storyImage)),
+        reducedMotion,
+      };
+      void transition(context).then(() => {
+        if (closed) {
+          return;
+        }
+        overlay.classList.remove('photo-wall--introducing');
+        overlay.classList.add('photo-wall--ready');
+        overlay.dataset.photoIntro = 'complete';
+        hero.remove();
+        introScrim.remove();
+        options.onIntroComplete?.();
+        overlay.focus({ preventScroll: true });
+      });
+    });
   });
 }
 
@@ -246,6 +405,9 @@ function buildMedia(item: WallItem, large: boolean): HTMLElement {
   if (item.src) {
     const img = document.createElement('img');
     img.className = large ? 'photo-wall__media photo-wall__media--large' : 'photo-wall__media';
+    if (item.storyPhoto && !large) {
+      img.classList.add('photo-wall__media--story');
+    }
     img.src = item.src;
     img.alt = item.caption || 'A photo of ____';
     img.loading = 'lazy';

@@ -118,7 +118,7 @@ const PRACTICE_TRAIL_MS =
 const WINDOW = { x: 14, y: 52, w: 66, h: 150 } as const;
 const WINDOW_LIGHT = { x: WINDOW.x + WINDOW.w / 2, y: WINDOW.y + WINDOW.h * 0.62 };
 
-const CAPTION_TEXT = 'Do you hear them?';
+const CAPTION_TEXT = 'Follow the light';
 const CAPTION_FADE_MS = 1400;
 const CAPTION_HOLD_MS = 1800;
 
@@ -1313,9 +1313,6 @@ export class ViolinScene extends Phaser.Scene {
     const count = phrase.notes.length;
     const span = NOTE_RIGHT_LOCAL - NOTE_LEFT_LOCAL;
     const lit = litNoteCount(this.modelState);
-    const echoing = this.modelState.phase === 'echo';
-    const recovering = this.modelState.recovering;
-    const expectedIdx = this.modelState.echoIndex;
 
     const pts = phrase.notes.map((note, i) => {
       const pitch = getPitch(note.pitchId);
@@ -1325,28 +1322,26 @@ export class ViolinScene extends Phaser.Scene {
 
     this.drawGraphAxis(g);
 
-    // Drop lines from the axis to each point — reads as a bar/graph reading.
-    pts.forEach((p) => {
+    // Advanced mode is performed, not previewed: only the notes that have
+    // actually sounded during playback or been played during echo exist yet.
+    const visiblePts = pts.slice(0, lit);
+
+    // Drop lines appear with their points instead of revealing the phrase ahead.
+    visiblePts.forEach((p) => {
       g.lineStyle(1, INK, 0.12);
       g.lineBetween(p.x, GRAPH_AXIS_LOCAL, p.x, p.y + 4);
     });
 
-    // The contour connecting the notes; the already-played run glows gold.
-    for (let i = 0; i < count - 1; i += 1) {
+    // The contour grows one segment at a time as the music is heard or echoed.
+    for (let i = 0; i < visiblePts.length - 1; i += 1) {
       const a = pts[i];
       const b = pts[i + 1];
-      g.lineStyle(2, INK, 0.4);
+      g.lineStyle(2.4, mixHex(NOTE_LIT, 0xffe6a6, 0.3), 0.9);
       g.lineBetween(a.x, a.y, b.x, b.y);
-      if (i + 1 < lit) {
-        g.lineStyle(2.4, mixHex(NOTE_LIT, 0xffe6a6, 0.3), 0.9);
-        g.lineBetween(a.x, a.y, b.x, b.y);
-      }
     }
 
-    pts.forEach((p, i) => {
-      const isLit = i < lit;
-      const isExpected = echoing && i === expectedIdx;
-      this.drawGraphMark(g, p.x, p.y, time, i, isLit, isExpected, recovering);
+    visiblePts.forEach((p, i) => {
+      this.drawGraphMark(g, p.x, p.y, time, i, true, false, false);
     });
   }
 
@@ -1548,8 +1543,9 @@ export class ViolinScene extends Phaser.Scene {
 
     VIOLIN_PITCHES.forEach((pitch, index) => {
       const cx = this.legendCapX(index);
-      const isExpected = echoing && expected === pitch.id;
+      const isExpected = this.modes.keyGuidance && echoing && expected === pitch.id;
       const held = this.noteKeys.get(pitch.key)?.isDown ?? false;
+      const isActive = isExpected || held;
       const press = held ? 2 : 0; // depress offset
       const x = cx - capW / 2;
       const y = capY + press;
@@ -1559,28 +1555,28 @@ export class ViolinScene extends Phaser.Scene {
       g.fillRoundedRect(x, capY + 3, capW, capH, 7);
 
       // Cap face.
-      const glow = isExpected ? 0.65 + Math.sin(time / 220) * 0.2 : 0;
-      const faceTop = isExpected ? mixHex(0x6a4a24, 0xffd98a, glow) : 0x3c2f26;
-      const faceBot = isExpected ? mixHex(0x4a3218, 0xcf9a44, glow) : 0x271f19;
+      const glow = held ? 0.95 : isExpected ? 0.65 + Math.sin(time / 220) * 0.2 : 0;
+      const faceTop = isActive ? mixHex(0x6a4a24, 0xffd98a, glow) : 0x3c2f26;
+      const faceBot = isActive ? mixHex(0x4a3218, 0xcf9a44, glow) : 0x271f19;
       g.fillStyle(faceBot, 1);
       g.fillRoundedRect(x, y, capW, capH, 7);
       g.fillStyle(faceTop, 1);
       g.fillRoundedRect(x, y, capW, capH - 4, 7);
       // Bevel highlight.
-      g.fillStyle(isExpected ? 0xfff0c6 : 0x6a584a, isExpected ? 0.5 : 0.35);
+      g.fillStyle(isActive ? 0xfff0c6 : 0x6a584a, isActive ? 0.5 : 0.35);
       g.fillRoundedRect(x + 3, y + 2, capW - 6, 4, 3);
       // Rim.
-      g.lineStyle(1.5, isExpected ? 0xffe6a6 : 0x1c1512, isExpected ? 0.9 : 0.8);
+      g.lineStyle(1.5, isActive ? 0xffe6a6 : 0x1c1512, isActive ? 0.9 : 0.8);
       g.strokeRoundedRect(x, y, capW, capH, 7);
 
-      if (isExpected) {
+      if (isActive) {
         g.fillStyle(0xffe6a6, 0.12 + glow * 0.1);
         g.fillCircle(cx, y + capH / 2, 30);
       }
 
       this.legendLetters[index]
         .setPosition(cx, y + 11)
-        .setColor(isExpected ? '#fff4d6' : '#e6d2ac');
+        .setColor(isActive ? '#fff4d6' : '#e6d2ac');
       this.legendNames[index].setPosition(cx, y + 26);
     });
   }

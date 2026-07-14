@@ -1,23 +1,64 @@
 import type { LocationEnterBeat } from '../content/types';
 import {
   hasAllFriendKeepsakes,
+  hasActivityCompleted,
   hasSeenBeat,
   isFinalSpotUnlocked,
   type RunState,
 } from './runState';
 
+export function isInteractionAvailable(
+  interaction: {
+    readonly requiresBeatId?: string;
+    readonly requiresActivityId?: string;
+    readonly hiddenAfterActivityId?: string;
+    readonly hiddenAfterBeatId?: string;
+    readonly requiresEndingCompleted?: boolean;
+    readonly lockedUntilActivityId?: string;
+  },
+  state: RunState,
+): boolean {
+  if (interaction.requiresBeatId && !hasSeenBeat(state, interaction.requiresBeatId)) {
+    return false;
+  }
+  if (
+    interaction.requiresActivityId &&
+    !hasActivityCompleted(state, interaction.requiresActivityId)
+  ) {
+    return false;
+  }
+  if (
+    interaction.hiddenAfterActivityId &&
+    hasActivityCompleted(state, interaction.hiddenAfterActivityId)
+  ) {
+    return false;
+  }
+  if (interaction.hiddenAfterBeatId && hasSeenBeat(state, interaction.hiddenAfterBeatId)) {
+    return false;
+  }
+  return !interaction.requiresEndingCompleted || state.endingCompleted;
+}
+
 /**
- * A keepsake-gated interaction that isn't unlocked yet. `requiresAllKeepsakes`
- * needs every letter (the clearing shore ritual); `requiresAllFriendKeepsakes`
- * needs only the two friend letters (e.g. ____'s PC / violin).
+ * An interaction that remains visible while a prerequisite is outstanding.
+ * `lockedUntilActivityId` gates story order without hiding the hotspot;
+ * `requiresAllKeepsakes` needs every letter (the clearing shore ritual), while
+ * `requiresAllFriendKeepsakes` needs only the two friend letters.
  */
 export function isInteractionLocked(
   interaction: {
     readonly requiresAllFriendKeepsakes?: boolean;
     readonly requiresAllKeepsakes?: boolean;
+    readonly lockedUntilActivityId?: string;
   },
   state: RunState,
 ): boolean {
+  if (
+    interaction.lockedUntilActivityId &&
+    !hasActivityCompleted(state, interaction.lockedUntilActivityId)
+  ) {
+    return true;
+  }
   if (interaction.requiresAllKeepsakes && !isFinalSpotUnlocked(state)) {
     return true;
   }
@@ -33,6 +74,14 @@ export function shouldPlayEnterBeat(beat: LocationEnterBeat, state: RunState): b
   }
 
   if (beat.requiresAllFriendKeepsakes && !hasAllFriendKeepsakes(state)) {
+    return false;
+  }
+
+  if (beat.requiresBeatId && !hasSeenBeat(state, beat.requiresBeatId)) {
+    return false;
+  }
+
+  if (beat.requiresActivityId && !hasActivityCompleted(state, beat.requiresActivityId)) {
     return false;
   }
 

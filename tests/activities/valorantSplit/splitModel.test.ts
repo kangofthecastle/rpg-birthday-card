@@ -86,6 +86,7 @@ describe('splitModel construction', () => {
     expect(state.attempt).toBe(0);
     expect(state.defuse.progressMs).toBe(0);
     expect(state.reinforcementsSpawned).toBe(1);
+    expect(state.teammate.present).toBe(true);
   });
 });
 
@@ -177,6 +178,22 @@ describe('teammate fire (____ / Omen)', () => {
     const state = withState({ enemies: [] });
 
     expect(fireTeammateShot(state).result.fired).toBe(false);
+  });
+
+  it('does not move or fire after departing', () => {
+    const base = withState({ enemies: [enemyAt({ x: 426, y: 300 })] });
+    const absent = {
+      ...base,
+      player: { ...base.player, pos: { x: 700, y: 400 }, invulnMs: 1e7 },
+      teammate: { ...base.teammate, present: false, fireCooldownMs: 0 },
+    };
+
+    expect(fireTeammateShot(absent).result.fired).toBe(false);
+
+    const next = tickSplit(absent, IDLE_INPUT, 250);
+
+    expect(next.teammate.pos).toEqual(absent.teammate.pos);
+    expect(collect(next.events, 'teammate-shot')).toHaveLength(0);
   });
 });
 
@@ -784,10 +801,83 @@ describe('defuse checkpoint at 3.5s (Valorant half-defuse semantics)', () => {
     expect(SPLIT_CONFIG.defuse.checkpointMs).toBe(SPLIT_CONFIG.defuse.totalMs / 2);
   });
 
+  it('departs Omen once, immediately after banking the half-defuse checkpoint', () => {
+    const state = hold(atSpike(), SPLIT_CONFIG.defuse.checkpointMs, true);
+
+    expect(state.teammate.present).toBe(false);
+    expect(state.events.map((event) => event.type).slice(-2)).toEqual([
+      'defuse-checkpoint',
+      'teammate-departed',
+    ]);
+    expect(
+      state.events.find((event) => event.type === 'teammate-departed'),
+    ).toMatchObject({
+      type: 'teammate-departed',
+      at: state.teammate.pos,
+    });
+  });
+
+  it('does not emit another departure while finishing from the banked half', () => {
+    let state = hold(atSpike(), SPLIT_CONFIG.defuse.checkpointMs, true);
+
+    state = hold(state, 500, false);
+    expect(state.teammate.present).toBe(false);
+    expect(collect(state.events, 'teammate-departed')).toHaveLength(0);
+
+    state = hold(state, SPLIT_CONFIG.defuse.checkpointMs, true);
+    expect(isSplitWon(state)).toBe(true);
+    expect(state.teammate.present).toBe(false);
+    expect(collect(state.events, 'teammate-departed')).toHaveLength(0);
+  });
+
+  it('keeps Omen absent when a hit interrupts progress above the banked half', () => {
+    let state = hold(atSpike(), SPLIT_CONFIG.defuse.checkpointMs + 1000, true);
+    state = {
+      ...state,
+      player: { ...state.player, invulnMs: 0 },
+    };
+
+    state = damagePlayer(state);
+
+    expect(state.defuse.progressMs).toBe(SPLIT_CONFIG.defuse.checkpointMs);
+    expect(state.teammate.present).toBe(false);
+  });
+
+  it('restores Omen when death starts a fully fresh round', () => {
+    let state = hold(atSpike(), SPLIT_CONFIG.defuse.checkpointMs, true);
+    state = {
+      ...state,
+      player: { ...state.player, hearts: 1, invulnMs: 0 },
+    };
+
+    state = damagePlayer(state);
+    expect(state.phase).toBe('dead');
+    expect(state.teammate.present).toBe(false);
+
+    state = tickSplit(state, IDLE_INPUT, SPLIT_CONFIG.death.holdMs + 50);
+    expect(state.phase).toBe('retake');
+    expect(state.teammate.present).toBe(true);
+  });
+
+  it('restores Omen when detonation starts a fully fresh round', () => {
+    let state = hold(atSpike(), SPLIT_CONFIG.defuse.checkpointMs, true);
+    state = { ...state, spikeTimerMs: 1 };
+
+    state = tickSplit(state, IDLE_INPUT, 50);
+    expect(state.phase).toBe('detonated');
+    expect(state.teammate.present).toBe(false);
+
+    state = tickSplit(state, IDLE_INPUT, SPLIT_CONFIG.detonation.holdMs + 50);
+    expect(state.phase).toBe('retake');
+    expect(state.teammate.present).toBe(true);
+  });
+
   it('releasing BEFORE 3.5s resets progress all the way to zero', () => {
-    let state = hold(atSpike(), 3400, true); // stop just shy of the checkpoint
+    let state = hold(atSpike(), SPLIT_CONFIG.defuse.checkpointMs - 1, true);
     expect(state.defuse.checkpointReached).toBe(false);
-    expect(state.defuse.progressMs).toBeCloseTo(3400, 0);
+    expect(state.defuse.progressMs).toBeCloseTo(SPLIT_CONFIG.defuse.checkpointMs - 1, 0);
+    expect(state.teammate.present).toBe(true);
+    expect(collect(state.events, 'teammate-departed')).toHaveLength(0);
 
     state = hold(state, 32, false); // release
     expect(state.defuse.progressMs).toBe(0);

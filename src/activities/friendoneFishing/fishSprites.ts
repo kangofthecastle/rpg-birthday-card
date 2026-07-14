@@ -2,14 +2,13 @@
 //
 // Each fish type may ship a single-frame PNG at
 //   public/assets/activities/friendone-fishing/fish-<id>.png
-// painted as a TOP-DOWN cutout (viewed from above, as if looking down into the
-// water) on a transparent background, with the nose pointing LEFT in the source
-// art. The scene rotates the whole sprite to the fish's travel heading (no flip,
-// because a top-down fish reads correctly at any rotation). When the file is
-// present the scene renders from it; when it is absent the scene falls back to
-// the existing vector rendering. Presence is probed with `isImageUrl` (dev
-// serves index.html for missing paths), so an absent sprite never logs a loader
-// error, and the golden koi halo/sparkle stays procedural on top of the art.
+// painted as a side-view cutout on a transparent background, with the nose
+// pointing RIGHT in every current source asset. The scene mirrors the sprite
+// when travel changes sides and applies only a small pitch so the fish stays
+// upright. When a file is absent the scene falls back to vector rendering.
+// Presence is probed with `isImageUrl` (dev serves index.html for missing paths),
+// so a missing sprite never logs a loader error, and the golden koi
+// halo/sparkle stays procedural on top of the art.
 
 export interface FishSpriteConfig {
   /** Phaser texture key. */
@@ -24,8 +23,8 @@ export interface FishSpriteConfig {
 
 export const FISH_SPRITE_BASE_URL = '/assets/activities/friendone-fishing';
 
-/** Nose direction of the source art, in radians (PI = pointing left). */
-export const FISH_SPRITE_NOSE_ANGLE = Math.PI;
+/** Nose direction shared by the source art, in radians (0 = pointing right). */
+export const FISH_SPRITE_NOSE_ANGLE = 0;
 
 /**
  * Largest vertical pitch (radians) a swimming fish sprite is allowed to take.
@@ -36,7 +35,7 @@ export const FISH_SPRITE_NOSE_ANGLE = Math.PI;
 export const FISH_MAX_PITCH = 0.5;
 
 export interface FishFacing {
-  /** Mirror the (left-facing) art horizontally so it faces its travel side. */
+  /** Mirror the source art horizontally so it faces its travel side. */
   readonly flipX: boolean;
   /** Gentle vertical pitch toward the travel heading, clamped upright. */
   readonly rotation: number;
@@ -45,7 +44,7 @@ export interface FishFacing {
 /**
  * Map a travel heading to a side-view sprite orientation.
  *
- * The source art faces LEFT. Instead of rotating the whole sprite to the heading
+ * The source art faces RIGHT. Instead of rotating the whole sprite to the heading
  * (which flips a side-view fish belly-up whenever it swims to the right — the
  * "fish moving backwards" bug), we mirror it to the travel side with `flipX` and
  * apply only a small vertical pitch. The fish always stays upright yet noses the
@@ -54,11 +53,13 @@ export interface FishFacing {
 export function fishSpriteFacing(heading: number, maxPitch = FISH_MAX_PITCH): FishFacing {
   const wrap = (a: number): number => Math.atan2(Math.sin(a), Math.cos(a));
   const faceRight = Math.cos(heading) >= 0;
-  // When facing right we mirror the left-nose art; the leftover pitch is the
-  // heading itself. When facing left we keep the art and pitch by heading-PI.
+  const sourceFacesRight = Math.cos(FISH_SPRITE_NOSE_ANGLE) >= 0;
+  // Mirror exactly when the requested travel side differs from the source art.
+  // Pitch is measured from the horizontal direction the fish is facing.
+  const flipX = faceRight !== sourceFacesRight;
   const pitch = faceRight ? wrap(heading) : wrap(heading - Math.PI);
   const rotation = Math.max(-maxPitch, Math.min(maxPitch, pitch));
-  return { flipX: faceRight, rotation };
+  return { flipX, rotation };
 }
 
 // Per-fish target display widths, matching the locked asset spec

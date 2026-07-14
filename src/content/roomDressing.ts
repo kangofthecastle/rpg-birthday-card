@@ -306,6 +306,15 @@ const RECIPIENT_HOUSE_DRESSING: RoomDressing = {
       heightRatio: 1.1,
       note: 'reading armchair (singles-only)',
     },
+    {
+      frame: 'epilogue-photo',
+      mapX: 511,
+      mapY: -64,
+      heightRatio: 0.358,
+      wallShear: 0.5,
+      fixedDepth: -20.95,
+      note: 'post-ending boat photo (independently movable in dressEdit)',
+    },
   ],
 };
 

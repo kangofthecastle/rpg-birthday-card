@@ -12,6 +12,14 @@ export interface DialogueLine {
   readonly speaker?: string;
   readonly text: string;
   readonly portraitId?: string;
+  /** Optional non-character portrait treatment rendered by the dialogue UI. */
+  readonly portraitTreatment?: 'phone';
+}
+
+export interface SheetMusicReward {
+  readonly title: string;
+  readonly imageSrc: string;
+  readonly imageAlt: string;
 }
 
 /**
@@ -24,6 +32,9 @@ export interface LocationEnterBeat {
   readonly dialogue: readonly DialogueLine[];
   /** When true, the beat only fires once both friend keepsakes are collected. */
   readonly requiresAllFriendKeepsakes?: boolean;
+  /** Optional canonical-story prerequisites. */
+  readonly requiresBeatId?: string;
+  readonly requiresActivityId?: string;
   /** When false, the beat may replay on every entry. Defaults to true (once only). */
   readonly once?: boolean;
 }
@@ -77,6 +88,19 @@ interface BaseLocationInteraction {
    * needs all three letters in hand. Until then it shows `lockedDialogue`.
    */
   readonly requiresAllKeepsakes?: boolean;
+  /** Hide the interaction until a named narrative beat or activity is complete. */
+  readonly requiresBeatId?: string;
+  readonly requiresActivityId?: string;
+  /** Keep this interaction visible, but locked until the named activity completes. */
+  readonly lockedUntilActivityId?: string;
+  /** Remove the interaction once its one-time activity has completed. */
+  readonly hiddenAfterActivityId?: string;
+  /** Remove a one-time interaction after its named narrative beat. */
+  readonly hiddenAfterBeatId?: string;
+  /** Show only in the persistent post-ending world. */
+  readonly requiresEndingCompleted?: boolean;
+  /** Beat recorded after this interaction's dialogue finishes. */
+  readonly marksBeatId?: string;
   readonly lockedDialogue?: readonly DialogueLine[];
   /**
    * After the ending is complete, this interaction opens the full-screen photo
@@ -120,6 +144,8 @@ export interface LocationDefinition {
   readonly activityId?: string;
   readonly rewardPresentation?: RewardPresentation;
   readonly rewardMessage?: readonly DialogueLine[];
+  /** Illustrated score shown on first acquisition before ____'s recognition dialogue. */
+  readonly rewardSheetMusic?: SheetMusicReward;
   readonly keepsake?: KeepsakeDefinition;
   readonly exits: readonly LocationExit[];
   /** Edge-to-edge transitions to adjacent outdoor areas (walk off the side). */

@@ -75,7 +75,7 @@ describe('keepsake ritual model — components & verbs', () => {
     expect(FOLD_COMPONENTS.map((c) => c.letterKeepsakeId)).toEqual([
       'glowing-koi-scale',
       'defused-spike-charm',
-      'golden-hour-photo',
+      'recipient-sheet-music',
     ]);
   });
 

@@ -30,8 +30,17 @@ import {
   UI_FRAMES,
   type ArtFrame,
 } from './splitArt';
-import { playSfx as playAudioSfx, type SfxKey } from '../../game/audio';
+import {
+  playAudioFile,
+  playSfx as playAudioSfx,
+  preloadAudioFile,
+  type SfxKey,
+} from '../../game/audio';
 import { isImageUrl } from '../../game/assetProbe';
+import {
+  createSplitIntroPresentation,
+  type SplitIntroCombatant,
+} from './splitIntro';
 
 type SfxEvent =
   | 'shot'
@@ -39,6 +48,7 @@ type SfxEvent =
   | 'beep'
   | 'tick'
   | 'checkpoint'
+  | 'teleport'
   | 'complete'
   | 'detonate'
   | 'clutch'
@@ -52,6 +62,7 @@ const SFX_BY_EVENT: Readonly<Record<SfxEvent, SfxKey>> = {
   beep: 'sfx-spike-beep',
   tick: 'sfx-defuse-tick',
   checkpoint: 'sfx-defuse-checkpoint',
+  teleport: 'sfx-omen-teleport',
   complete: 'sfx-defuse-complete',
   detonate: 'sfx-detonate',
   clutch: 'sfx-clutch',
@@ -61,11 +72,13 @@ const SFX_BY_EVENT: Readonly<Record<SfxEvent, SfxKey>> = {
 };
 
 export interface SplitSceneCallbacks {
+  readonly onReady: () => Promise<void>;
   readonly onComplete: () => void;
   readonly onCancel: () => void;
 }
 
 const DEFAULT_CALLBACKS: SplitSceneCallbacks = {
+  onReady: () => Promise.resolve(),
   onComplete: () => undefined,
   onCancel: () => undefined,
 };
@@ -76,6 +89,7 @@ const CLUTCH_DELAY_MS = 1600;
 const HIT_FLASH_MS = 90;
 const DEATH_FADE_MS = 260;
 const COVER_OVERHANG = 1.08;
+const INTRO_MATERIALIZE_MS = 560;
 
 // HUD geometry (arena is 960x540). The bottom bar carries health on the left and
 // the ammo counter on the right. The top bar is a Valorant-style scoreboard:
@@ -142,19 +156,14 @@ const MUZZLE_COLOR = {
   enemy: 0xff8a5c,
 } as const;
 
-// ____-voice comms barks. Warm, personal, Valorant-flavored — the teammate is
-// ____, the player is ____, and this is a birthday gift.
-const BARKS = {
-  roundStart: "Site's lost, spike's down — we're taking it back. On me, ____.",
-  firstBlood: "That's the one. Knew you'd pop off.",
-  died: "You're down — but we reset and run it clean. From the top, ____.",
-  reinforcement: "More inbound from Heaven. Hold the angle, I've got trades.",
-  defuseWave: "You tapped it — they're collapsing! Two on the flank, hold!",
-  onSite: "You're on it — plant your feet and hold 4. I've got the site.",
-  interrupted: "They knocked you off it! Reset and get back on — go, go.",
-  detonate: "Spike's gone. Shake it off — we run it back. Same as always.",
-  runback: "Fresh round. Site's down again. Let's take it back.",
-  clutch: "That's my Viper. Clutch.",
+const VALORANT_AUDIO_BASE = '/audio/valorant-reference';
+const valorantAudioUrl = (file: string): string => encodeURI(`${VALORANT_AUDIO_BASE}/${file}`);
+const VALORANT_AUDIO = {
+  shot: valorantAudioUrl('Phantom fire 1 bullet.mp3'),
+  reload: valorantAudioUrl('phantom-reload.mp3'),
+  plant: valorantAudioUrl('Valorant spike planting sound.mp3'),
+  defuseTap: valorantAudioUrl('spike-defusing.mp3'),
+  kills: [1, 2, 3, 4, 5].map((number) => valorantAudioUrl(`kill ${number}.mp3`)),
 } as const;
 
 interface Tracer {
@@ -249,7 +258,6 @@ export class SplitScene extends Phaser.Scene {
   private allyCountText!: Phaser.GameObjects.Text;
   private enemyCountText!: Phaser.GameObjects.Text;
   private roundText!: Phaser.GameObjects.Text;
-  private barkText!: Phaser.GameObjects.Text;
   private popupText!: Phaser.GameObjects.Text;
   private promptText!: Phaser.GameObjects.Text;
   private warnText!: Phaser.GameObjects.Text;
@@ -259,11 +267,12 @@ export class SplitScene extends Phaser.Scene {
   private nextBeepAt = 0;
   private nextDefuseTickAt = 0;
   private nextDefuseLoopAt = 0;
-  private onSiteBarked = false;
+  private killSoundIndex = 0;
   private playerFlashUntil = 0;
   private enemyFlashUntil = new Map<number, number>();
   private teammateFacingLeft = false;
   private teammatePrevX: number = SPLIT_CONFIG.teammateStart.x;
+  private teammateDepartureFx = new Set<Phaser.GameObjects.GameObject>();
 
   constructor(callbacks: SplitSceneCallbacks = DEFAULT_CALLBACKS) {
     super('SplitScene');
@@ -318,6 +327,13 @@ export class SplitScene extends Phaser.Scene {
     this.playerView = this.createCharacter('player', TEX.player);
     this.teammateView = this.createCharacter('teammate', TEX.teammate);
     this.createSpike();
+    [
+      VALORANT_AUDIO.shot,
+      VALORANT_AUDIO.reload,
+      VALORANT_AUDIO.plant,
+      VALORANT_AUDIO.defuseTap,
+      ...VALORANT_AUDIO.kills,
+    ].forEach(preloadAudioFile);
 
     this.groundFx = this.add.graphics().setDepth(55);
     this.dynamic = this.add.graphics().setDepth(700);
@@ -337,21 +353,6 @@ export class SplitScene extends Phaser.Scene {
       .setOrigin(0.5, 0.5)
       .setDepth(813)
       .setScrollFactor(0);
-    this.barkText = this.add
-      .text(0, 0, '', {
-        align: 'center',
-        backgroundColor: '#20304aee',
-        color: '#dfe9ff',
-        fontFamily: 'Arial, sans-serif',
-        fontSize: '18px',
-        padding: { x: 10, y: 6 },
-        stroke: '#0c1220',
-        strokeThickness: 2,
-        wordWrap: { width: 280 },
-      })
-      .setOrigin(0.5, 1)
-      .setDepth(815)
-      .setVisible(false);
     this.popupText = this.add
       .text(ARENA.width / 2, ARENA.height / 2 - 60, '', {
         align: 'center',
@@ -400,8 +401,131 @@ export class SplitScene extends Phaser.Scene {
     this.crosshair.setDepth(900);
 
     this.createInput();
-    this.showBark(BARKS.roundStart);
+    await this.playIntroMaterialization();
+
+    if (!this.scene.isActive()) {
+      return;
+    }
+
+    await this.callbacks.onReady();
+
+    if (!this.scene.isActive()) {
+      return;
+    }
+
+    playAudioFile(VALORANT_AUDIO.plant, { volume: 0.82 });
+
+    this.heldCodes.clear();
+    this.pointerDown = false;
+    this.firePressed = false;
+    this.reloadQueued = false;
     this.ready = true;
+  }
+
+  /**
+   * Put both agents at the same authoritative positions gameplay will use,
+   * then let the arena visibly resolve them before the lead-in dialogue opens.
+   * Their weapons stay hidden throughout this story beat; the first live
+   * render after onReady() aims and reveals them.
+   */
+  private async playIntroMaterialization(): Promise<void> {
+    const presentation = createSplitIntroPresentation(this.state);
+
+    for (const combatant of presentation) {
+      const view = combatant.role === 'viper' ? this.playerView : this.teammateView;
+      const height =
+        combatant.role === 'viper'
+          ? SPLIT_CONFIG.player.height
+          : SPLIT_CONFIG.teammate.height;
+
+      this.positionCharacter(view, combatant.position, height, 0);
+      view.gun.setVisible(combatant.gunVisible);
+      view.img.setVisible(true).setAlpha(0).setTint(combatant.cueColor);
+    }
+
+    await new Promise<void>((resolve) => {
+      let completed = 0;
+      let settled = false;
+
+      const finish = (): void => {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+        this.events.off(Phaser.Scenes.Events.SHUTDOWN, cancel);
+        resolve();
+      };
+      const completeOne = (): void => {
+        completed += 1;
+        if (completed === presentation.length) {
+          finish();
+        }
+      };
+      const cancel = (): void => finish();
+
+      this.events.once(Phaser.Scenes.Events.SHUTDOWN, cancel);
+
+      for (const combatant of presentation) {
+        this.playCombatantMaterialization(combatant, completeOne);
+      }
+    });
+  }
+
+  private playCombatantMaterialization(
+    combatant: SplitIntroCombatant,
+    onComplete: () => void,
+  ): void {
+    const view = combatant.role === 'viper' ? this.playerView : this.teammateView;
+    const height =
+      combatant.role === 'viper' ? SPLIT_CONFIG.player.height : SPLIT_CONFIG.teammate.height;
+    const baseScaleX = view.img.scaleX;
+    const baseScaleY = view.img.scaleY;
+    const footY = combatant.position.y + height / 2;
+    const cue = this.add
+      .graphics()
+      .setPosition(combatant.position.x, footY)
+      .setDepth(view.img.depth + 2);
+
+    cue.lineStyle(3, combatant.cueColor, 0.9);
+    cue.strokeEllipse(0, 0, 42, 13);
+    cue.lineStyle(1.5, combatant.cueColor, 0.7);
+    cue.strokeEllipse(0, -9, 28, 9);
+    cue.fillStyle(combatant.cueColor, 0.85);
+    for (let index = 0; index < 11; index += 1) {
+      const angle = (index / 11) * Math.PI * 2;
+      const radius = 8 + (index % 4) * 4;
+      cue.fillCircle(
+        Math.cos(angle) * radius,
+        -10 - (index % 5) * 7 + Math.sin(angle) * 4,
+        1.4 + (index % 2) * 0.7,
+      );
+    }
+
+    view.img.setScale(baseScaleX * 0.72, baseScaleY * 0.72);
+    this.tweens.add({
+      targets: view.img,
+      alpha: 1,
+      scaleX: baseScaleX,
+      scaleY: baseScaleY,
+      duration: INTRO_MATERIALIZE_MS,
+      ease: 'Back.easeOut',
+      onComplete: () => {
+        view.img.clearTint();
+        onComplete();
+      },
+    });
+    this.tweens.add({
+      targets: cue,
+      alpha: 0,
+      angle: combatant.role === 'viper' ? 34 : -34,
+      scaleX: 1.45,
+      scaleY: 0.72,
+      y: cue.y - 22,
+      duration: INTRO_MATERIALIZE_MS,
+      ease: 'Cubic.easeOut',
+      onComplete: () => cue.destroy(),
+    });
   }
 
   update(_time: number, _delta: number): void {
@@ -423,7 +547,11 @@ export class SplitScene extends Phaser.Scene {
 
     if (!this.finalizing) {
       const input = this.readInput();
+      const wasDefusing = this.state.defuse.defusing;
       this.state = tickSplit(this.state, input, modelDelta);
+      if (!wasDefusing && this.state.defuse.defusing) {
+        playAudioFile(VALORANT_AUDIO.defuseTap, { volume: 0.9 });
+      }
       this.handleEvents(this.state.events, now);
 
       if (isSplitWon(this.state)) {
@@ -510,9 +638,12 @@ export class SplitScene extends Phaser.Scene {
     for (const event of events) {
       switch (event.type) {
         case 'player-shot':
-          this.tracers.push({ from: event.from, to: event.to, color: 0x8affc1, bornAt: now });
-          this.addMuzzle(this.playerView, event.from, event.to, MUZZLE_COLOR.player, now);
-          this.playSfx('shot');
+          {
+            const muzzle = this.resolveMuzzlePoint(this.playerView, event.from, event.to);
+            this.tracers.push({ from: muzzle, to: event.to, color: 0x8affc1, bornAt: now });
+            this.addMuzzle(muzzle, MUZZLE_COLOR.player, now);
+          }
+          playAudioFile(VALORANT_AUDIO.shot, { volume: 0.82 });
           if (event.hitEnemyId !== null) {
             this.enemyFlashUntil.set(event.hitEnemyId, now + HIT_FLASH_MS);
           }
@@ -522,15 +653,25 @@ export class SplitScene extends Phaser.Scene {
           }
           break;
         case 'teammate-shot':
-          this.tracers.push({ from: event.from, to: event.to, color: 0x9a7bff, bornAt: now });
-          this.addMuzzle(this.teammateView, event.from, event.to, MUZZLE_COLOR.teammate, now);
+          {
+            const muzzle = this.resolveMuzzlePoint(this.teammateView, event.from, event.to);
+            this.tracers.push({ from: muzzle, to: event.to, color: 0x9a7bff, bornAt: now });
+            this.addMuzzle(muzzle, MUZZLE_COLOR.teammate, now);
+          }
           if (event.hitEnemyId !== null) {
             this.enemyFlashUntil.set(event.hitEnemyId, now + HIT_FLASH_MS);
           }
           break;
         case 'enemy-shot':
-          this.tracers.push({ from: event.from, to: event.to, color: 0xff6b6b, bornAt: now });
-          this.addMuzzle(this.enemyViews.get(event.enemyId), event.from, event.to, MUZZLE_COLOR.enemy, now);
+          {
+            const muzzle = this.resolveMuzzlePoint(
+              this.enemyViews.get(event.enemyId),
+              event.from,
+              event.to,
+            );
+            this.tracers.push({ from: muzzle, to: event.to, color: 0xff6b6b, bornAt: now });
+            this.addMuzzle(muzzle, MUZZLE_COLOR.enemy, now);
+          }
           break;
         case 'heart-lost':
           this.playSfx('heart');
@@ -539,13 +680,12 @@ export class SplitScene extends Phaser.Scene {
           break;
         case 'player-died':
           this.playSfx('death');
-          this.showBark(BARKS.died);
           this.showPopup('YOU DIED', '#ff5470');
           this.cameras.main.flash(400, 200, 20, 30);
           this.cameras.main.shake(500, 0.014);
           break;
         case 'reload-start':
-          this.playSfx('reload');
+          playAudioFile(VALORANT_AUDIO.reload, { volume: 0.9 });
           break;
         case 'reload-complete':
           break;
@@ -553,32 +693,36 @@ export class SplitScene extends Phaser.Scene {
           this.playSfx('dryfire');
           break;
         case 'defuse-wave':
-          this.showBark(BARKS.defuseWave);
           this.showWarn('CONTESTED — 2 INBOUND');
           break;
         case 'first-blood':
-          this.showBark(BARKS.firstBlood);
           break;
         case 'enemy-killed':
           this.spawnSkull(event.enemyId);
+          playAudioFile(
+            VALORANT_AUDIO.kills[Math.min(this.killSoundIndex, VALORANT_AUDIO.kills.length - 1)],
+            { volume: 0.92 },
+          );
+          this.killSoundIndex += 1;
           break;
         case 'reinforcement':
-          this.showBark(BARKS.reinforcement);
           this.showWarn('MORE INBOUND');
           break;
         case 'defuse-interrupted':
-          this.showBark(BARKS.interrupted);
           this.showPopup('OFF THE SPIKE', '#ff5470');
           break;
         case 'defuse-checkpoint':
           this.playSfx('checkpoint');
+          break;
+        case 'teammate-departed':
+          this.playSfx('teleport');
+          this.playTeammateDeparture();
           break;
         case 'defuse-complete':
           this.playSfx('complete');
           break;
         case 'detonated':
           this.playSfx('detonate');
-          this.showBark(BARKS.detonate);
           this.showPopup('RUN IT BACK.', '#ff5470');
           this.cameras.main.flash(500, 220, 70, 40);
           this.cameras.main.shake(600, 0.012);
@@ -607,10 +751,18 @@ export class SplitScene extends Phaser.Scene {
     this.nextBeepAt = now;
     this.nextDefuseTickAt = now;
     this.nextDefuseLoopAt = now;
-    this.onSiteBarked = false;
+    this.killSoundIndex = 0;
+    for (const effect of this.teammateDepartureFx) {
+      this.tweens.killTweensOf(effect);
+      effect.destroy();
+    }
+    this.teammateDepartureFx.clear();
+    this.teammateFacingLeft = false;
+    this.teammatePrevX = SPLIT_CONFIG.teammateStart.x;
+    this.teammateView.img.setVisible(true).setAlpha(1).clearTint();
+    this.teammateView.gun.setVisible(true).setAlpha(1).clearTint();
     this.popupText.setVisible(false);
     this.tweens.killTweensOf(this.popupText);
-    this.showBark(BARKS.runback);
   }
 
   // ------------------------------------------------------------------
@@ -657,6 +809,14 @@ export class SplitScene extends Phaser.Scene {
   }
 
   private renderTeammate(now: number, pos: { x: number; y: number }): void {
+    const present = this.state.teammate.present;
+    this.teammateView.img.setVisible(present);
+    this.teammateView.gun.setVisible(present);
+
+    if (!present) {
+      return;
+    }
+
     const bob = Math.sin(now / 320 + 1.7) * 1;
     const dx = pos.x - this.teammatePrevX;
 
@@ -677,6 +837,57 @@ export class SplitScene extends Phaser.Scene {
         ? Math.PI
         : 0;
     this.aimGun(this.teammateView, pos, aimAngle);
+  }
+
+  private playTeammateDeparture(): void {
+    const source = this.teammateView.img;
+    const afterimage = this.add
+      .image(source.x, source.y, source.texture.key, source.frame.name)
+      .setOrigin(source.originX, source.originY)
+      .setScale(source.scaleX, source.scaleY)
+      .setFlipX(source.flipX)
+      .setTint(0x9a7bff)
+      .setBlendMode(Phaser.BlendModes.ADD)
+      .setAlpha(0.9)
+      .setDepth(source.depth + 3);
+
+    const motes = this.add.graphics().setPosition(source.x, source.y).setDepth(source.depth + 4);
+    motes.fillStyle(0x8c78ff, 0.9);
+    for (let index = 0; index < 12; index += 1) {
+      const angle = (index / 12) * Math.PI * 2;
+      const radius = 8 + (index % 4) * 4;
+      motes.fillCircle(Math.cos(angle) * radius, Math.sin(angle) * radius - 12, 1.5 + index % 2);
+    }
+
+    this.teammateDepartureFx.add(afterimage);
+    this.teammateDepartureFx.add(motes);
+    this.tweens.add({
+      targets: afterimage,
+      alpha: 0,
+      y: afterimage.y - 26,
+      scaleX: afterimage.scaleX * 1.18,
+      scaleY: afterimage.scaleY * 1.32,
+      duration: 480,
+      ease: 'Cubic.easeOut',
+      onComplete: () => {
+        this.teammateDepartureFx.delete(afterimage);
+        afterimage.destroy();
+      },
+    });
+    this.tweens.add({
+      targets: motes,
+      alpha: 0,
+      angle: 55,
+      scaleX: 1.5,
+      scaleY: 0.45,
+      y: motes.y - 34,
+      duration: 520,
+      ease: 'Cubic.easeOut',
+      onComplete: () => {
+        this.teammateDepartureFx.delete(motes);
+        motes.destroy();
+      },
+    });
   }
 
   private nearestEnemyPos(from: { x: number; y: number }): { x: number; y: number } | null {
@@ -740,24 +951,40 @@ export class SplitScene extends Phaser.Scene {
     gun.setVisible(true);
   }
 
-  // Queue a muzzle flash at the barrel tip, derived from a shot's from→to
-  // direction so it lines up with whichever combatant fired. Anchored to the
-  // firer's hand band (via its view) so the flash pops from the gun's muzzle,
-  // not the hitbox center.
-  private addMuzzle(
+  // Resolve the barrel tip from the live gun geometry. The gun's world position
+  // is its grip pivot; the muzzle is the remaining display width to the right of
+  // that origin, projected along the shot direction. This works for both the
+  // 96px painted gun and the smaller procedural fallback, including leftward aim.
+  private resolveMuzzlePoint(
     view: CharacterView | undefined,
     from: { x: number; y: number },
     to: { x: number; y: number },
-    color: number,
-    now: number,
-  ): void {
+  ): { x: number; y: number } {
     const dx = to.x - from.x;
     const dy = to.y - from.y;
     const dist = Math.hypot(dx, dy) || 1;
+    const ux = dx / dist;
+    const uy = dy / dist;
     const handY = view ? this.gunHandY(view) : from.y;
+    const gripX = from.x + ux * GUN_HAND_OFFSET;
+    const gripY = handY + uy * GUN_HAND_OFFSET;
+    const barrelLength = view
+      ? view.gun.displayWidth * (1 - view.gun.originX)
+      : MUZZLE_DIST - GUN_HAND_OFFSET;
+    return {
+      x: gripX + ux * barrelLength,
+      y: gripY + uy * barrelLength,
+    };
+  }
+
+  private addMuzzle(
+    point: { x: number; y: number },
+    color: number,
+    now: number,
+  ): void {
     this.muzzles.push({
-      x: from.x + (dx / dist) * MUZZLE_DIST,
-      y: handY + (dy / dist) * MUZZLE_DIST,
+      x: point.x,
+      y: point.y,
       color,
       bornAt: now,
     });
@@ -1115,9 +1342,8 @@ export class SplitScene extends Phaser.Scene {
   // Live scoreboard values. Enemy count starts at the full roster (5) — the not-
   // yet-spawned defuse-ambush pair counts as alive — and decrements one tile per
   // kill (killed bots stay in enemies[] as alive:false, so their count is the
-  // true per-round tally). Ally count is 2 while the player is up; the player
-  // tile dims during the death overlay. The teammate (____) has no death
-  // mechanic in the model, so his tile is always lit.
+  // true per-round tally). The scoreboard represents deaths only: Omen's
+  // half-defuse teleport removes him from play but leaves his alive tile/count.
   private updateTopBar(): void {
     const killed = this.state.enemies.filter((enemy) => !enemy.alive).length;
     const enemiesRemaining = Math.max(0, ENEMY_ROSTER - killed);
@@ -1125,10 +1351,12 @@ export class SplitScene extends Phaser.Scene {
     this.enemyTiles.forEach((tile, j) => this.styleTile(tile, j < killed));
 
     const playerDown = this.state.phase === 'dead';
-    const alliesUp = playerDown ? HUD_ALLY_KEYS.length - 1 : HUD_ALLY_KEYS.length;
+    const alliesUp = playerDown ? 1 : 2;
     this.allyCountText.setText(String(Math.max(0, alliesUp)));
-    // Tile 0 is the player (Viper); tile 1 is ____ (Omen), who never dies.
-    this.allyTiles.forEach((tile, i) => this.styleTile(tile, i === 0 && playerDown));
+    // Tile 0 is the player (Viper); tile 1 is Omen.
+    this.allyTiles.forEach((tile, i) =>
+      this.styleTile(tile, i === 0 ? playerDown : false),
+    );
   }
 
   private styleTile(tile: Phaser.GameObjects.Image, dead: boolean): void {
@@ -1295,10 +1523,6 @@ export class SplitScene extends Phaser.Scene {
 
     this.promptText.setText(this.state.defuse.defusing ? 'DEFUSING…' : 'HOLD 4 TO DEFUSE');
 
-    if (!this.onSiteBarked) {
-      this.onSiteBarked = true;
-      this.showBark(BARKS.onSite);
-    }
   }
 
   private showWarn(text: string): void {
@@ -1310,28 +1534,6 @@ export class SplitScene extends Phaser.Scene {
       delay: 1000,
       duration: 500,
       onComplete: () => this.warnText.setVisible(false),
-    });
-  }
-
-  // ------------------------------------------------------------------
-  // Barks / popups
-  // ------------------------------------------------------------------
-
-  private showBark(text: string): void {
-    const pos = this.state.teammate.pos;
-    this.barkText.setText(text);
-    this.barkText.setPosition(
-      Phaser.Math.Clamp(pos.x, 160, ARENA.width - 160),
-      Math.max(52, pos.y - 30),
-    );
-    this.barkText.setVisible(true).setAlpha(1);
-    this.tweens.killTweensOf(this.barkText);
-    this.tweens.add({
-      targets: this.barkText,
-      alpha: 0,
-      delay: 2600,
-      duration: 500,
-      onComplete: () => this.barkText.setVisible(false),
     });
   }
 
@@ -1362,7 +1564,6 @@ export class SplitScene extends Phaser.Scene {
     this.crosshair.setVisible(false);
     this.promptText.setVisible(false);
     this.warnText.setVisible(false);
-    this.showBark(BARKS.clutch);
     this.showPopup('CLUTCH.', '#2ee6c4');
     this.cameras.main.flash(400, 46, 230, 196);
     this.playSfx('clutch');

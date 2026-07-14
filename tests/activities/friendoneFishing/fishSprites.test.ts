@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   FISH_MAX_PITCH,
+  FISH_SPRITE_NOSE_ANGLE,
   fishSpriteFacing,
 } from '../../../src/activities/friendoneFishing/fishSprites';
 import {
@@ -14,29 +15,33 @@ import {
 const BOUNDS = { minX: 196, maxX: 606, minY: 214, maxY: 332 } as const;
 
 describe('fishSpriteFacing', () => {
-  it('faces right (mirrored) with an upright, near-level pitch when swimming right', () => {
+  it('records that the source fish art points right', () => {
+    expect(FISH_SPRITE_NOSE_ANGLE).toBe(0);
+  });
+
+  it('faces right (unmirrored) with an upright, near-level pitch when swimming right', () => {
     const facing = fishSpriteFacing(0);
-    expect(facing.flipX).toBe(true);
+    expect(facing.flipX).toBe(false);
     // Regression: the old code rotated by heading - PI, so swimming right rolled
     // the side-view sprite ~180deg (belly-up / tail-first). It must stay level.
     expect(Math.abs(facing.rotation)).toBeLessThan(0.05);
   });
 
-  it('faces left (unmirrored) and level when swimming left', () => {
+  it('faces left (mirrored) and level when swimming left', () => {
     const facing = fishSpriteFacing(Math.PI);
-    expect(facing.flipX).toBe(false);
+    expect(facing.flipX).toBe(true);
     expect(Math.abs(facing.rotation)).toBeLessThan(0.05);
   });
 
   it('noses down-right when swimming down-right', () => {
     const facing = fishSpriteFacing(0.3);
-    expect(facing.flipX).toBe(true);
+    expect(facing.flipX).toBe(false);
     expect(facing.rotation).toBeCloseTo(0.3, 5);
   });
 
-  it('noses down-left (unmirrored) when swimming down-left', () => {
+  it('noses down-left (mirrored) when swimming down-left', () => {
     const facing = fishSpriteFacing(Math.PI - 0.3);
-    expect(facing.flipX).toBe(false);
+    expect(facing.flipX).toBe(true);
     // heading - PI wrapped => -0.3
     expect(facing.rotation).toBeCloseTo(-0.3, 5);
   });
@@ -75,7 +80,7 @@ describe('fish facing follows model velocity', () => {
     const state = run(start, { x: 210, y: 250, active: true, reeling: 0.5 }, 30);
     expect(state.velocity.x).toBeLessThan(0);
     const facing = fishSpriteFacing(state.heading);
-    expect(facing.flipX).toBe(false);
+    expect(facing.flipX).toBe(true);
     // Heading points the way it travels.
     expect(Math.cos(state.heading)).toBeLessThan(0);
   });

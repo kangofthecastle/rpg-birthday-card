@@ -11,7 +11,18 @@ import {
   SHORE_WATER_KEY,
   FRIEND_TWO_SPRITE,
 } from '../content/galaxyScene';
-import { HOME_HOST_NPCS, resolveHomeNpcPosition } from '../content/homeNpcs';
+import { HOME_HOST_NPCS, FRIEND_ONE_SPRITE, resolveHomeNpcPosition } from '../content/homeNpcs';
+import { LETTERS } from '../content/letters';
+import { getActivityCompletionStory, resolveRecipientPcStory } from '../content/storyContent';
+import {
+  RECIPIENT_PC_MAIL_CUE,
+  CLEARING_KOI_KEY,
+  FINALE_OMEN_DISPLAY_SIZE,
+  FINALE_OMEN_KEY,
+  FRIEND_ONE_PC_GLASS_CUE,
+  STORY_KOI_BOWL_ONE_KEY,
+  STORY_KOI_BOWL_TWO_KEY,
+} from '../content/storyAssets';
 import {
   FRIEND_TWO_GENERATED_ROWS,
   FRIEND_TWO_PARTIAL_FRAMES,
@@ -95,6 +106,9 @@ import {
   completeLocation,
   createInitialRunState,
   hasAllFriendKeepsakes,
+  hasActivityCompleted,
+  hasKeepsake,
+  hasSeenBeat,
   isBoatFolded,
   isFinalSpotUnlocked,
   markBeatSeen,
@@ -102,10 +116,58 @@ import {
   setCurrentLocation,
   type RunState,
 } from '../game/runState';
-import { isInteractionLocked, shouldPlayEnterBeat } from '../game/interactionState';
+import {
+  isInteractionAvailable,
+  isInteractionLocked,
+  shouldPlayEnterBeat,
+} from '../game/interactionState';
+import {
+  getStoryTravelBlock,
+  isFriendOneFollowing,
+  RETAKE_ACTIVITY_ID,
+  shouldShowHomeNpc,
+  VIOLIN_ACTIVITY_ID,
+  INTRO_COMPLETE_BEAT_ID,
+  FRIEND_ONE_PC_READY_BEAT_ID,
+  VIOLIN_CALLED_BEAT_ID,
+} from '../game/storyProgression';
+import {
+  advanceFollowerTrail,
+  createFollowerTrail,
+  type FollowerTrailState,
+} from '../game/followerTrail';
+import {
+  advanceFollowerRoute,
+  createFriendTwoRoomFriendOneRoute,
+  facingForScreenDelta,
+  type FollowerRouteState,
+} from '../game/followerRoute';
+import {
+  advanceClearingCurrentItem,
+  advanceClearingMote,
+  createClearingCurrent,
+  createClearingMotePath,
+  sampleClearingMoteRibbon,
+  type ClearingCurrentItem,
+  type ClearingMote,
+  type ClearingMotePath,
+} from '../game/clearingCurrent';
+import { createViolinInvitationSchedule } from '../game/violinInvitationCue';
+import { getPitch } from '../activities/violin/melody';
+import {
+  advanceFinaleReveal,
+  createFinaleReveal,
+  type FinaleRevealState,
+} from '../game/finaleReveal';
+import {
+  EPILOGUE_WALL_SHEAR,
+  resolveEpilogueBeamBands,
+  resolveEpilogueRoomAnchors,
+  resolveShearedWindowLightOpening,
+} from '../game/epilogueRoom';
 import { type IsoOrigin, type IsoPoint } from '../game/isometricProjection';
 import { createProjection, type Projection } from '../game/projection';
-import { playMusic, playSfx, type MusicKey } from '../game/audio';
+import { playMusic, playSfx, playViolinNote, type MusicKey } from '../game/audio';
 import {
   getObjectLayer,
   getPointObject,
@@ -117,7 +179,7 @@ import { getPlayerFacingFromScreenMovement, PlayerController } from '../game/pla
 import { createCollectionPanel, type CollectionPanelHandle } from '../ui/collectionPanel';
 import { showDialogue } from '../ui/dialogueBox';
 import { clearUiRoot, getUiRoot } from '../ui/domRoot';
-import { showLetterModal } from '../ui/letterModal';
+import { showLetterModal, showSheetMusicModal } from '../ui/letterModal';
 import { showLettersScreen } from '../ui/lettersScreen';
 import { showPhotoWall } from '../ui/photoWall';
 import { fnv1a, mulberry32 } from '../game/rng';
@@ -322,6 +384,26 @@ interface DriftingCrane {
   scale: number;
 }
 
+interface ClearingKoiDisplay {
+  readonly kind: 'koi';
+  model: ClearingCurrentItem;
+  readonly image: Phaser.GameObjects.Image;
+  readonly baseY: number;
+  readonly bobRate: number;
+  readonly bobAmount: number;
+}
+
+interface ClearingMoteDisplay {
+  readonly kind: 'mote';
+  model: ClearingMote;
+  readonly image: Phaser.GameObjects.Image;
+  readonly path: ClearingMotePath;
+  readonly bobRate: number;
+  readonly bobAmount: number;
+}
+
+type ClearingCurrentDisplay = ClearingKoiDisplay | ClearingMoteDisplay;
+
 
 // Ambient bed per location; activities layer their own bed on top and the
 // location bed resumes when they end. The ending swaps beds itself.
@@ -438,6 +520,8 @@ export class LocationScene extends Phaser.Scene {
   // while the dressEdit editor is frozen. Reset on (re)start like the shore.
   private clearingCranes: DriftingCrane[] = [];
   private clearingCraneClock = 0;
+  private clearingCurrentDisplays: ClearingCurrentDisplay[] = [];
+  private clearingCurrentClock = 0;
   // PRNG kept from spawn so an off-edge crane can re-roll its look on
   // wrap-around with the same distribution.
   private craneWrapRng: () => number = Math.random;
@@ -486,6 +570,13 @@ export class LocationScene extends Phaser.Scene {
   // can drag it. Set when createHomeHostNpc places the sprite; undefined in rooms
   // (or outdoor areas) with no resident.
   private homeHostNpcHandle?: NpcEditHandle;
+  private friendoneFollower?: Phaser.GameObjects.Sprite;
+  private friendoneFollowerTrail?: FollowerTrailState;
+  private friendoneFollowerRoute?: FollowerRouteState;
+  private friendonePcReadyCue: Phaser.GameObjects.GameObject[] = [];
+  private violinCueTimers: Phaser.Time.TimerEvent[] = [];
+  private finaleActor?: Phaser.GameObjects.Image | Phaser.GameObjects.Sprite;
+  private finaleReveal: FinaleRevealState = createFinaleReveal(false);
   /** Alpha-measured signpost board geometry, cached per texture key (measuring
    * reads the whole texture once). Keeps caption fit texture-driven. */
   private signpostGeometryCache = new Map<string, SignpostBoardGeometry>();
@@ -560,6 +651,15 @@ export class LocationScene extends Phaser.Scene {
     // stale references. spawnClearingCranes repopulates this for the clearing.
     this.clearingCranes = [];
     this.clearingCraneClock = 0;
+    this.clearingCurrentDisplays = [];
+    this.clearingCurrentClock = 0;
+    this.friendoneFollower = undefined;
+    this.friendoneFollowerTrail = undefined;
+    this.friendoneFollowerRoute = undefined;
+    this.friendonePcReadyCue = [];
+    this.violinCueTimers = [];
+    this.finaleActor = undefined;
+    this.finaleReveal = createFinaleReveal(this.state.endingCompleted);
   }
 
   create(): void {
@@ -581,16 +681,21 @@ export class LocationScene extends Phaser.Scene {
     delete document.body.dataset.interiorAwakened;
     this.createMap();
     this.createPlayer();
+    this.createFriendOneFollower();
     this.createHud();
     this.createLocationLabel();
     this.applyWarmLightingTint();
     this.applyOutdoorAwakening();
     this.createGalaxyScenery();
     this.createHomeHostNpc();
+    this.applyFishbowlStoryState();
+    this.applyFriendOnePcReadyState();
+    this.applyEpilogueRoomState();
     // Statically awaken a dressed interior already entered post-violin (later
     // room entries); the completion seam applies it dynamically the first time.
     this.applyInteriorAwakening({ animate: false });
     playMusic(locationMusicKey(this.location.id), { fadeMs: 1200 });
+    this.startStoryAudioCues();
 
     this.interactKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.E);
     this.promptText = this.add
@@ -769,12 +874,11 @@ export class LocationScene extends Phaser.Scene {
         continue;
       }
 
+      await this.pauseForDialogue(beat.dialogue);
       if (beat.once !== false) {
         this.state = markBeatSeen(this.state, beat.id);
         this.registry.set('runState', this.state);
       }
-
-      await this.pauseForDialogue(beat.dialogue);
     }
   }
 
@@ -788,6 +892,7 @@ export class LocationScene extends Phaser.Scene {
     // Same beat: nudge the drifting paper cranes downstream (also before the
     // gates, so they keep floating even while the dressEdit editor is frozen).
     this.advanceClearingCranes(delta);
+    this.advanceClearingCurrent(delta);
 
     // The dressEdit editor freezes the whole scene: the player stands still and
     // no interactions/edges fire, so arranging props never triggers gameplay.
@@ -800,6 +905,7 @@ export class LocationScene extends Phaser.Scene {
 
     this.controller.update(this.canMove);
     this.syncPlayerVisual();
+    this.updateFriendOneFollower(delta);
 
     if (this.debugMarkers) {
       document.body.dataset.playerPos = `${Math.round(this.player.x)},${Math.round(this.player.y)}`;
@@ -862,6 +968,15 @@ export class LocationScene extends Phaser.Scene {
 
   private async activateEdgeExit(edgeExit: LocationEdgeExit, body: BodyRect): Promise<void> {
     this.edgeTriggerBusy = true;
+
+    const storyBlock = getStoryTravelBlock(edgeExit.destinationLocationId, this.state);
+    if (storyBlock) {
+      this.nudgeAwayFromEdge(edgeExit.edge);
+      await this.pauseForDialogue([{ text: storyBlock }]);
+      this.edgeCooldownUntil = this.time.now + EDGE_ARRIVAL_COOLDOWN_MS;
+      this.edgeTriggerBusy = false;
+      return;
+    }
 
     // The gated south edge opens only once the boat is folded (the ritual is the
     // real way across). Before that: if the letters aren't all held yet, the old
@@ -1394,6 +1509,7 @@ export class LocationScene extends Phaser.Scene {
       this.decorateClearing(width, height, tile);
       this.drawClearingShore(width, height, tile);
       this.spawnClearingCranes(width, height, tile);
+      this.spawnClearingCurrent(width, height, tile);
     }
 
     // Guildford's south edge foreshadows the twilight clearing: a painterly dusk
@@ -1696,6 +1812,106 @@ export class LocationScene extends Phaser.Scene {
     }
   }
 
+  /** Post-violin guidance: koi drift west while motes enter from the left water,
+   * curl at the centre, and stream north into the clearing. */
+  private spawnClearingCurrent(width: number, height: number, tile: number): void {
+    if (!isFinalSpotUnlocked(this.state)) {
+      delete document.body.dataset.clearingCurrent;
+      return;
+    }
+
+    this.createMoteTexture();
+    const bandTop = height - tile * 2;
+    const current = createClearingCurrent(
+      fnv1a(`${this.location.id}:story-current`),
+      width,
+      bandTop,
+      tile * 1.45,
+    );
+    const motePath = createClearingMotePath(width, bandTop, tile * 1.45);
+    const addKoi = (model: ClearingCurrentItem, index: number): void => {
+      const image = this.add
+        .image(model.x, model.y, CLEARING_KOI_KEY)
+        .setOrigin(0.5)
+        .setScale(model.scale)
+        .setFlipX(model.flipX)
+        .setAlpha(0.42)
+        .setDepth(-14.7);
+      this.clearingCurrentDisplays.push({
+        kind: 'koi',
+        model,
+        image,
+        baseY: model.y,
+        bobRate: 0.7 + index * 0.08,
+        bobAmount: 3.5,
+      });
+    };
+    const addMote = (model: ClearingMote, index: number): void => {
+      const point = sampleClearingMoteRibbon(
+        motePath,
+        model.progress,
+        model.spread,
+        width,
+        tile * 1.45,
+      );
+      const image = this.add
+        .image(point.x, point.y, 'awaken-mote')
+        .setOrigin(0.5)
+        .setScale(model.scale)
+        .setAlpha(0.78 + (index % 4) * 0.055)
+        .setDepth(point.y + 6)
+        .setTint(0xffe7a8)
+        .setBlendMode(Phaser.BlendModes.ADD);
+      this.clearingCurrentDisplays.push({
+        kind: 'mote',
+        model,
+        image,
+        path: motePath,
+        bobRate: 1.1 + index * 0.04,
+        bobAmount: 2.5,
+      });
+    };
+    if (this.textures.exists(CLEARING_KOI_KEY)) {
+      current.koi.forEach(addKoi);
+    }
+    current.motes.forEach(addMote);
+    document.body.dataset.clearingCurrent = 'left-water-horizontal-curve-north';
+  }
+
+  private advanceClearingCurrent(deltaMs: number): void {
+    if (this.clearingCurrentDisplays.length === 0) {
+      return;
+    }
+    this.clearingCurrentClock += Math.max(0, deltaMs) / 1000;
+    for (const display of this.clearingCurrentDisplays) {
+      if (display.kind === 'koi') {
+        display.model = advanceClearingCurrentItem(display.model, deltaMs, this.mapDims.width);
+        display.image.setPosition(
+          display.model.x,
+          display.baseY +
+            Math.sin(this.clearingCurrentClock * display.bobRate + display.model.phase) *
+              display.bobAmount,
+        );
+      } else {
+        display.model = advanceClearingMote(display.model, deltaMs);
+        const point = sampleClearingMoteRibbon(
+          display.path,
+          display.model.progress,
+          display.model.spread,
+          this.mapDims.width,
+          this.mapDims.tileSize * 1.45,
+        );
+        display.image.setPosition(
+          point.x + Math.sin(this.clearingCurrentClock * 0.7 + display.model.phase) * 2,
+          point.y +
+            Math.sin(this.clearingCurrentClock * display.bobRate + display.model.phase) *
+              display.bobAmount,
+        );
+        display.image.setDepth(point.y + 6);
+      }
+    }
+  }
+
   // The galaxy place's ground: the painted ocean-galaxy you stand ON. A file-first
   // painted override (galaxy-ground.png) replaces it whole; otherwise it is
   // COMPOSED from the SAME paintings as the ending's terminal CSS frame — the
@@ -1985,38 +2201,48 @@ export class LocationScene extends Phaser.Scene {
   // final conversation. He idles in place (facing down, toward the path ____
   // climbs). A soft warm pool marks him — the one warm point in the dark.
   private createGalaxyScenery(): void {
-    if (this.location.id !== 'final-spot') {
+    if (this.location.id !== 'final-spot' || this.state.endingCompleted) {
       return;
     }
     this.createMoteTexture();
     const pos = { x: 704, y: 464 };
 
     const glow = this.add
-      .image(pos.x, pos.y + 6, 'awaken-mote')
+      .ellipse(pos.x, pos.y + 8, 104, 28, 0xffc06a, 0.1)
       .setDepth(pos.y - 2)
-      .setScale(11)
-      .setTint(0xffcf8a)
-      .setAlpha(0.5)
       .setBlendMode(Phaser.BlendModes.ADD);
     this.tweens.add({
       targets: glow,
-      alpha: { from: 0.38, to: 0.6 },
-      scale: { from: 10.4, to: 11.6 },
+      alpha: { from: 0.06, to: 0.14 },
+      scaleX: { from: 0.92, to: 1.08 },
+      scaleY: { from: 0.88, to: 1.05 },
       duration: 2600,
       yoyo: true,
       repeat: -1,
       ease: 'Sine.easeInOut',
     });
 
+    if (this.textures.exists(FINALE_OMEN_KEY)) {
+      this.finaleActor = this.add
+        .image(pos.x, pos.y + 4, FINALE_OMEN_KEY)
+        .setOrigin(0.5, 1)
+        .setDisplaySize(FINALE_OMEN_DISPLAY_SIZE.width, FINALE_OMEN_DISPLAY_SIZE.height)
+        .setDepth(pos.y + 4);
+      document.body.dataset.finaleActor = 'omen';
+    }
+  }
+
+  private createFinaleFriendTwo(x: number, y: number): Phaser.GameObjects.Sprite {
     this.createFriendTwoAnimation();
     const friendtwo = this.add
-      .sprite(pos.x, pos.y, FRIEND_TWO_SPRITE.key, FRIEND_TWO_SPRITE.idleDownStartFrame)
+      .sprite(x, y, FRIEND_TWO_SPRITE.key, FRIEND_TWO_SPRITE.idleDownStartFrame)
       .setOrigin(FRIEND_TWO_SPRITE.origin.x, FRIEND_TWO_SPRITE.origin.y)
       .setScale(FRIEND_TWO_SPRITE.scale)
-      .setDepth(pos.y + 4);
+      .setDepth(y + 4);
     if (this.anims.exists(FRIEND_TWO_SPRITE.idleAnimationKey)) {
       friendtwo.play(FRIEND_TWO_SPRITE.idleAnimationKey);
     }
+    return friendtwo;
   }
 
   private createFriendTwoAnimation(): void {
@@ -2044,9 +2270,585 @@ export class LocationScene extends Phaser.Scene {
   // the host dialogue fires exactly once — the character and the hotspot are the
   // same beat. Depth-sorts by projected feet Y like every other room billboard,
   // so props in front of the character (the tea table, the desk) occlude them.
+  private createFriendOneFollower(): void {
+    const eligible = new Set([
+      'friend-a',
+      'friendone-yard',
+      'main-outside',
+      'friendtwo-yard',
+      'friend-b',
+    ]);
+    if (
+      !eligible.has(this.location.id) ||
+      !isFriendOneFollowing(this.state) ||
+      !this.textures.exists(FRIEND_ONE_SPRITE.key)
+    ) {
+      delete document.body.dataset.friendoneMode;
+      return;
+    }
+
+    this.createFriendOneFollowerAnimations();
+    const walkingToPc = this.location.id === 'friend-b';
+    const start = walkingToPc
+      ? createFriendTwoRoomFriendOneRoute({ x: this.player.x, y: this.player.y }).position
+      : { x: this.player.x - 64, y: this.player.y };
+    if (walkingToPc) {
+      this.friendoneFollowerRoute = createFriendTwoRoomFriendOneRoute({ x: this.player.x, y: this.player.y });
+    } else {
+      this.friendoneFollowerTrail = createFollowerTrail(start);
+    }
+    const projected = this.getProjection().project(start.x, start.y);
+    this.friendoneFollower = this.add
+      .sprite(projected.x, projected.y, FRIEND_ONE_SPRITE.key, 0)
+      .setOrigin(FRIEND_ONE_SPRITE.origin.x, FRIEND_ONE_SPRITE.origin.y)
+      .setScale(FRIEND_ONE_SPRITE.scale)
+      .setDepth(projected.y);
+    this.friendoneFollower.play('friendone-follower-idle-down');
+    document.body.dataset.friendoneMode = walkingToPc
+      ? hasSeenBeat(this.state, 'friendtwo-house-entered')
+        ? 'arriving'
+        : 'waiting'
+      : 'following';
+  }
+
+  private createFriendOneFollowerAnimations(): void {
+    const facings = ['down', 'left', 'right', 'up'] as const;
+    facings.forEach((facing, index) => {
+      const idleKey = `friendone-follower-idle-${facing}`;
+      const walkKey = `friendone-follower-walk-${facing}`;
+      if (!this.anims.exists(idleKey)) {
+        this.anims.create({
+          key: idleKey,
+          // Side idles stay planted. Cycling tiny generated differences reads
+          // as toe/hair jitter, while ____'s side silhouette is effectively still.
+          frames: facing === 'left' || facing === 'right'
+            ? [{ key: FRIEND_ONE_SPRITE.key, frame: index * 6 }]
+            : this.anims.generateFrameNumbers(FRIEND_ONE_SPRITE.key, {
+                start: index * 6,
+                end: index * 6 + 5,
+              }),
+          frameRate: FRIEND_ONE_SPRITE.idleFrameRate,
+          repeat: -1,
+        });
+      }
+      if (!this.anims.exists(walkKey)) {
+        this.anims.create({
+          key: walkKey,
+          frames: this.anims.generateFrameNumbers(FRIEND_ONE_SPRITE.key, {
+            start: (index + 4) * 6,
+            end: (index + 4) * 6 + 5,
+          }),
+          frameRate: FRIEND_ONE_SPRITE.walkFrameRate,
+          repeat: -1,
+        });
+      }
+    });
+  }
+
+  private updateFriendOneFollower(deltaMs: number): void {
+    const sprite = this.friendoneFollower;
+    if (!sprite) {
+      return;
+    }
+    if (this.location.id === 'friend-b') {
+      const route = this.friendoneFollowerRoute;
+      if (!route) return;
+      if (!hasSeenBeat(this.state, 'friendtwo-house-entered')) {
+        document.body.dataset.friendoneMode = 'waiting';
+        if (sprite.anims.currentAnim?.key !== 'friendone-follower-idle-down') {
+          sprite.play('friendone-follower-idle-down');
+        }
+        return;
+      }
+      const projection = this.getProjection();
+      const previousProjected = projection.project(route.position.x, route.position.y);
+      const next = advanceFollowerRoute(route, deltaMs);
+      this.friendoneFollowerRoute = next;
+      const projected = projection.project(next.position.x, next.position.y);
+      sprite.setPosition(projected.x, projected.y).setDepth(projected.y);
+      const facing = next.moving
+        ? facingForScreenDelta(previousProjected, projected, next.facing)
+        : next.facing;
+      const animation = `friendone-follower-${next.moving ? 'walk' : 'idle'}-${facing}`;
+      if (sprite.anims.currentAnim?.key !== animation) sprite.play(animation);
+      document.body.dataset.friendoneMode = next.arrived ? 'parked' : 'arriving';
+      if (this.debugMarkers) {
+        document.body.dataset.friendonePos = `${Math.round(next.position.x)},${Math.round(next.position.y)}`;
+      }
+      return;
+    }
+    const trail = this.friendoneFollowerTrail;
+    if (!trail) return;
+    const next = advanceFollowerTrail(trail, { x: this.player.x, y: this.player.y }, deltaMs);
+    this.friendoneFollowerTrail = next;
+    const projected = this.getProjection().project(next.position.x, next.position.y);
+    sprite.setPosition(projected.x, projected.y).setDepth(projected.y);
+    const animation = `friendone-follower-${next.moving ? 'walk' : 'idle'}-${next.facing}`;
+    if (sprite.anims.currentAnim?.key !== animation) {
+      sprite.play(animation);
+    }
+    if (this.debugMarkers) {
+      document.body.dataset.friendonePos = `${Math.round(next.position.x)},${Math.round(next.position.y)}`;
+    }
+  }
+
+  private removeFriendOneFollower(): void {
+    this.friendoneFollower?.destroy();
+    this.friendoneFollower = undefined;
+    this.friendoneFollowerTrail = undefined;
+    this.friendoneFollowerRoute = undefined;
+    document.body.dataset.friendoneMode = 'absent';
+    delete document.body.dataset.friendonePos;
+  }
+
+  private applyFishbowlStoryState(): void {
+    if (this.location.id !== 'friend-a') {
+      delete document.body.dataset.friendoneFishCount;
+      delete document.body.dataset.koiTransition;
+      return;
+    }
+    const handle = this.propHandles.find(({ placement }) => placement.frame === 'fishbowl-table');
+    if (!handle) {
+      return;
+    }
+    const twoKoi = hasActivityCompleted(this.state, 'friendone-pc-fishing');
+    if (!twoKoi) {
+      delete document.body.dataset.koiTransition;
+    }
+    const texture = twoKoi ? STORY_KOI_BOWL_TWO_KEY : STORY_KOI_BOWL_ONE_KEY;
+    if (!this.textures.exists(texture)) {
+      return;
+    }
+    const displayHeight = handle.image.displayHeight;
+    handle.image.setTexture(texture);
+    const frame = handle.image.frame;
+    const displayWidth = displayHeight * (frame.realWidth / Math.max(1, frame.realHeight));
+    handle.image.setDisplaySize(displayWidth, displayHeight);
+    document.body.dataset.friendoneFishCount = twoKoi ? '2' : '1';
+  }
+
+  /** State-derived invitation contained inside ____'s physical monitor. */
+  private applyFriendOnePcReadyState(): void {
+    this.friendonePcReadyCue.forEach((object) => object.destroy());
+    this.friendonePcReadyCue = [];
+    delete document.body.dataset.friendonePcReady;
+    delete document.body.dataset.friendonePcCue;
+
+    if (
+      this.location.id !== 'friend-a' ||
+      !hasSeenBeat(this.state, FRIEND_ONE_PC_READY_BEAT_ID) ||
+      hasActivityCompleted(this.state, 'friendone-pc-fishing')
+    ) {
+      return;
+    }
+
+    const desk = this.propHandles.find(({ placement }) => placement.frame === 'desk')?.image;
+    if (!desk) {
+      return;
+    }
+    const bounds = desk.getBounds();
+    const depth = desk.depth + 3;
+    // The monitor glass itself wakes up: a clean light-blue sheen, without symbols,
+    // scenery, status dots, bars, prompts, or an extra border.
+    const screenWidth = bounds.width * FRIEND_ONE_PC_GLASS_CUE.bounds.width;
+    const screenHeight = bounds.height * FRIEND_ONE_PC_GLASS_CUE.bounds.height;
+    const screenLeft = bounds.x + bounds.width * FRIEND_ONE_PC_GLASS_CUE.bounds.left;
+    const screenTop = bounds.y + bounds.height * FRIEND_ONE_PC_GLASS_CUE.bounds.top;
+    const glassShine = this.add.graphics().setDepth(depth);
+    glassShine.fillGradientStyle(
+      ...FRIEND_ONE_PC_GLASS_CUE.gradient,
+      0.76,
+      0.7,
+      0.56,
+      0.62,
+    );
+    glassShine.fillRect(screenLeft, screenTop, screenWidth, screenHeight);
+    glassShine.fillStyle(0xedfbff, 0.38);
+    glassShine.fillEllipse(
+      screenLeft + screenWidth * 0.3,
+      screenTop + screenHeight * 0.2,
+      screenWidth * 0.58,
+      screenHeight * 0.26,
+    );
+    glassShine.setBlendMode(Phaser.BlendModes.ADD);
+    this.tweens.add({
+      targets: glassShine,
+      alpha: { from: 0.82, to: 1 },
+      duration: 1650,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+    this.friendonePcReadyCue = [glassShine];
+    document.body.dataset.friendonePcReady = 'true';
+    document.body.dataset.friendonePcCue = 'glass-shine';
+  }
+
+  /** Turns the fishing result into a readable world beat: the bowl ripples,
+   * briefly flashes, then settles on the matched two-koi art. */
+  private async revealSecondKoi(): Promise<void> {
+    this.applyFriendOnePcReadyState();
+    if (this.location.id !== 'friend-a') {
+      this.applyFishbowlStoryState();
+      return;
+    }
+    const handle = this.propHandles.find(({ placement }) => placement.frame === 'fishbowl-table');
+    if (!handle) {
+      this.applyFishbowlStoryState();
+      return;
+    }
+
+    document.body.dataset.koiTransition = 'running';
+    playSfx('sfx-koi-arrive');
+    const bounds = handle.image.getBounds();
+    const duration = new URLSearchParams(window.location.search).get('testMode') === '1' ? 70 : 420;
+    const ripple = this.add
+      .ellipse(bounds.centerX, bounds.y + bounds.height * 0.32, bounds.width * 0.5, bounds.height * 0.18)
+      .setStrokeStyle(3, 0x8ef3e6, 0.9)
+      .setFillStyle(0xf3c56d, 0.1)
+      .setDepth(handle.image.depth + 4);
+    const arrival = this.add
+      .text(bounds.centerX, bounds.y - 8, '+1 KOI', {
+        color: '#fff0b5',
+        backgroundColor: '#06111add',
+        fontFamily: 'Consolas, "Courier New", monospace',
+        fontSize: '16px',
+        padding: { x: 7, y: 4 },
+        stroke: '#7c5429',
+        strokeThickness: 2,
+      })
+      .setOrigin(0.5, 1)
+      .setAlpha(0)
+      .setDepth(handle.image.depth + 5);
+    this.tweens.add({
+      targets: ripple,
+      scaleX: 1.75,
+      scaleY: 1.75,
+      alpha: 0,
+      duration: duration * 2,
+      ease: 'Sine.easeOut',
+    });
+    this.tweens.add({
+      targets: arrival,
+      y: arrival.y - 24,
+      alpha: { from: 0, to: 1 },
+      duration,
+      hold: duration,
+      yoyo: true,
+    });
+
+    await new Promise<void>((resolve) => {
+      this.tweens.add({
+        targets: handle.image,
+        alpha: 0.28,
+        duration,
+        ease: 'Sine.easeIn',
+        onComplete: () => resolve(),
+      });
+    });
+    this.applyFishbowlStoryState();
+    await new Promise<void>((resolve) => {
+      this.tweens.add({
+        targets: handle.image,
+        alpha: 1,
+        duration,
+        ease: 'Sine.easeOut',
+        onComplete: () => resolve(),
+      });
+    });
+    ripple.destroy();
+    arrival.destroy();
+    document.body.dataset.koiTransition = 'complete';
+  }
+
+  private applyEpilogueRoomState(): void {
+    const photo = this.propHandles.find(
+      ({ placement }) => placement.frame === 'epilogue-photo',
+    );
+    const editingRoom =
+      import.meta.env.DEV && new URLSearchParams(window.location.search).has('dressEdit');
+    photo?.image.setVisible(this.state.endingCompleted || editingRoom);
+
+    if (this.location.id !== 'recipient-house' || !this.state.endingCompleted) {
+      delete document.body.dataset.pcPowered;
+      delete document.body.dataset.roomPhotoComplete;
+      delete document.body.dataset.roomPhotoShear;
+      delete document.body.dataset.roomPhotoTexture;
+      return;
+    }
+
+    const anchors = resolveEpilogueRoomAnchors(
+      this.propHandles.map(({ placement }) => ({
+        ...placement,
+        mapX: placement.mapX,
+        mapY: placement.mapY,
+      })),
+    );
+    const findHandle = (placement: typeof anchors.photoWall) =>
+      placement
+        ? this.propHandles.find((handle) => handle.placement === placement ||
+            (handle.placement.frame === placement.frame &&
+              handle.placement.mapX === placement.mapX &&
+              handle.placement.mapY === placement.mapY))
+        : undefined;
+    const desk = findHandle(anchors.desk);
+    const wall = findHandle(anchors.photoWall);
+    const windowHandle = findHandle(anchors.highWindow);
+
+    if (wall && photo) {
+      const bounds = wall.image.getBounds();
+      const photoBounds = photo.image.getBounds();
+      const shearDrop = photoBounds.width * EPILOGUE_WALL_SHEAR;
+      const photoCorners = {
+        topLeft: { x: photoBounds.left, y: photoBounds.top },
+        topRight: { x: photoBounds.right, y: photoBounds.top + shearDrop },
+        bottomRight: { x: photoBounds.right, y: photoBounds.bottom },
+        bottomLeft: { x: photoBounds.left, y: photoBounds.bottom - shearDrop },
+      };
+      const glow = this.add
+        .ellipse(
+          bounds.centerX,
+          bounds.centerY,
+          bounds.width * 1.3,
+          bounds.height * 1.25,
+          0xffd78d,
+          0.08,
+        )
+        .setDepth(wall.image.depth - 0.15)
+        .setBlendMode(Phaser.BlendModes.ADD);
+      this.tweens.add({
+        targets: glow,
+        alpha: { from: 0.055, to: 0.115 },
+        duration: 2200,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+      });
+
+      document.body.dataset.roomPhotoShear = String(photo.placement.wallShear ?? 0);
+      document.body.dataset.roomPhotoTexture = photo.image.texture.key;
+
+      if (windowHandle) {
+        const source = resolveShearedWindowLightOpening(windowHandle.image.getBounds(), -0.5);
+        const bands = resolveEpilogueBeamBands(source, photoCorners);
+        const beam = this.add.graphics().setDepth(wall.image.depth + 0.02);
+        const colors = [0xffe4aa, 0xffebbe, 0xfff3d8] as const;
+        const alphas = [0.05, 0.08, 0.1] as const;
+        bands.forEach((band, index) => {
+          beam.fillStyle(colors[index] ?? colors[0], alphas[index] ?? alphas[0]);
+          beam.fillPoints([
+            new Phaser.Geom.Point(band.source.start.x, band.source.start.y),
+            new Phaser.Geom.Point(band.source.end.x, band.source.end.y),
+            new Phaser.Geom.Point(band.target.end.x, band.target.end.y),
+            new Phaser.Geom.Point(band.target.start.x, band.target.start.y),
+          ], true);
+        });
+        beam.setBlendMode(Phaser.BlendModes.ADD);
+        this.tweens.add({
+          targets: beam,
+          alpha: { from: 0.74, to: 1 },
+          duration: 3600,
+          yoyo: true,
+          repeat: -1,
+          ease: 'Sine.easeInOut',
+        });
+
+        const pool = this.add.graphics().setDepth(wall.image.depth + 0.04);
+        pool.setBlendMode(Phaser.BlendModes.ADD);
+        pool.fillStyle(0xffe6a8, 0.16);
+        pool.fillEllipse(
+          photoBounds.centerX,
+          photoBounds.centerY,
+          Math.max(64, photoBounds.width * 2.8),
+          Math.max(28, photoBounds.width * 1.25),
+        );
+        pool.fillStyle(0xfff2cf, 0.12);
+        pool.fillEllipse(
+          photoBounds.centerX,
+          photoBounds.centerY,
+          Math.max(38, photoBounds.width * 1.65),
+          Math.max(16, photoBounds.width * 0.7),
+        );
+        this.tweens.add({
+          targets: pool,
+          alpha: { from: 0.68, to: 1 },
+          duration: 3400,
+          yoyo: true,
+          repeat: -1,
+          ease: 'Sine.easeInOut',
+        });
+
+        const rim = this.add.graphics().setDepth(wall.image.depth + 0.06);
+        rim.lineStyle(1, 0xffe5a8, 0.18);
+        rim.strokePoints([
+          new Phaser.Geom.Point(photoCorners.topLeft.x, photoCorners.topLeft.y),
+          new Phaser.Geom.Point(photoCorners.topRight.x, photoCorners.topRight.y),
+          new Phaser.Geom.Point(photoCorners.bottomRight.x, photoCorners.bottomRight.y),
+          new Phaser.Geom.Point(photoCorners.bottomLeft.x, photoCorners.bottomLeft.y),
+        ], true);
+        rim.setBlendMode(Phaser.BlendModes.ADD);
+      }
+    }
+
+    if (desk) {
+      const bounds = desk.image.getBounds();
+      const screenCue = RECIPIENT_PC_MAIL_CUE.screenBounds;
+      const screenLeft = bounds.x + bounds.width * screenCue.left;
+      const screenTop = bounds.y + bounds.height * screenCue.top;
+      const screenWidth = bounds.width * screenCue.width;
+      const screenHeight = bounds.height * screenCue.height;
+      const centerX = screenLeft + screenWidth / 2;
+      const centerY = screenTop + screenHeight / 2;
+
+      // Leave the original CRT glass untouched. A restrained yellow halo and a
+      // compact envelope communicate that the letters are waiting without
+      // needing to fit a replacement surface against the monitor's curved rim.
+      const halo = this.add.graphics().setDepth(desk.image.depth + 0.1);
+      halo.fillStyle(RECIPIENT_PC_MAIL_CUE.color, 0.18);
+      halo.fillEllipse(centerX, centerY, screenWidth * 0.72, screenHeight * 0.8);
+      halo.setBlendMode(Phaser.BlendModes.ADD);
+      this.tweens.add({
+        targets: halo,
+        alpha: { from: 0.55, to: 1 },
+        duration: 1300,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+      });
+
+      const iconWidth = screenWidth * 0.34;
+      const iconHeight = screenHeight * 0.36;
+      const iconLeft = centerX - iconWidth / 2;
+      const iconTop = centerY - iconHeight / 2;
+      const mail = this.add.graphics().setDepth(desk.image.depth + 0.11);
+      mail.fillStyle(RECIPIENT_PC_MAIL_CUE.color, 1);
+      mail.fillRoundedRect(iconLeft, iconTop, iconWidth, iconHeight, 1);
+      mail.lineStyle(0.8, 0x8a5700, 0.95);
+      mail.strokeRoundedRect(iconLeft, iconTop, iconWidth, iconHeight, 1);
+      mail.beginPath();
+      mail.moveTo(iconLeft + 0.8, iconTop + 0.8);
+      mail.lineTo(centerX, iconTop + iconHeight * 0.62);
+      mail.lineTo(iconLeft + iconWidth - 0.8, iconTop + 0.8);
+      mail.strokePath();
+    }
+    document.body.dataset.pcPowered = 'true';
+    document.body.dataset.roomPhotoComplete = 'true';
+  }
+
+  private startStoryAudioCues(): void {
+    const scheduleNote = (
+      pitchId: string,
+      durationMs: number,
+      delayMs: number,
+      onPlay?: () => void,
+    ): void => {
+      const pitch = getPitch(pitchId);
+      if (!pitch) return;
+      this.violinCueTimers.push(
+        this.time.delayedCall(delayMs, () => {
+          playViolinNote(pitch.frequency, durationMs, { volume: 0.34 });
+          onPlay?.();
+        }),
+      );
+    };
+
+    if (this.location.id === 'recipient-house' && !hasSeenBeat(this.state, INTRO_COMPLETE_BEAT_ID)) {
+      this.time.delayedCall(450, () => playSfx('sfx-story-hum', { volume: 0.28 }));
+    }
+
+    if (
+      this.location.id !== 'recipient-house' ||
+      !hasActivityCompleted(this.state, RETAKE_ACTIVITY_ID) ||
+      hasActivityCompleted(this.state, VIOLIN_ACTIVITY_ID) ||
+      hasKeepsake(this.state, 'recipient-sheet-music') ||
+      hasSeenBeat(this.state, VIOLIN_CALLED_BEAT_ID) ||
+      this.state.endingCompleted
+    ) {
+      return;
+    }
+    const violin = this.propHandles.find(({ placement }) => placement.frame === 'violin')?.image;
+    if (!violin) return;
+    playSfx('sfx-story-hum', { volume: 0.22 });
+    const emitNote = (): void => {
+      const bounds = violin.getBounds();
+      const glyph = this.add
+        .text(bounds.centerX + (Math.random() - 0.5) * 18, bounds.y + 12, Math.random() > 0.5 ? '♪' : '♫', {
+          color: '#fff0b5',
+          fontFamily: 'serif',
+          fontSize: '25px',
+          stroke: '#7c5429',
+          strokeThickness: 2,
+        })
+        .setDepth(violin.depth + 2)
+        .setAlpha(0);
+      this.tweens.add({
+        targets: glyph,
+        y: glyph.y - 48,
+        x: glyph.x + 14,
+        alpha: { from: 0, to: 0.95 },
+        duration: 600,
+        hold: 220,
+        yoyo: true,
+        onComplete: () => glyph.destroy(),
+      });
+    };
+    const violinDelayMs = 2800;
+    createViolinInvitationSchedule().forEach((note) =>
+      scheduleNote(note.pitchId, note.durationMs, violinDelayMs + note.atMs, emitNote),
+    );
+    // The first pass ends at 1.5s + its 650ms final note. Let that final tone
+    // breathe for a fraction of a beat, then have ____ react without requiring
+    // the player to touch the violin. Any scheduled repeat is cancelled here.
+    this.violinCueTimers.push(
+      this.time.delayedCall(violinDelayMs + 2270, () => {
+        void this.acknowledgeViolinCall();
+      }),
+    );
+    document.body.dataset.violinInvitation = 'playing';
+  }
+
+  private async acknowledgeViolinCall(): Promise<void> {
+    if (hasSeenBeat(this.state, VIOLIN_CALLED_BEAT_ID)) {
+      this.cancelViolinCue();
+      return;
+    }
+    // Entry dialogue or another overlay may still own the UI when the fragment
+    // ends. Wait until the room is controllable rather than replacing that beat.
+    if (!this.canMove) {
+      this.violinCueTimers.push(
+        this.time.delayedCall(200, () => void this.acknowledgeViolinCall()),
+      );
+      return;
+    }
+
+    this.cancelViolinCue();
+    await this.pauseForDialogue([
+      {
+        speaker: '____',
+        text: 'Did the violin just make noise on its own?',
+        portraitId: 'portrait-recipient',
+      },
+    ]);
+    this.state = markBeatSeen(this.state, VIOLIN_CALLED_BEAT_ID);
+    this.registry.set('runState', this.state);
+    document.body.dataset.violinCalled = 'acknowledged';
+  }
+
+  private cancelViolinCue(): void {
+    this.violinCueTimers.forEach((timer) => timer.remove(false));
+    this.violinCueTimers = [];
+    delete document.body.dataset.violinInvitation;
+  }
+
   private createHomeHostNpc(): void {
     const npc = HOME_HOST_NPCS[this.location.id];
     if (!npc || !this.textures.exists(npc.sprite.key)) {
+      return;
+    }
+    if (
+      (npc.id === 'friendone' || npc.id === 'friendtwo') &&
+      !shouldShowHomeNpc(this.location.id, npc.id, this.state)
+    ) {
       return;
     }
     // ____'s home billboard runs on the partial frame set (one strip per row).
@@ -3826,7 +4628,18 @@ export class LocationScene extends Phaser.Scene {
     }
 
     const playerBounds = this.player.getBounds();
-    const objects = [...this.interactions, ...this.exits];
+    const availableInteractionIds = new Set(
+      this.location.interactions
+        .filter((interaction) =>
+          isInteractionAvailable(interaction, this.state) &&
+          !(interaction.endingConversation && this.state.endingCompleted),
+        )
+        .map((interaction) => interaction.id),
+    );
+    const objects = [
+      ...this.interactions.filter((object) => availableInteractionIds.has(object.id)),
+      ...this.exits,
+    ];
 
     return objects.find((object) =>
       Phaser.Geom.Intersects.RectangleToRectangle(playerBounds, this.toRectangle(object)),
@@ -3855,6 +4668,11 @@ export class LocationScene extends Phaser.Scene {
     const exit = this.location.exits.find((candidate) => candidate.id === object.id);
 
     if (exit) {
+      const storyBlock = getStoryTravelBlock(exit.destinationLocationId, this.state);
+      if (storyBlock) {
+        await this.pauseForDialogue([{ text: storyBlock }]);
+        return;
+      }
       if (exit.requiresFinalUnlock && !isFinalSpotUnlocked(this.state)) {
         await this.pauseForDialogue([{ text: FINAL_LOCKED_LINE }]);
         return;
@@ -3879,6 +4697,9 @@ export class LocationScene extends Phaser.Scene {
 
   private async activateInteraction(interaction: LocationInteraction): Promise<void> {
     playSfx('sfx-interact');
+    if (!isInteractionAvailable(interaction, this.state)) {
+      return;
+    }
     if (isInteractionLocked(interaction, this.state)) {
       if (interaction.lockedDialogue) {
         await this.pauseForDialogue(interaction.lockedDialogue);
@@ -3890,8 +4711,50 @@ export class LocationScene extends Phaser.Scene {
     // its ordinary dialogue.
     if (interaction.photoWallAfterEnding && this.state.endingCompleted) {
       this.canMove = false;
-      await showPhotoWall();
+      await showPhotoWall({ onIntroComplete: () => playSfx('sfx-photo-complete') });
       this.canMove = true;
+      return;
+    }
+
+    if (interaction.id === 'recipient-pc' && this.state.endingCompleted) {
+      this.canMove = false;
+      const archive = showLettersScreen({ mode: 'archive', letters: LETTERS });
+      await archive.closed;
+      this.canMove = true;
+      return;
+    }
+
+    if (interaction.id === 'recipient-pc') {
+      const pcStory = resolveRecipientPcStory(this.state);
+      playSfx('sfx-pc-fail');
+      const desk = this.propHandles.find(({ placement }) => placement.frame === 'desk')?.image;
+      if (desk) {
+        this.tweens.add({
+          targets: desk,
+          alpha: { from: 1, to: 0.55 },
+          duration: 85,
+          yoyo: true,
+          repeat: 3,
+        });
+      }
+      if (pcStory.playNotification) {
+        const priorCount = Number(document.body.dataset.phoneNotificationCount ?? '0');
+        document.body.dataset.phoneNotificationCount = String(priorCount + 1);
+        this.time.delayedCall(950, () => playSfx('sfx-phone-notification'));
+      }
+      await this.pauseForDialogue(pcStory.dialogue);
+      if (pcStory.marksBeatId) {
+        this.state = markBeatSeen(this.state, pcStory.marksBeatId);
+        this.registry.set('runState', this.state);
+      }
+      return;
+    }
+    if (interaction.id === 'recipient-violin') {
+      this.cancelViolinCue();
+    }
+
+    if (interaction.endingConversation) {
+      await this.runFinaleConversation(interaction);
       return;
     }
 
@@ -3899,16 +4762,52 @@ export class LocationScene extends Phaser.Scene {
       await this.pauseForDialogue(interaction.dialogue);
     }
 
-    // The terminal ending beat: the conversation just closed → the two short
-    // final letters, then the persistent letters screen. The ending completes here.
-    if (interaction.endingConversation) {
-      await this.runTerminalEnding();
-      return;
+    if (interaction.marksBeatId) {
+      this.state = markBeatSeen(this.state, interaction.marksBeatId);
+      this.registry.set('runState', this.state);
+      this.applyFriendOnePcReadyState();
     }
 
     if (interaction.kind === 'activity') {
       await this.startActivity(interaction.activityId);
     }
+  }
+
+  private async runFinaleConversation(interaction: LocationInteraction): Promise<void> {
+    if (this.finaleReveal.phase !== 'omen') {
+      return;
+    }
+    await this.pauseForDialogue([
+      { speaker: '____', text: 'You... who are you?', portraitId: 'portrait-recipient' },
+      { speaker: 'Omen', text: '~~', portraitId: 'portrait-omen' },
+    ]);
+    this.finaleReveal = advanceFinaleReveal(this.finaleReveal, 'ask-identity');
+    const actor = this.finaleActor;
+    if (actor) {
+      playSfx('sfx-omen-teleport');
+      await new Promise<void>((resolve) => {
+        this.tweens.add({
+          targets: actor,
+          alpha: 0,
+          scaleX: actor.scaleX * 0.45,
+          scaleY: actor.scaleY * 1.35,
+          duration: 480,
+          ease: 'Cubic.easeIn',
+          onComplete: () => resolve(),
+        });
+      });
+      const { x, y } = actor;
+      actor.destroy();
+      this.finaleActor = this.createFinaleFriendTwo(x, y - 4);
+    }
+    this.finaleReveal = advanceFinaleReveal(this.finaleReveal, 'transform-complete');
+    document.body.dataset.finaleActor = 'friendtwo';
+    if (interaction.dialogue) {
+      await this.pauseForDialogue(interaction.dialogue);
+    }
+    this.finaleReveal = advanceFinaleReveal(this.finaleReveal, 'ending-complete');
+    delete document.body.dataset.finaleActor;
+    await this.runTerminalEnding();
   }
 
   // The ending's tail, once the galaxy conversation with ____ closes. Freezes
@@ -4010,6 +4909,13 @@ export class LocationScene extends Phaser.Scene {
       },
       onComplete: async (completion) => {
         restoreHud();
+        // The scene knows which registered activity produced this callback.
+        // Normalize the completion here so a module can never award its keepsake
+        // while accidentally failing to persist its completed activity ID.
+        const recordedCompletion = {
+          ...completion,
+          activityId: completion.activityId ?? activityId,
+        };
         // The ending's frame-sequence transition hands off to the live, playable
         // galaxy scene. Wake this scene so it renders beneath the held galaxy
         // frame (still up in the activity mount), record the activity, then
@@ -4017,7 +4923,7 @@ export class LocationScene extends Phaser.Scene {
         // Movement stays frozen through the fade so no input leaks to the scene.
         if (completion.endingArrival) {
           wakeScene();
-          this.state = completeLocation(this.state, completion);
+          this.state = completeLocation(this.state, recordedCompletion);
           this.registry.set('runState', this.state);
           await this.revealGalaxyArrival(activityMount);
           return;
@@ -4047,7 +4953,7 @@ export class LocationScene extends Phaser.Scene {
         if (this.location.keepsake) {
           playSfx('sfx-keepsake');
         }
-        this.state = completeLocation(this.state, completion);
+        this.state = completeLocation(this.state, recordedCompletion);
 
         if (isEndingCompletion) {
           this.state = markEndingCompleted(this.state);
@@ -4058,6 +4964,14 @@ export class LocationScene extends Phaser.Scene {
 
         this.registry.set('runState', this.state);
 
+        const completedActivityId = completion.activityId ?? activityId;
+        if (completedActivityId === 'friendone-pc-fishing') {
+          await this.revealSecondKoi();
+        }
+        if (completedActivityId === RETAKE_ACTIVITY_ID) {
+          this.removeFriendOneFollower();
+        }
+
         // The awakening is the emotional beat: apply it the instant the violin
         // completes (the scene woke without re-running create()), fading the
         // golden shafts + doormat shine in over ~1.5s while ____ is still at
@@ -4065,10 +4979,17 @@ export class LocationScene extends Phaser.Scene {
         // on the final unlock, so only the run-completing keepsake triggers it.
         this.applyInteriorAwakening({ animate: true });
 
-        if (this.location.rewardMessage && this.location.rewardPresentation === 'letter') {
+        if (this.location.rewardSheetMusic) {
+          await showSheetMusicModal(this.location.rewardSheetMusic);
+        } else if (this.location.rewardMessage && this.location.rewardPresentation === 'letter') {
           await showLetterModal(this.location.rewardMessage);
         } else if (this.location.rewardMessage) {
           await this.pauseForDialogue(this.location.rewardMessage);
+        }
+
+        const completionStory = getActivityCompletionStory(completedActivityId);
+        if (completionStory?.worldDialogue.length) {
+          await this.pauseForDialogue(completionStory.worldDialogue);
         }
 
         // Some activities deliver the player elsewhere on completion (the origami

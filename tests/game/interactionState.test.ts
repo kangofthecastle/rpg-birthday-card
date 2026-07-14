@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  isInteractionAvailable,
   isInteractionLocked,
   shouldPlayEnterBeat,
 } from '../../src/game/interactionState';
@@ -48,6 +49,30 @@ describe('isInteractionLocked', () => {
     }
     expect(isInteractionLocked(gated, state)).toBe(false);
   });
+
+  it('keeps an activity interaction inspectable but locked until its prerequisite activity', () => {
+    const violin = { lockedUntilActivityId: 'valorant-split' } as const;
+    const fresh = createInitialRunState('recipient-house');
+
+    expect(isInteractionAvailable(violin, fresh)).toBe(true);
+    expect(isInteractionLocked(violin, fresh)).toBe(true);
+
+    const afterRetake = completeLocation(fresh, {
+      locationId: 'friend-b',
+      activityId: 'valorant-split',
+    });
+    expect(isInteractionAvailable(violin, afterRetake)).toBe(true);
+    expect(isInteractionLocked(violin, afterRetake)).toBe(false);
+  });
+});
+
+describe('isInteractionAvailable', () => {
+  it('hides a one-time interaction after its named beat', () => {
+    const interaction = { hiddenAfterBeatId: 'friendone-pc-ready' } as const;
+    const fresh = createInitialRunState('friend-a');
+    expect(isInteractionAvailable(interaction, fresh)).toBe(true);
+    expect(isInteractionAvailable(interaction, markBeatSeen(fresh, 'friendone-pc-ready'))).toBe(false);
+  });
 });
 
 describe('shouldPlayEnterBeat', () => {
@@ -79,5 +104,23 @@ describe('shouldPlayEnterBeat', () => {
     const seen = markBeatSeen(createInitialRunState('recipient-house'), 'recipient-intro');
 
     expect(shouldPlayEnterBeat(repeating, seen)).toBe(true);
+  });
+
+  it('waits for a required activity and beat', () => {
+    const gated: LocationEnterBeat = {
+      id: 'friendtwo-house-entered',
+      requiresActivityId: 'friendone-pc-fishing',
+      requiresBeatId: 'friendone-text-read',
+      dialogue: [{ text: "That's strange. He's not here!" }],
+    };
+    const fresh = createInitialRunState('friend-b');
+    expect(shouldPlayEnterBeat(gated, fresh)).toBe(false);
+
+    const invited = markBeatSeen(fresh, 'friendone-text-read');
+    const ready = completeLocation(invited, {
+      locationId: 'friend-a',
+      activityId: 'friendone-pc-fishing',
+    });
+    expect(shouldPlayEnterBeat(gated, ready)).toBe(true);
   });
 });

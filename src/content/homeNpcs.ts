@@ -19,16 +19,17 @@ import {
 
 // ____'s 4-direction idle/walk sheet: 1536×2048, 6 columns × 8 rows of 256px
 // frames — identical layout to ____'s. Rows 0–3 are idle (down, left, right,
-// up); rows 4–7 are walk. Only the idle-down row is used here — she stands at
-// her tea table, facing the door ____ comes in through.
+// up); rows 4–7 are walk. The home billboard uses idle-down, while the ____
+// visit follower sequence uses all four idle/walk directions.
 export const FRIEND_ONE_SPRITE = {
   key: 'friendone-idle-walk-4dir',
-  url: '/assets/sprites/characters/friendone-idle-walk-4dir-v1-alpha.png',
+  url: '/assets/sprites/characters/friendone-idle-walk-4dir-v6-alpha.png',
   frameWidth: 256,
   frameHeight: 256,
   scale: 0.45,
   origin: { x: 0.5, y: 1 },
   idleFrameRate: 4,
+  walkFrameRate: 10,
   /** First frame of the idle-down row. */
   idleDownStartFrame: 0,
   idleDownFrameCount: 6,

@@ -1,7 +1,16 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createValorantSplitActivity } from '../../../src/activities/valorantSplit/valorantSplitActivity';
 import type { SplitSceneCallbacks } from '../../../src/activities/valorantSplit/SplitScene';
 import { createInitialRunState } from '../../../src/game/runState';
+
+const { playSfx } = vi.hoisted(() => ({ playSfx: vi.fn() }));
+
+vi.mock('../../../src/game/audio', () => ({ playSfx }));
+
+beforeEach(() => {
+  playSfx.mockClear();
+  document.querySelector('[data-ui-layer="dialogue"]')?.remove();
+});
 
 function setSearch(search: string): void {
   window.history.pushState({}, '', `/${search}`);
@@ -18,6 +27,63 @@ function mountFixture(): { fixture: HTMLElement; mount: HTMLElement } {
 }
 
 describe('valorantSplitActivity', () => {
+  it('waits for explicit scene readiness, then holds gameplay through the Omen lead-in', async () => {
+    let sceneCallbacks: SplitSceneCallbacks | undefined;
+    const activity = createValorantSplitActivity((_parent, callbacks) => {
+      sceneCallbacks = callbacks;
+      return { destroy: vi.fn() };
+    });
+    const { fixture, mount } = mountFixture();
+    const uiRoot = document.createElement('div');
+    uiRoot.id = 'ui-root';
+    document.body.append(uiRoot);
+
+    try {
+      await activity.start({
+        state: createInitialRunState('friend-b'),
+        mount,
+        onComplete: vi.fn(),
+        onCancel: vi.fn(),
+      });
+
+      // Merely constructing the Phaser game is not scene readiness.
+      expect(document.body.textContent).not.toContain('Omen?');
+      expect(playSfx).not.toHaveBeenCalledWith('sfx-omen-void');
+
+      let released = false;
+      const leadIn = sceneCallbacks?.onReady();
+      expect(sceneCallbacks?.onReady()).toBe(leadIn);
+      const ready = leadIn?.then(() => {
+        released = true;
+      });
+
+      expect(document.body.textContent).toContain('Omen? You don’t play Omen very often.');
+      expect(released).toBe(false);
+      expect(playSfx).not.toHaveBeenCalledWith('sfx-omen-void');
+
+      document.querySelector<HTMLButtonElement>('.dialogue-box__action')?.click();
+      await Promise.resolve();
+
+      expect(document.body.textContent).toContain('~~');
+      expect(playSfx).toHaveBeenCalledWith('sfx-omen-void');
+      expect(
+        document.querySelector<HTMLImageElement>('.dialogue-box__portrait')?.getAttribute('src'),
+      ).toBe('/assets/activities/valorant-split/omen.png');
+      expect(playSfx.mock.calls.filter(([key]) => key === 'sfx-omen-void')).toHaveLength(1);
+      expect(released).toBe(false);
+
+      document.querySelector<HTMLButtonElement>('.dialogue-box__action')?.click();
+      await ready;
+
+      expect(released).toBe(true);
+      expect(document.querySelector('[data-ui-layer="dialogue"]')).toBeNull();
+    } finally {
+      document.querySelector('[data-ui-layer="dialogue"]')?.remove();
+      uiRoot.remove();
+      fixture.remove();
+    }
+  });
+
   it('does not expose the test completion control outside test mode', async () => {
     setSearch('');
 
@@ -80,6 +146,7 @@ describe('valorantSplitActivity', () => {
 
       expect(onComplete).toHaveBeenCalledWith({
         locationId: 'friend-b',
+        activityId: 'valorant-split',
         keepsakeId: 'defused-spike-charm',
       });
       expect(onComplete).toHaveBeenCalledTimes(1);
@@ -116,6 +183,7 @@ describe('valorantSplitActivity', () => {
 
       expect(onComplete).toHaveBeenCalledWith({
         locationId: 'friend-b',
+        activityId: 'valorant-split',
         keepsakeId: 'defused-spike-charm',
       });
       expect(onComplete).toHaveBeenCalledTimes(1);

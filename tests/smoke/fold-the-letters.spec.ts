@@ -38,6 +38,7 @@ async function walkToShore(page: Page): Promise<void> {
 test('makes the boat with real gestures and arrives at the lantern clearing WITH control', async ({
   page,
 }) => {
+  test.setTimeout(60_000);
   await page.goto('/?testMode=1&locationId=clearing&spawnId=start&seedKeepsakes=all');
   const canvas = page.locator('canvas').first();
   await expect(canvas).toBeVisible();
@@ -157,6 +158,13 @@ test('makes the boat with real gestures and arrives at the lantern clearing WITH
   // All three distinct verbs were genuinely exercised.
   expect(sawHoist && sawRoll && sawKindle).toBe(true);
 
+  // Begin observing the short test-mode arrival overlay before waiting on the
+  // destination attribute. Under full-suite load the ~230ms frame sequence can
+  // otherwise complete between those two sequential assertions.
+  const endingFramesVisible = expect(page.locator('[data-ending-frames]')).toBeVisible({
+    timeout: 15000,
+  });
+
   // The ritual carries her INTO the lantern clearing (the travelTo integration).
   await expect(page.locator('body')).toHaveAttribute('data-location-id', 'final-spot', {
     timeout: 15000,
@@ -164,18 +172,23 @@ test('makes the boat with real gestures and arrives at the lantern clearing WITH
 
   // The boat lands IN the ending: the arrival frame-sequence transition AUTO-plays
   // (no interim walk or E-press) …
-  await expect(page.locator('[data-ending-frames]')).toBeVisible({ timeout: 15000 });
+  await endingFramesVisible;
 
-  // … then it hands off to the live, playable galaxy scene. Walk up to ____ at
-  // the warm glow and open the final conversation — proving control is restored.
+  // … then it hands off to the live, playable galaxy scene. Walk up to Omen at
+  // the warm glow and open the identity reveal — proving control is restored.
+  const identityQuestion = page.getByText('You... who are you?');
   const conversationLine = page.getByText('make it out this far');
-  for (let step = 0; step < 80 && !(await conversationLine.isVisible().catch(() => false)); step += 1) {
+  for (let step = 0; step < 80 && !(await identityQuestion.isVisible().catch(() => false)); step += 1) {
     await page.keyboard.down('ArrowUp');
     await page.waitForTimeout(90);
     await page.keyboard.up('ArrowUp');
     await page.keyboard.press('E', { delay: 20 });
     await page.waitForTimeout(40);
   }
+  await expect(identityQuestion).toBeVisible();
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByText('~~')).toBeVisible();
+  await page.getByRole('button', { name: 'Continue' }).click();
   await expect(conversationLine).toBeVisible();
 });
 

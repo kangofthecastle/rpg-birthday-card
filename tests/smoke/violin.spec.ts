@@ -45,7 +45,7 @@ async function walkToViolin(page: import('@playwright/test').Page): Promise<void
 
 // "The piece on the stand" is ____'s self-keepsake activity: with both friend
 // keepsakes in hand, the piece that's waited on her music stand all game
-// unlocks, and playing it through awards the Golden Hour Photo. This drives it
+// unlocks, and playing it through awards ____'s sheet music. This drives it
 // through the test-mode skip button (mirrors the friendone/valorant smokes), seeding
 // the two friend keepsakes so the violin unlocks (as ending.spec does).
 test('plays the piece on the stand through test mode', async ({ page }) => {
@@ -59,6 +59,13 @@ test('plays the piece on the stand through test mode', async ({ page }) => {
 
   // Clear the intro + warm return-home enter beats.
   await dismissContinues(page, 6);
+
+  // The invitation belongs to the violin, not its interaction hotspot: the
+  // fragment plays by itself and ____ acknowledges it immediately afterward.
+  await expect(page.getByText('Did the violin just make noise on its own?')).toBeVisible({
+    timeout: 10000,
+  });
+  await page.getByRole('button', { name: 'Continue' }).click();
 
   await canvas.click();
   await walkToViolin(page);
@@ -85,8 +92,17 @@ test('plays the piece on the stand through test mode', async ({ page }) => {
     { timeout: 10000 },
   );
 
-  // The reward letter plays, then the keepsake lands in the collection.
-  await dismissContinues(page, 4);
+  // The acquired paper is the score itself. Only after the sheet-music modal
+  // closes does ____'s recognition land in the ordinary dialogue UI.
+  const rewardPaper = page.locator('.letter-modal');
+  await expect(rewardPaper).toBeVisible();
+  await expect(rewardPaper.getByRole('img', { name: /____’s handwritten sheet music/ })).toBeVisible();
+  await expect(rewardPaper).toContainText('Do You Hear the People Sing?');
+  await expect(rewardPaper).not.toContainText('completed sheet music');
+  await expect(page.getByText('...wait. I know this song!')).toHaveCount(0);
+  await rewardPaper.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByText('...wait. I know this song!')).toBeVisible();
+  await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.locator('.collection-panel')).toContainText(
     'The Piece You Finally Played',
   );
@@ -103,6 +119,7 @@ test('plays the piece on the stand through test mode', async ({ page }) => {
 test('echoes phrase 1 on the mapped keys, recovering from a wrong note', async ({
   page,
 }) => {
+  test.setTimeout(60_000);
   await page.goto(
     '/?testMode=1&locationId=recipient-house&spawnId=near-pc&seedKeepsakes=glowing-koi-scale,defused-spike-charm',
   );

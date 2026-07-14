@@ -18,8 +18,11 @@ export interface ViolinModes {
   /** One forgiven wrong press per note (see violinModel). Works in normal and
    * advanced play; irrelevant in practice. */
   mistakesAllowed: boolean;
+  /** Highlight the next expected keyboard cap during echo. Off by default;
+   * physically pressed caps still illuminate regardless of this setting. */
+  keyGuidance: boolean;
 }
 
 export function createViolinModes(): ViolinModes {
-  return { advanced: false, practice: false, mistakesAllowed: false };
+  return { advanced: false, practice: false, mistakesAllowed: false, keyGuidance: false };
 }

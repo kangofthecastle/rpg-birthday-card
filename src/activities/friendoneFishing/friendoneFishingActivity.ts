@@ -98,6 +98,7 @@ export function createFriendOneFishingActivity(
         finish(() =>
           onComplete({
             locationId: 'friend-a',
+            activityId: 'friendone-pc-fishing',
             keepsakeId: 'glowing-koi-scale',
           }),
         );

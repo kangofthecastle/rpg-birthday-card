@@ -47,6 +47,12 @@ export const SFX_KEYS = [
   'sfx-dialogue-advance',
   'sfx-keepsake',
   'sfx-letter-open',
+  'sfx-story-hum',
+  'sfx-pc-fail',
+  'sfx-phone-notification',
+  'sfx-koi-arrive',
+  'sfx-omen-void',
+  'sfx-photo-complete',
   'sfx-shot',
   'sfx-reload',
   'sfx-dryfire',
@@ -58,6 +64,7 @@ export const SFX_KEYS = [
   'sfx-defuse-tick',
   'sfx-defuse-loop',
   'sfx-defuse-checkpoint',
+  'sfx-omen-teleport',
   'sfx-defuse-complete',
   'sfx-detonate',
   'sfx-clutch',
@@ -118,6 +125,7 @@ interface AudioManagerState {
   muted: boolean;
   currentBed: MusicBedInstance | null;
   resolutionCache: Map<AudioKey, Promise<Resolution>>;
+  fileBufferCache: Map<string, Promise<AudioBuffer | null>>;
 }
 
 const state: AudioManagerState = {
@@ -129,6 +137,7 @@ const state: AudioManagerState = {
   muted: readStoredMuted(),
   currentBed: null,
   resolutionCache: new Map(),
+  fileBufferCache: new Map(),
 };
 
 // ---------------------------------------------------------------------------
@@ -323,6 +332,46 @@ export function playSfx(key: SfxKey, options: PlaySfxOptions = {}): void {
   });
 }
 
+/** Pre-decodes a one-off audio asset at an explicit public URL. Activities with
+ * bespoke recordings can warm their files during an intro without expanding the
+ * global SFX key/synth registry. Safe before audio initialization (no-op). */
+export function preloadAudioFile(url: string): void {
+  if (!state.ctx) {
+    return;
+  }
+  void resolveAudioFile(url);
+}
+
+/** Plays a one-off recording from an explicit public URL through the normal SFX
+ * and master/mute buses. Missing or undecodable files fail silently. */
+export function playAudioFile(url: string, options: PlaySfxOptions = {}): void {
+  const ctx = state.ctx;
+  const sfxGain = state.sfxGain;
+  if (!ctx || !sfxGain) {
+    return;
+  }
+
+  const rate = options.rate ?? 1;
+  const volume = clamp01(options.volume ?? 1);
+  void resolveAudioFile(url).then((buffer) => {
+    if (!buffer) {
+      return;
+    }
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.playbackRate.value = rate;
+    const gain = ctx.createGain();
+    gain.gain.value = volume;
+    source.connect(gain);
+    gain.connect(sfxGain);
+    source.start();
+    source.onended = () => {
+      source.disconnect();
+      gain.disconnect();
+    };
+  });
+}
+
 export interface PlayViolinNoteOptions {
   volume?: number;
 }
@@ -418,6 +467,32 @@ async function resolveKeyUncached(key: AudioKey): Promise<Resolution> {
 
   debugLog(`using synth fallback for "${key}"`);
   return { type: 'synth' };
+}
+
+function resolveAudioFile(url: string): Promise<AudioBuffer | null> {
+  const cached = state.fileBufferCache.get(url);
+  if (cached) {
+    return cached;
+  }
+  const promise = resolveAudioFileUncached(url);
+  state.fileBufferCache.set(url, promise);
+  return promise;
+}
+
+async function resolveAudioFileUncached(url: string): Promise<AudioBuffer | null> {
+  const ctx = state.ctx;
+  if (!ctx) {
+    return null;
+  }
+  try {
+    const response = await fetch(url);
+    if (!response?.ok) {
+      return null;
+    }
+    return await ctx.decodeAudioData(await response.arrayBuffer());
+  } catch {
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------

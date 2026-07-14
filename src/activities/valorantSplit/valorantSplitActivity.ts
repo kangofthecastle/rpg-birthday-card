@@ -3,6 +3,8 @@ import { addKeyboardActivation } from '../activityDom';
 import { createActivityCloseButton } from '../activityShell';
 import { SPLIT_CONFIG } from './splitModel';
 import type { SplitSceneCallbacks } from './SplitScene';
+import { playSfx } from '../../game/audio';
+import { showDialogue } from '../../ui/dialogueBox';
 
 const CLOSE_ART_URL = '/assets/activities/valorant-split/close-x.png';
 
@@ -79,6 +81,7 @@ export function createValorantSplitActivity(
 
       let finished = false;
       let game: SplitGameHandle | null = null;
+      let readyPromise: Promise<void> | null = null;
 
       const destroyGame = (): void => {
         game?.destroy();
@@ -99,11 +102,38 @@ export function createValorantSplitActivity(
         finish(() =>
           onComplete({
             locationId: 'friend-b',
+            activityId: 'valorant-split',
             keepsakeId: 'defused-spike-charm',
           }),
         );
       const cancelSplit = (): void => finish(onCancel);
+      const runLeadIn = async (): Promise<void> => {
+        if (finished) {
+          return;
+        }
+
+        await showDialogue([
+          {
+            speaker: '____',
+            text: 'Omen? You don’t play Omen very often.',
+            portraitId: 'portrait-recipient',
+          },
+        ]);
+
+        if (finished) {
+          return;
+        }
+
+        playSfx('sfx-omen-void');
+        await showDialogue([
+          { speaker: 'Omen', text: '~~', portraitId: 'portrait-omen' },
+        ]);
+      };
       const sceneCallbacks: SplitSceneCallbacks = {
+        onReady: () => {
+          readyPromise ??= runLeadIn();
+          return readyPromise;
+        },
         onComplete: completeSplit,
         onCancel: cancelSplit,
       };

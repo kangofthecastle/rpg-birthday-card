@@ -161,4 +161,21 @@ describe('createCollectionPanel', () => {
 
     expect(onOpenLetter).not.toHaveBeenCalled();
   });
+
+  it('does not leave the stack focused open after pointer activation', async () => {
+    const onOpenLetter = vi.fn().mockResolvedValue(undefined);
+    const { element } = createCollectionPanel(stateWith(['glowing-koi-scale']), {
+      onOpenLetter,
+    });
+    document.body.append(element);
+    const item = element.querySelector<HTMLButtonElement>('.letter-stack__item')!;
+
+    item.focus();
+    item.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
+    await vi.waitFor(() => expect(onOpenLetter).toHaveBeenCalledOnce());
+    await Promise.resolve();
+
+    expect(document.activeElement).not.toBe(item);
+    expect(element.querySelector('.letter-stack:focus-within')).toBeNull();
+  });
 });

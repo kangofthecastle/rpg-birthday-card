@@ -179,7 +179,7 @@ export function createCollectionPanel(
     item.append(face);
 
     let opening = false;
-    const activate = async (): Promise<void> => {
+    const activate = async (restoreKeyboardFocus: boolean): Promise<void> => {
       if (opening || !canInteract()) {
         return;
       }
@@ -194,12 +194,19 @@ export function createCollectionPanel(
       } finally {
         opening = false;
       }
-      item.focus({ preventScroll: true });
+      if (restoreKeyboardFocus) {
+        item.focus({ preventScroll: true });
+      } else {
+        item.blur();
+      }
     };
 
     item.addEventListener('click', (event) => {
       event.stopPropagation();
-      void activate();
+      // Browser-generated keyboard activation dispatches click with detail 0.
+      // Restore focus for that path so arrow navigation continues; a pointer
+      // click should not leave :focus-within holding the fan open after close.
+      void activate(event.detail === 0);
     });
     item.addEventListener('mouseenter', () => {
       caption.textContent = entry.label;

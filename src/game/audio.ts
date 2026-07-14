@@ -357,6 +357,18 @@ export function preloadAudioFile(url: string): void {
 /** Plays a one-off recording from an explicit public URL through the normal SFX
  * and master/mute buses. Missing or undecodable files fail silently. */
 export function playAudioFile(url: string, options: PlaySfxOptions = {}): void {
+  void playAudioFileAndWait(url, options);
+}
+
+/** Plays a one-off recording and resolves after its source has actually ended.
+ * This lets authored sequences wait for a cue's full duration without duplicating
+ * the recording length in gameplay code. Missing audio or an unavailable audio
+ * context resolves immediately, preserving the audio manager's safe-no-op
+ * contract. */
+export async function playAudioFileAndWait(
+  url: string,
+  options: PlaySfxOptions = {},
+): Promise<void> {
   const ctx = state.ctx;
   const sfxGain = state.sfxGain;
   if (!ctx || !sfxGain) {
@@ -365,10 +377,12 @@ export function playAudioFile(url: string, options: PlaySfxOptions = {}): void {
 
   const rate = options.rate ?? 1;
   const volume = clamp01(options.volume ?? 1);
-  void resolveAudioFile(url).then((buffer) => {
-    if (!buffer) {
-      return;
-    }
+  const buffer = await resolveAudioFile(url);
+  if (!buffer) {
+    return;
+  }
+
+  await new Promise<void>((resolve) => {
     const source = ctx.createBufferSource();
     source.buffer = buffer;
     source.playbackRate.value = rate;
@@ -380,6 +394,7 @@ export function playAudioFile(url: string, options: PlaySfxOptions = {}): void {
     source.onended = () => {
       source.disconnect();
       gain.disconnect();
+      resolve();
     };
   });
 }

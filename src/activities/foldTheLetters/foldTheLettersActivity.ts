@@ -59,7 +59,7 @@ interface FoldTiming {
 const REAL_TIMING: FoldTiming = {
   assembledHoldMs: 1000,
   landingMs: 1100,
-  landingHoldMs: 250,
+  landingHoldMs: 750,
   sailIntroMs: 750,
 };
 

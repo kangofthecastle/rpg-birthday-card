@@ -26,6 +26,20 @@ vi.mock('../../src/content/locations', () => ({
         iconAssetId: 'keepsake-friend-b',
       },
     },
+    {
+      id: 'recipient-house',
+      keepsake: {
+        id: 'recipient-sheet-music',
+        label: 'The Piece You Finally Played',
+        description: 'This fallback should not be shown.',
+        iconAssetId: 'keepsake-golden-hour-photo',
+      },
+      rewardSheetMusic: {
+        title: 'Do You Hear the People Sing?',
+        imageSrc: '/sheet-music.png',
+        imageAlt: '____’s handwritten sheet music',
+      },
+    },
   ],
 }));
 
@@ -116,6 +130,24 @@ describe('createCollectionPanel', () => {
     element.querySelector<HTMLButtonElement>('.letter-stack__item')?.click();
 
     expect(onOpenLetter).toHaveBeenCalledWith([{ text: 'friend-b description.' }]);
+  });
+
+  it('reopens ____’s illustrated score instead of showing the keepsake description', () => {
+    const onOpenLetter = vi.fn().mockResolvedValue(undefined);
+    const onOpenSheetMusic = vi.fn().mockResolvedValue(undefined);
+    const { element } = createCollectionPanel(stateWith(['recipient-sheet-music']), {
+      onOpenLetter,
+      onOpenSheetMusic,
+    });
+
+    element.querySelector<HTMLButtonElement>('.letter-stack__item')?.click();
+
+    expect(onOpenLetter).not.toHaveBeenCalled();
+    expect(onOpenSheetMusic).toHaveBeenCalledWith({
+      title: 'Do You Hear the People Sing?',
+      imageSrc: '/sheet-music.png',
+      imageAlt: '____’s handwritten sheet music',
+    });
   });
 
   it('never opens a letter while the interaction guard is closed', () => {

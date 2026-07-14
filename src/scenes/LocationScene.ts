@@ -3256,6 +3256,11 @@ export class LocationScene extends Phaser.Scene {
         await showLetterModal(lines);
         this.canMove = true;
       },
+      onOpenSheetMusic: async (content) => {
+        this.canMove = false;
+        await showSheetMusicModal(content);
+        this.canMove = true;
+      },
     });
     panel.element.classList.toggle('collection-panel--inert', !this._canMove);
     this.collectionPanel = panel;

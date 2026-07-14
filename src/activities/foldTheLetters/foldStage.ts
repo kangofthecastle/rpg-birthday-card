@@ -202,10 +202,15 @@ const PIECE_PAPER_FILES: Readonly<Record<string, string>> = {
 const BOAT_PIECE_COUNT = 3;
 /** Top of the water band. The hull's base rests right on this line. */
 const WATERLINE_Y = 352;
-/** Boat-tray origin at rest (hull base sits on the waterline). */
-const BOAT_REST_Y = 346;
-/** How far above rest the finished boat floats down from. */
-const BOAT_DROP_RISE = 55;
+/** Tray origin while the three pieces are being assembled. */
+const BOAT_ASSEMBLY_Y = 346;
+/** Final origin after landing. The hull image has transparent/pale edge pixels
+ * below its visible paper silhouette, so its draw-box touching WATERLINE_Y still
+ * reads as hovering. Nest the box 14 logical pixels into the painted water. */
+const BOAT_LANDING_Y = 360;
+/** Keep the elevated final frame at its existing position while lengthening the
+ * visible descent to the lower landing anchor. */
+const BOAT_DROP_RISE = 69;
 /** Default descent duration; the activity supplies its timing so reduced-motion
  * and smoke-test runs can collapse the same visual beat without special-casing
  * the renderer. */
@@ -2030,20 +2035,21 @@ export class FoldStage {
 
   // The boat coming together along the bottom — a COMPOSITE of the three pieces
   // (file-first images when present, else procedural), never one monolith.
-  /** The boat-tray's animated origin Y: incomplete pieces rest at the waterline;
+  /** The boat-tray's animated origin Y: incomplete pieces sit at their assembly
+   * anchor;
    * once complete, the boat waits above it until playBoatLanding() begins, then
    * eases down with a small decaying bob. */
   private boatOriginY(): number {
     if (!this.boatDropPrepared) {
-      return BOAT_REST_Y;
+      return BOAT_ASSEMBLY_Y;
     }
     if (this.boatDropStart === undefined) {
-      return BOAT_REST_Y - BOAT_DROP_RISE;
+      return BOAT_LANDING_Y - BOAT_DROP_RISE;
     }
     const t = clamp01((performance.now() - this.boatDropStart) / this.boatDropDurationMs);
     const ease = 1 - Math.pow(1 - t, 3); // ease-out cubic descent
     const bob = Math.sin(t * Math.PI * 3) * (1 - t) * 5; // small decaying settle
-    return BOAT_REST_Y - BOAT_DROP_RISE * (1 - ease) + bob;
+    return BOAT_LANDING_Y - BOAT_DROP_RISE * (1 - ease) + bob;
   }
 
   private drawBoatTray(): void {

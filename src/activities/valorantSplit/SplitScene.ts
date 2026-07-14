@@ -32,6 +32,7 @@ import {
 } from './splitArt';
 import {
   playAudioFile,
+  playAudioFileAndWait,
   playSfx as playAudioSfx,
   preloadAudioFile,
   type SfxKey,
@@ -164,6 +165,14 @@ const VALORANT_AUDIO = {
   plant: valorantAudioUrl('Valorant spike planting sound.mp3'),
   defuseTap: valorantAudioUrl('spike-defusing.mp3'),
   kills: [1, 2, 3, 4, 5].map((number) => valorantAudioUrl(`kill ${number}.mp3`)),
+} as const;
+
+// These two source recordings are mastered substantially louder than the gun,
+// reload and synthesized RETAKE cues. Pulling them down by roughly 9 dB keeps
+// their authored character without making the plant/defuse dominate the mix.
+const VALORANT_AUDIO_VOLUME = {
+  plant: 0.28,
+  defuseTap: 0.32,
 } as const;
 
 interface Tracer {
@@ -413,7 +422,15 @@ export class SplitScene extends Phaser.Scene {
       return;
     }
 
-    playAudioFile(VALORANT_AUDIO.plant, { volume: 0.82 });
+    // Keep gameplay paused—and therefore the opening enemy sprites uncreated—
+    // until the complete plant cue has established that the spike is live.
+    await playAudioFileAndWait(VALORANT_AUDIO.plant, {
+      volume: VALORANT_AUDIO_VOLUME.plant,
+    });
+
+    if (!this.scene.isActive()) {
+      return;
+    }
 
     this.heldCodes.clear();
     this.pointerDown = false;
@@ -550,7 +567,9 @@ export class SplitScene extends Phaser.Scene {
       const wasDefusing = this.state.defuse.defusing;
       this.state = tickSplit(this.state, input, modelDelta);
       if (!wasDefusing && this.state.defuse.defusing) {
-        playAudioFile(VALORANT_AUDIO.defuseTap, { volume: 0.9 });
+        playAudioFile(VALORANT_AUDIO.defuseTap, {
+          volume: VALORANT_AUDIO_VOLUME.defuseTap,
+        });
       }
       this.handleEvents(this.state.events, now);
 

@@ -1,14 +1,14 @@
 import { LOCATIONS } from '../content/locations';
-import type { DialogueLine } from '../content/types';
+import type { DialogueLine, SheetMusicReward } from '../content/types';
 import type { RunState } from '../game/runState';
-import { showLetterModal } from './letterModal';
+import { showLetterModal, showSheetMusicModal } from './letterModal';
 
 /**
  * The in-world "Letters" HUD. Every keepsake a friend gives ____ is a letter;
  * once collected it lives here as a little envelope in a soft stack. Hovering
  * (or focusing, for keyboard) fans the stack out like a hand of cards so she can
- * pick one to read again — each opens through the shared {@link showLetterModal}
- * reader, the same warm aged-paper overlay the letter was first read in.
+ * pick one to read again. Letters reopen through {@link showLetterModal}; ____'s
+ * music keepsake reopens the illustrated score instead of inventing letter copy.
  *
  * The panel is deliberately NOT a `.activity-panel` (that class force-centres and
  * caps width at 560px — see styles.css); it keeps its own top-right corner slot.
@@ -21,6 +21,8 @@ import { showLetterModal } from './letterModal';
 export interface CollectionPanelOptions {
   /** Opens a letter. Injectable for tests; defaults to the shared modal. */
   readonly onOpenLetter?: (lines: readonly DialogueLine[]) => Promise<void> | void;
+  /** Reopens an illustrated score. Injectable so the world can freeze while it is open. */
+  readonly onOpenSheetMusic?: (content: SheetMusicReward) => Promise<void> | void;
   /**
    * Guard checked before a letter opens. Returns false while the player is
    * frozen (dialogue/activity/reward) so the HUD never steals a click or a
@@ -33,28 +35,50 @@ export interface CollectionPanelHandle {
   readonly element: HTMLElement;
 }
 
-interface LetterEntry {
+interface EntryBase {
   readonly keepsakeId: string;
   readonly label: string;
   readonly iconAssetId: string;
-  readonly lines: readonly DialogueLine[];
 }
+
+type LetterEntry =
+  | (EntryBase & {
+      readonly kind: 'letter';
+      readonly lines: readonly DialogueLine[];
+    })
+  | (EntryBase & {
+      readonly kind: 'sheet-music';
+      readonly content: SheetMusicReward;
+    });
 
 /** Every keepsake-bearing location, in play order, that the run has collected. */
 function collectedLetters(state: RunState): LetterEntry[] {
-  return LOCATIONS.flatMap((location) => {
+  return LOCATIONS.flatMap<LetterEntry>((location): LetterEntry[] => {
     const keepsake = location.keepsake;
     if (!keepsake || !state.collectedKeepsakeIds.includes(keepsake.id)) {
       return [];
     }
-    // The reward message IS the letter as first read; fall back to the keepsake's
-    // own description so a letter is never empty.
+    if (location.rewardSheetMusic) {
+      return [
+        {
+          kind: 'sheet-music' as const,
+          keepsakeId: keepsake.id,
+          label: keepsake.label,
+          iconAssetId: keepsake.iconAssetId,
+          content: location.rewardSheetMusic,
+        },
+      ];
+    }
+
+    // The reward message IS the letter as first read; non-score keepsakes retain
+    // the description fallback so older content can never open an empty reader.
     const lines: readonly DialogueLine[] =
       location.rewardMessage && location.rewardMessage.length > 0
         ? location.rewardMessage
         : [{ text: keepsake.description }];
     return [
       {
+        kind: 'letter' as const,
         keepsakeId: keepsake.id,
         label: keepsake.label,
         iconAssetId: keepsake.iconAssetId,
@@ -75,6 +99,8 @@ export function createCollectionPanel(
 ): CollectionPanelHandle {
   const onOpenLetter =
     options.onOpenLetter ?? ((lines) => showLetterModal(lines));
+  const onOpenSheetMusic =
+    options.onOpenSheetMusic ?? ((content) => showSheetMusicModal(content));
   const canInteract = options.canInteract ?? (() => true);
 
   const letters = collectedLetters(state);
@@ -160,7 +186,11 @@ export function createCollectionPanel(
       opening = true;
       caption.textContent = entry.label;
       try {
-        await onOpenLetter(entry.lines);
+        if (entry.kind === 'sheet-music') {
+          await onOpenSheetMusic(entry.content);
+        } else {
+          await onOpenLetter(entry.lines);
+        }
       } finally {
         opening = false;
       }

@@ -551,6 +551,34 @@ describe('playSfx', () => {
   });
 });
 
+describe('playAudioFileAndWait', () => {
+  it('resolves only after the decoded recording has finished playing', async () => {
+    stubAudioContext();
+    stubFetchSucceedsOnFirstTry();
+    const audio = await import('../../src/game/audio');
+
+    audio.initAudio();
+    const ctx = createdContexts[0];
+    let finished = false;
+    const completion = audio
+      .playAudioFileAndWait('/audio/cue.mp3', { volume: 0.28 })
+      .then(() => {
+        finished = true;
+      });
+    await flushAsync();
+
+    expect(ctx.bufferSources).toHaveLength(1);
+    const [source] = ctx.bufferSources;
+    expect(source.start).toHaveBeenCalledOnce();
+    expect(finished).toBe(false);
+
+    source.onended?.();
+    await completion;
+    expect(finished).toBe(true);
+    expect(source.disconnect).toHaveBeenCalledOnce();
+  });
+});
+
 describe('sampled violin notes', () => {
   it('starts preloading every violin anchor after audio initialization', async () => {
     stubAudioContext();

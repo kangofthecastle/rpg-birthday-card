@@ -2614,19 +2614,27 @@ export class LocationScene extends Phaser.Scene {
       // longer a separate shaft connecting the photo wall to a window.
       const gleam = this.add.graphics().setDepth(photo.image.depth - 0.01);
       gleam.setBlendMode(Phaser.BlendModes.ADD);
-      const drawGleamBand = (padX: number, padY: number, color: number, alpha: number) => {
-        gleam.fillStyle(color, alpha);
-        gleam.fillPoints([
-          new Phaser.Geom.Point(photoCorners.topLeft.x - padX, photoCorners.topLeft.y - padY),
-          new Phaser.Geom.Point(photoCorners.topRight.x + padX, photoCorners.topRight.y - padY),
-          new Phaser.Geom.Point(photoCorners.bottomRight.x + padX, photoCorners.bottomRight.y + padY),
-          new Phaser.Geom.Point(photoCorners.bottomLeft.x - padX, photoCorners.bottomLeft.y + padY),
-        ], true);
-      };
-      drawGleamBand(34, 22, 0xffd995, 0.035);
-      drawGleamBand(22, 14, 0xffe4ac, 0.055);
-      drawGleamBand(11, 7, 0xffefc8, 0.08);
-      gleam.lineStyle(1.2, 0xffe9b7, 0.18);
+
+      // Build the aura from overlapping ellipses so it fades smoothly into the
+      // wall rather than showing three hard polygon bands. The pale centre is
+      // deliberately strong enough to remain visible against the light plaster.
+      const auraWidth = Math.max(150, photoBounds.width * 3.15);
+      const auraHeight = Math.max(132, photoBounds.height * 1.65);
+      for (let ring = 10; ring >= 1; ring -= 1) {
+        const scale = ring / 10;
+        const alpha = 0.018 + (1 - scale) * 0.008;
+        gleam.fillStyle(0xffe1a0, alpha);
+        gleam.fillEllipse(
+          photoBounds.centerX,
+          photoBounds.centerY,
+          auraWidth * scale,
+          auraHeight * scale,
+        );
+      }
+
+      // A brighter frame-edge shimmer makes the effect read as an intentional
+      // gleam instead of ambient room lighting.
+      gleam.lineStyle(2, 0xffffdc, 0.42);
       gleam.strokePoints([
         new Phaser.Geom.Point(photoCorners.topLeft.x, photoCorners.topLeft.y),
         new Phaser.Geom.Point(photoCorners.topRight.x, photoCorners.topRight.y),
@@ -2635,8 +2643,30 @@ export class LocationScene extends Phaser.Scene {
       ], true);
       this.tweens.add({
         targets: gleam,
-        alpha: { from: 0.68, to: 1 },
-        duration: 2400,
+        alpha: { from: 0.78, to: 1 },
+        duration: 1800,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+      });
+
+      const sparkle = this.add
+        .text(photoCorners.topRight.x + 5, photoCorners.topRight.y - 5, '✦', {
+          color: '#fff3bd',
+          fontFamily: 'Georgia, serif',
+          fontSize: '15px',
+          stroke: '#d89b42',
+          strokeThickness: 1,
+        })
+        .setOrigin(0.5)
+        .setDepth(photo.image.depth + 0.01)
+        .setBlendMode(Phaser.BlendModes.ADD);
+      this.tweens.add({
+        targets: sparkle,
+        alpha: { from: 0.25, to: 1 },
+        scale: { from: 0.72, to: 1.18 },
+        duration: 1250,
+        hold: 500,
         yoyo: true,
         repeat: -1,
         ease: 'Sine.easeInOut',

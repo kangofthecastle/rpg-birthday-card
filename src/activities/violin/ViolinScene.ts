@@ -1079,16 +1079,31 @@ export class ViolinScene extends Phaser.Scene {
       g.lineBetween(STAFF_LEFT_LOCAL, y, STAFF_RIGHT_LOCAL, y);
     }
 
-    // Bar lines framing the phrase as one measure: a light opening line at the
-    // very left of the ruling, and a standard thin+thick "end of piece" bar at
-    // the right. Each spans exactly the top staff-line centre to the bottom
-    // one, so no nub overshoots the five lines.
+    // A light opening bar frames the left edge. The right barline is drawn on
+    // the live layer because it is normally a single bar and becomes the
+    // thin+thick final bar only on the full replay's actual last page.
     const barTop = this.staffLineLocalY(0);
     const barBottom = this.staffLineLocalY(4);
     g.lineStyle(1.6, INK, 0.55);
     g.lineBetween(STAFF_LEFT_LOCAL, barTop, STAFF_LEFT_LOCAL, barBottom);
-    g.lineBetween(STAFF_RIGHT_LOCAL - 6, barTop, STAFF_RIGHT_LOCAL - 6, barBottom);
-    g.lineStyle(3, INK, 0.7);
+  }
+
+  private drawRightBarline(g: Phaser.GameObjects.Graphics): void {
+    const barTop = this.staffLineLocalY(0);
+    const barBottom = this.staffLineLocalY(4);
+    const isActualFinalPage =
+      (this.modelState.phase === 'finale' || this.modelState.phase === 'complete') &&
+      this.modelState.phraseIndex === VIOLIN_FINALE_PHRASES.length - 1;
+
+    if (isActualFinalPage) {
+      g.lineStyle(1.6, INK, 0.55);
+      g.lineBetween(STAFF_RIGHT_LOCAL - 6, barTop, STAFF_RIGHT_LOCAL - 6, barBottom);
+      g.lineStyle(3, INK, 0.7);
+      g.lineBetween(STAFF_RIGHT_LOCAL - 1.5, barTop, STAFF_RIGHT_LOCAL - 1.5, barBottom);
+      return;
+    }
+
+    g.lineStyle(1.6, INK, 0.55);
     g.lineBetween(STAFF_RIGHT_LOCAL - 1.5, barTop, STAFF_RIGHT_LOCAL - 1.5, barBottom);
   }
 
@@ -1160,6 +1175,8 @@ export class ViolinScene extends Phaser.Scene {
     const marks = this.currentNoteMarks(phrase);
     const lit = litNoteCount(this.modelState);
     const echoing = this.modelState.phase === 'echo';
+
+    this.drawRightBarline(g);
 
     // Track newly lit notes → one-shot ember bloom that lingers and decays.
     if (lit < this.litShown) {

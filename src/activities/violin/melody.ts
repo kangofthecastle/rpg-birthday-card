@@ -2,7 +2,7 @@
 //
 // Measures 1–9 of the user-supplied “Do You Hear the People Sing?” score are
 // transcribed here as one canonical passage. The interactive game uses measures
-// 1–5 in 4–6-note pages; the finale replay expands into the complete measures
+// 1–5 in 4–5-note pages; the finale replay expands into the complete measures
 // 1–9 passage. This file remains the single pitch/rhythm source for both, plus
 // the invitation and awakening cues and the ending's sheet-roll plucks.
 
@@ -233,12 +233,12 @@ const FULL_NOTE_STREAM = VIOLIN_FINALE_PHRASES.flatMap((phrase) => phrase.notes)
  * duplicate the finale's notes. Measure 5 ends at exclusive index 33. */
 export const VIOLIN_PHRASES: readonly ViolinPhrase[] = [
   { id: 'game-page-1-opening', notes: FULL_NOTE_STREAM.slice(0, 4) },
-  { id: 'game-page-2-rise-and-turn', notes: FULL_NOTE_STREAM.slice(4, 10) },
-  { id: 'game-page-3-fall', notes: FULL_NOTE_STREAM.slice(10, 14) },
-  { id: 'game-page-4-turn', notes: FULL_NOTE_STREAM.slice(14, 18) },
-  { id: 'game-page-5-climb', notes: FULL_NOTE_STREAM.slice(18, 22) },
-  { id: 'game-page-6-chromatic-answer', notes: FULL_NOTE_STREAM.slice(22, 27) },
-  { id: 'game-page-7-lift', notes: FULL_NOTE_STREAM.slice(27, 33) },
+  { id: 'game-page-2-rise', notes: FULL_NOTE_STREAM.slice(4, 9) },
+  { id: 'game-page-3-fall-and-answer', notes: FULL_NOTE_STREAM.slice(9, 14) },
+  { id: 'game-page-4-low-turn', notes: FULL_NOTE_STREAM.slice(14, 19) },
+  { id: 'game-page-5-chromatic-climb', notes: FULL_NOTE_STREAM.slice(19, 24) },
+  { id: 'game-page-6-answer', notes: FULL_NOTE_STREAM.slice(24, 29) },
+  { id: 'game-page-7-final-lift', notes: FULL_NOTE_STREAM.slice(29, 33) },
 ] as const;
 
 /** The score's first four sounded notes, shared by all autonomous cues. */

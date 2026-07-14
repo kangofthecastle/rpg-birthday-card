@@ -84,28 +84,28 @@ describe('melody data', () => {
     expect(VIOLIN_FINALE_CAPTION).toBe('Follow the light');
   });
 
-  it('uses measures 1–5 for the interactive game in 4–6-note pages', () => {
+  it('uses measures 1–5 for the interactive game in 4–5-note musical pages', () => {
     expect(VIOLIN_PHRASES.map((phrase) => phrase.notes.map((note) => note.pitchId))).toEqual([
       ['a4', 'g4', 'f4', 'g4'],
-      ['a4', 'bb4', 'c5', 'a4', 'g4', 'f4'],
-      ['e4', 'd4', 'e4', 'f4'],
-      ['c4', 'd4', 'c4', 'bb3'],
-      ['a3', 'c4', 'f4', 'a4'],
-      ['g4', 'fs4', 'g4', 'd4', 'f4'],
-      ['e4', 'e4', 'f4', 'g4', 'a4', 'g4'],
+      ['a4', 'bb4', 'c5', 'a4', 'g4'],
+      ['f4', 'e4', 'd4', 'e4', 'f4'],
+      ['c4', 'd4', 'c4', 'bb3', 'a3'],
+      ['c4', 'f4', 'a4', 'g4', 'fs4'],
+      ['g4', 'd4', 'f4', 'e4', 'e4'],
+      ['f4', 'g4', 'a4', 'g4'],
     ]);
 
     const { dottedEighth, sixteenth, quarter, tripletEighth } = VIOLIN_RHYTHM_MS;
     expect(VIOLIN_PHRASES.map((phrase) => phrase.notes.map((note) => note.durationMs))).toEqual([
       [dottedEighth, sixteenth, dottedEighth, sixteenth],
-      [dottedEighth, sixteenth, quarter, tripletEighth, tripletEighth, tripletEighth],
-      [dottedEighth, sixteenth, dottedEighth, sixteenth],
-      [quarter, tripletEighth, tripletEighth, tripletEighth],
-      [dottedEighth, sixteenth, dottedEighth, sixteenth],
+      [dottedEighth, sixteenth, quarter, tripletEighth, tripletEighth],
+      [tripletEighth, dottedEighth, sixteenth, dottedEighth, sixteenth],
+      [quarter, tripletEighth, tripletEighth, tripletEighth, dottedEighth],
+      [sixteenth, dottedEighth, sixteenth, dottedEighth, sixteenth],
       [dottedEighth, sixteenth, dottedEighth, sixteenth, dottedEighth],
-      [sixteenth, dottedEighth, sixteenth, quarter, dottedEighth, sixteenth],
+      [sixteenth, quarter, dottedEighth, sixteenth],
     ]);
-    expect(VIOLIN_PHRASES.every((phrase) => phrase.notes.length <= 6)).toBe(true);
+    expect(VIOLIN_PHRASES.every((phrase) => phrase.notes.length <= 5)).toBe(true);
     expect(VIOLIN_PHRASES.every((phrase) => phrase.notes.length >= 4)).toBe(true);
   });
 

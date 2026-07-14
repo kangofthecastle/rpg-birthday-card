@@ -165,16 +165,25 @@ export function showLettersScreen(
   birthday.textContent = HAPPY_BIRTHDAY_LINE;
   birthday.hidden = true;
 
-  // A quiet way back once every letter is read — the game's soft landing.
+  // A quiet way back. During the terminal ending it appears once every letter
+  // is read; when the same screen is reopened from ____'s PC it remains an
+  // immediate, reliable return to her room.
   const goHome = document.createElement('button');
   goHome.type = 'button';
   goHome.className = 'letters-screen__go-home';
   goHome.textContent = 'go home';
-  goHome.hidden = true;
+  goHome.hidden = mode !== 'archive' || !options.onGoHome;
   if (options.onGoHome) {
     goHome.addEventListener('click', () => {
-      overlay.remove();
-      resolveClosed();
+      if (mode === 'archive') {
+        if (archiveClosed || opening) {
+          return;
+        }
+        closeArchive();
+      } else {
+        overlay.remove();
+        resolveClosed();
+      }
       options.onGoHome?.();
     });
   }

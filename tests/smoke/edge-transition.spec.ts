@@ -32,15 +32,12 @@ test('walks off the west edge of main-outside into ____’s block', async ({ pag
   await expect(page.locator('body')).toHaveAttribute('data-location-id', 'friendtwo-yard');
 });
 
-test('three collected papers unlock the south path into the clearing', async ({ page }) => {
-  await page.goto(
-    '/?testMode=1&locationId=main-outside&spawnId=start&seedKeepsakes=all',
-  );
+test('the south path into the clearing is open before any papers are collected', async ({ page }) => {
+  await page.goto('/?testMode=1&locationId=main-outside&spawnId=start');
 
   const canvas = page.locator('canvas');
   await expect(canvas).toBeVisible();
   await expect(page.locator('body')).toHaveAttribute('data-location-id', 'main-outside');
-  await page.getByRole('button', { name: 'Continue' }).click();
   await canvas.click();
 
   // main-outside is a flat outdoor map, so Down is direct world-south. The

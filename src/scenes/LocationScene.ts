@@ -125,6 +125,7 @@ import {
 } from '../game/interactionState';
 import {
   getStoryTravelBlock,
+  isClearingAwakened,
   isFriendOneFollowing,
   RETAKE_ACTIVITY_ID,
   shouldShowHomeNpc,
@@ -265,13 +266,8 @@ interface LocationSceneData {
   readonly autoStartActivityId?: string;
 }
 
-// Shown when the player reaches a final-unlock-gated way forward too early.
-const FINAL_LOCKED_LINE =
-  'The clearing feels close, but some keepsakes are still missing.';
-
-// Shown at the gated south edge once every letter is held but the boat hasn't
-// been folded yet — the ritual, not the edge, is the way across.
-const FINAL_WAITING_LINE = 'not like this. the water is waiting for something.';
+// The water remains impassable until ____ completes the folding ritual.
+const FINAL_LOCKED_LINE = "There's no way across the water. Not like this.";
 
 // Player yardstick (mirrors roomRenderer): ____ reads ~0.88 of her frame.
 const PLAYER_VISUAL_HEIGHT_PX = RECIPIENT_SPRITE.frameHeight * RECIPIENT_SPRITE.scale * 0.88;
@@ -985,13 +981,13 @@ export class LocationScene extends Phaser.Scene {
       return;
     }
 
-    // The gated south edge opens only once the boat is folded (the ritual is the
-    // real way across). Before that: if the letters aren't all held yet, the old
-    // "still missing" line; if they are, the water is waiting for the ritual.
+    // The gated south edge opens only once the boat is folded; simply reaching
+    // the clearing never lets ____ walk across the water.
     if (edgeExit.requiresFinalUnlock && !isBoatFolded(this.state)) {
       this.nudgeAwayFromEdge(edgeExit.edge);
-      const line = isFinalSpotUnlocked(this.state) ? FINAL_WAITING_LINE : FINAL_LOCKED_LINE;
-      await this.pauseForDialogue([{ text: line }]);
+      await this.pauseForDialogue([
+        { speaker: '____', text: FINAL_LOCKED_LINE, portraitId: 'portrait-recipient' },
+      ]);
       this.edgeCooldownUntil = this.time.now + EDGE_ARRIVAL_COOLDOWN_MS;
       this.edgeTriggerBusy = false;
       return;
@@ -1588,7 +1584,7 @@ export class LocationScene extends Phaser.Scene {
   // once the world awakens (all letters held), a warm-cool light blooms from
   // beneath and beyond the water — the ending, close now.
   private drawClearingShore(width: number, height: number, tile: number): void {
-    const awakened = isFinalSpotUnlocked(this.state);
+    const awakened = isClearingAwakened(this.state);
     const bandHeight = tile * 2;
     const top = height - bandHeight;
 
@@ -1698,6 +1694,9 @@ export class LocationScene extends Phaser.Scene {
   // interaction. Depth sits above the water/glow but well below any standing
   // figure, so ____ draws in front when he kneels at the shore.
   private spawnClearingCranes(width: number, height: number, tile: number): void {
+    if (!isClearingAwakened(this.state)) {
+      return;
+    }
     const rng = mulberry32(fnv1a(`${this.location.id}:cranes`));
     this.craneWrapRng = rng;
     const bandTop = height - tile * 2;
@@ -1725,7 +1724,7 @@ export class LocationScene extends Phaser.Scene {
         .setDepth(-15);
       // Cranes warm with the shore once the world has awakened (see
       // drawClearingShore's tint) so they read correctly under the golden light.
-      if (isFinalSpotUnlocked(this.state)) {
+      if (isClearingAwakened(this.state)) {
         image.setTint(0xffe9c8);
       }
       const crane: DriftingCrane = {
@@ -1822,7 +1821,7 @@ export class LocationScene extends Phaser.Scene {
   /** Post-violin guidance: koi drift west while motes enter from the left water,
    * curl at the centre, and stream north into the clearing. */
   private spawnClearingCurrent(width: number, height: number, tile: number): void {
-    if (!isFinalSpotUnlocked(this.state)) {
+    if (!isClearingAwakened(this.state)) {
       delete document.body.dataset.clearingCurrent;
       return;
     }
@@ -3491,7 +3490,7 @@ export class LocationScene extends Phaser.Scene {
       this.location.id === 'clearing' &&
       !kind.flat &&
       !kind.overhead &&
-      isFinalSpotUnlocked(this.state)
+      isClearingAwakened(this.state)
     ) {
       image.setTint(0xffe9c8);
     }
@@ -4742,7 +4741,11 @@ export class LocationScene extends Phaser.Scene {
 
     if (interaction.id === 'recipient-pc' && this.state.endingCompleted) {
       this.canMove = false;
-      const archive = showLettersScreen({ mode: 'archive', letters: LETTERS });
+      const archive = showLettersScreen({
+        mode: 'archive',
+        letters: LETTERS,
+        onGoHome: () => this.goHome(),
+      });
       await archive.closed;
       this.canMove = true;
       return;

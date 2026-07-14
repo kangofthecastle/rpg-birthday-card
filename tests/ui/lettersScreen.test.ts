@@ -88,22 +88,23 @@ describe('showLettersScreen', () => {
     expect(buttons[1]?.classList.contains('letters-screen__letter--read')).toBe(false);
   });
 
-  it('archive mode never replays the terminal birthday or go-home reveal', async () => {
-    showLettersScreen({
+  it('archive mode never replays the terminal birthday but keeps a working go-home exit', async () => {
+    const onGoHome = vi.fn();
+    const handle = showLettersScreen({
       mode: 'archive',
       letters: LETTERS,
       openLetter: () => Promise.resolve(),
-      onGoHome: vi.fn(),
+      onGoHome,
     });
 
-    const buttons = document.querySelectorAll<HTMLButtonElement>('.letters-screen__letter');
-    buttons[0]?.click();
-    await flush();
-    buttons[1]?.click();
-    await flush();
-
     expect(document.querySelector('.letters-screen__birthday')?.hasAttribute('hidden')).toBe(true);
-    expect(document.querySelector('.letters-screen__go-home')?.hasAttribute('hidden')).toBe(true);
+    const goHome = document.querySelector<HTMLButtonElement>('.letters-screen__go-home');
+    expect(goHome?.hasAttribute('hidden')).toBe(false);
+
+    goHome?.click();
+    await handle.closed;
+    expect(onGoHome).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('.letters-screen')).toBeNull();
   });
 
   it('renders one letter icon per entry with from-name labels', () => {

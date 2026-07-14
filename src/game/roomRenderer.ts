@@ -283,6 +283,10 @@ function addWindowShaftSet(
   const wallBase = projectToIso(windowProp.mapX, windowProp.mapY, origin);
   // Light enters up on the wall (the window opening), not at the baseboard.
   const source: IsoPoint = { x: wallBase.x, y: wallBase.y - dressing.wallHeight * 0.62 };
+  // The window texture is sheared to sit on the isometric wall. Its light mouth
+  // must follow that same diagonal; a horizontal source edge makes every shaft
+  // appear to radiate from an imaginary line cutting across the glass.
+  const sourceSlope = windowProp.wallShear ?? 0;
   const rng = mulberry32(
     fnv1a(`${dressing.tilesTextureKey}:window-shafts:${index}:${windowProp.mapX},${windowProp.mapY}`),
   );
@@ -309,11 +313,11 @@ function addWindowShaftSet(
 
     const shaft = scene.add.graphics().setBlendMode(Phaser.BlendModes.ADD);
     shaft.fillStyle(0xffd27a, 0.05);
-    shaft.fillPoints(toPhaserPoints(beamTrapezoid(source, land, beam.topHW * 1.5, beam.botHW * 1.4)), true);
+    shaft.fillPoints(toPhaserPoints(beamTrapezoid(source, land, beam.topHW * 1.5, beam.botHW * 1.4, sourceSlope)), true);
     shaft.fillStyle(0xffd98a, 0.08);
-    shaft.fillPoints(toPhaserPoints(beamTrapezoid(source, land, beam.topHW, beam.botHW)), true);
+    shaft.fillPoints(toPhaserPoints(beamTrapezoid(source, land, beam.topHW, beam.botHW, sourceSlope)), true);
     shaft.fillStyle(0xffecbe, 0.1);
-    shaft.fillPoints(toPhaserPoints(beamTrapezoid(source, land, beam.topHW * 0.5, beam.botHW * 0.55)), true);
+    shaft.fillPoints(toPhaserPoints(beamTrapezoid(source, land, beam.topHW * 0.5, beam.botHW * 0.55, sourceSlope)), true);
     container.add(shaft);
     // Slow "breathing" so the light feels alive, not a static decal.
     scene.tweens.add({
@@ -380,17 +384,25 @@ function addWindowShaftSet(
   }
 }
 
-// A screen-space trapezoid from a narrow source segment (top) to a wider
-// landing segment (bottom), with vertical sides — the read of a light shaft.
-function beamTrapezoid(
+// A screen-space trapezoid from a narrow source segment to a wider landing
+// segment. Window shafts pass the wall shear so their mouth follows the same
+// diagonal as the glass; doorway spill keeps the default horizontal mouth.
+export function beamTrapezoid(
   source: IsoPoint,
   land: IsoPoint,
   topHalfWidth: number,
   botHalfWidth: number,
+  sourceSlope = 0,
 ): IsoPoint[] {
   return [
-    { x: source.x - topHalfWidth, y: source.y },
-    { x: source.x + topHalfWidth, y: source.y },
+    {
+      x: source.x - topHalfWidth,
+      y: source.y - sourceSlope * topHalfWidth,
+    },
+    {
+      x: source.x + topHalfWidth,
+      y: source.y + sourceSlope * topHalfWidth,
+    },
     { x: land.x + botHalfWidth, y: land.y },
     { x: land.x - botHalfWidth, y: land.y },
   ];

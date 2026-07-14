@@ -1,8 +1,8 @@
 import {
   hasActivityCompleted,
   hasSeenBeat,
+  isCardMode,
   isBoatFolded,
-  isFinalSpotUnlocked,
   type RunState,
 } from './runState';
 
@@ -55,14 +55,12 @@ export function getStoryTravelBlock(
     return 'The PC is still waiting for one more try.';
   }
 
-  if (
-    destinationLocationId === 'clearing' &&
-    !isFinalSpotUnlocked(state)
-  ) {
-    return 'The way to the clearing is waiting for all three papers.';
-  }
-
   return undefined;
+}
+
+/** The clearing's luminous story state begins when ____ finishes the violin piece. */
+export function isClearingAwakened(state: RunState): boolean {
+  return isCardMode(state) || hasActivityCompleted(state, VIOLIN_ACTIVITY_ID);
 }
 
 export function isFriendOneFollowing(state: RunState): boolean {

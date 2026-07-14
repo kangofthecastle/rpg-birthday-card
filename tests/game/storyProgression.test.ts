@@ -6,6 +6,7 @@ import {
   VIOLIN_CALLED_BEAT_ID,
   getCanonicalStoryMilestone,
   getStoryTravelBlock,
+  isClearingAwakened,
   isFriendOneFollowing,
   shouldShowHomeNpc,
 } from '../../src/game/storyProgression';
@@ -56,14 +57,16 @@ describe('canonical story progression', () => {
 
     state = complete(state, FISHING_ACTIVITY_ID, 'friend-a');
     expect(getStoryTravelBlock('friendtwo-yard', state)).toBeUndefined();
-    expect(getStoryTravelBlock('clearing', state)).toContain('papers');
+    expect(getStoryTravelBlock('clearing', state)).toBeUndefined();
   });
 
   it('exports the one-shot autonomous violin acknowledgement beat', () => {
     expect(VIOLIN_CALLED_BEAT_ID).toBe('violin-called');
   });
 
-  it('unlocks clearing from all three papers even without a violin activity flag', () => {
+  it('keeps the clearing reachable before any papers are collected', () => {
+    expect(getStoryTravelBlock('clearing', createInitialRunState('main-outside'))).toBeUndefined();
+
     let state = createInitialRunState('main-outside');
     for (const keepsakeId of REQUIRED_FINAL_KEEPSAKE_IDS) {
       state = completeLocation(state, { locationId: `seed-${keepsakeId}`, keepsakeId });
@@ -72,8 +75,20 @@ describe('canonical story progression', () => {
     expect(state.completedActivityIds).toEqual([]);
     expect(getStoryTravelBlock('clearing', state)).toBeUndefined();
 
-    const missingOne = createInitialRunState('main-outside');
-    expect(getStoryTravelBlock('clearing', missingOne)).toContain('papers');
+    expect(getStoryTravelBlock('clearing', state)).toBeUndefined();
+  });
+
+  it('awakens clearing effects only after the violin game completes', () => {
+    let state = createInitialRunState('clearing');
+    expect(isClearingAwakened(state)).toBe(false);
+
+    for (const keepsakeId of REQUIRED_FINAL_KEEPSAKE_IDS) {
+      state = completeLocation(state, { locationId: `seed-${keepsakeId}`, keepsakeId });
+    }
+    expect(isClearingAwakened(state)).toBe(false);
+
+    state = complete(state, 'recipient-violin-piece', 'recipient-house');
+    expect(isClearingAwakened(state)).toBe(true);
   });
 
   it('treats seeded later milestones as satisfying their earlier route prerequisites', () => {

@@ -182,18 +182,27 @@ describe('dev maps', () => {
     );
   });
 
-  it('carves the border wall along every open edge and keeps closed sides solid', () => {
+  it('carves exactly five centred border tiles for each open edge', () => {
     // main-outside opens west, east and south (not north).
     const map = readMap('main-outside.tmj');
     const collision = collisionLayer(map);
     const at = (x: number, y: number) => collision[y * map.width + x];
     const midY = Math.floor(map.height / 2);
     const midX = Math.floor(map.width / 2);
+    const inFiveTileCorridor = (index: number, count: number): boolean =>
+      index >= Math.floor(count / 2) - 2 && index <= Math.floor(count / 2) + 2;
 
-    expect(at(0, midY)).toBe(0); // west open
-    expect(at(map.width - 1, midY)).toBe(0); // east open
-    expect(at(midX, map.height - 1)).toBe(0); // south open
-    expect(at(midX, 0)).not.toBe(0); // north closed
+    for (let y = 0; y < map.height; y += 1) {
+      expect(at(0, y) === 0).toBe(inFiveTileCorridor(y, map.height));
+      expect(at(map.width - 1, y) === 0).toBe(inFiveTileCorridor(y, map.height));
+    }
+    for (let x = 0; x < map.width; x += 1) {
+      expect(at(x, map.height - 1) === 0).toBe(inFiveTileCorridor(x, map.width));
+      expect(at(x, 0)).not.toBe(0); // north closed
+    }
+    expect(at(0, midY)).toBe(0);
+    expect(at(map.width - 1, midY)).toBe(0);
+    expect(at(midX, map.height - 1)).toBe(0);
     expect(at(0, 0)).not.toBe(0); // corner stays solid
   });
 
@@ -205,6 +214,18 @@ describe('dev maps', () => {
 
     expect(at(midX, 0)).toBe(0); // north open (to main-outside)
     expect(at(midX, map.height - 1)).toBe(0); // south open (gated, to final-spot)
+    expect(at(midX - 3, 0)).not.toBe(0);
+    expect(at(midX + 3, map.height - 1)).not.toBe(0);
+  });
+
+  it('fully closes the final spot so the ending cannot return to the clearing', () => {
+    const map = readMap('final-spot.tmj');
+    const collision = collisionLayer(map);
+    const at = (x: number, y: number) => collision[y * map.width + x];
+
+    for (let x = 0; x < map.width; x += 1) {
+      expect(at(x, 0)).not.toBe(0);
+    }
   });
 });
 

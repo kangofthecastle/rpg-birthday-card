@@ -60,7 +60,7 @@ export type MapEdge = 'north' | 'south' | 'east' | 'west';
 /**
  * An edge-to-edge outdoor transition: walking off `edge` of this map arrives on
  * `destinationEdge` of the destination area, at the same proportional position
- * along that edge. No E-press; triggered automatically by proximity. When
+ * within its centred five-path-width corridor. No E-press; triggered automatically by proximity. When
  * `requiresFinalUnlock` is set the edge stays blocked (with a nudge back) until
  * every keepsake is collected.
  */
@@ -70,6 +70,8 @@ export interface LocationEdgeExit {
   readonly destinationLocationId: string;
   readonly destinationEdge: MapEdge;
   readonly requiresFinalUnlock?: boolean;
+  /** Narrative one-way transition; the destination intentionally has no reciprocal edge. */
+  readonly oneWay?: boolean;
 }
 
 interface BaseLocationInteraction {

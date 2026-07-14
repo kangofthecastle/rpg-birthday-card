@@ -78,6 +78,7 @@ import type {
 } from '../content/types';
 import {
   EDGE_ARRIVAL_COOLDOWN_MS,
+  edgePortalSpan,
   edgeProportion,
   edgeSpawnPoint,
   isBodyAtEdge,
@@ -3408,13 +3409,29 @@ export class LocationScene extends Phaser.Scene {
     for (const exit of this.exits) {
       markCol(exit.x + exit.width / 2);
     }
-    // Two-cell approach band along each open edge.
-    for (let c = 0; c < cols; c += 1) {
+    // Two-cell-deep approach band only at each five-tile portal. The old full-edge
+    // bands made scenery treat an entire side as an entrance even though the path
+    // reaches it at the centre.
+    const horizontalSpan = edgePortalSpan('north', {
+      width: tilemap.widthInPixels,
+      height: tilemap.heightInPixels,
+      tileSize: tile,
+    });
+    const verticalSpan = edgePortalSpan('west', {
+      width: tilemap.widthInPixels,
+      height: tilemap.heightInPixels,
+      tileSize: tile,
+    });
+    const firstPortalCol = Math.floor(horizontalSpan.start / tile);
+    const lastPortalCol = Math.ceil(horizontalSpan.end / tile) - 1;
+    const firstPortalRow = Math.floor(verticalSpan.start / tile);
+    const lastPortalRow = Math.ceil(verticalSpan.end / tile) - 1;
+    for (let c = firstPortalCol; c <= lastPortalCol; c += 1) {
       if (openEdges.has('north')) grid[0 * cols + c] = grid[1 * cols + c] = true;
       if (openEdges.has('south'))
         grid[(rows - 1) * cols + c] = grid[(rows - 2) * cols + c] = true;
     }
-    for (let r = 0; r < rows; r += 1) {
+    for (let r = firstPortalRow; r <= lastPortalRow; r += 1) {
       if (openEdges.has('west')) grid[r * cols + 0] = grid[r * cols + 1] = true;
       if (openEdges.has('east'))
         grid[r * cols + (cols - 1)] = grid[r * cols + (cols - 2)] = true;

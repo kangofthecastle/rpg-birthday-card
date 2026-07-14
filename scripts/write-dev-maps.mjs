@@ -8,6 +8,9 @@ const mapsDir = join(root, 'public', 'maps');
 mkdirSync(mapsDir, { recursive: true });
 
 const TILE = 64;
+// Every outdoor portal is the central path tile plus two path-widths on either
+// side. The rest of that border remains solid.
+const EDGE_CORRIDOR_TILES = 5;
 // Interiors keep the standard room size (iso rooms are dressed to this footprint
 // and are NOT part of the outdoor-pacing pass).
 const STD_W = 22;
@@ -22,9 +25,8 @@ const YARD_H = 11;
 const CLEARING_W = 16;
 const CLEARING_H = 10;
 
-// Per-map definitions. `openEdges` lists sides whose border wall is opened along
-// its full walkable span (tiles 1..n-2), so the player can walk off that side
-// and trigger an edge transition. Corners always stay solid.
+// Per-map definitions. `openEdges` lists sides whose border wall has a centred
+// five-tile opening, aligned to the path cell, for edge transitions.
 const maps = [
   {
     file: 'main-outside.tmj',
@@ -92,11 +94,11 @@ const maps = [
     spawns: [point(1, 'front-door', 704, 768), point(2, 'near-pc', 704, 768)],
     exits: [rect(3, 'step-outside', 'exit', 640, 864, 128, 80)],
     interactables: [
-      rect(4, 'recipient-violin', 'easterEgg', 240, 300, 160, 140),
-      rect(6, 'recipient-mango-rice', 'easterEgg', 960, 300, 160, 140),
-      rect(7, 'recipient-photo-wall', 'easterEgg', 1080, 64, 160, 140),
-      rect(8, 'recipient-bed', 'easterEgg', 300, 600, 180, 150),
-      rect(9, 'recipient-pc', 'activity', 624, 720, 160, 140),
+      rect(4, 'recipient-violin', 'easterEgg', 236, 234, 174, 181),
+      rect(6, 'recipient-mango-rice', 'easterEgg', 1092, 627, 164, 144),
+      rect(7, 'recipient-photo-wall', 'easterEgg', 499, 61, 228, 98),
+      rect(8, 'recipient-bed', 'easterEgg', 145, 555, 217, 296),
+      rect(9, 'recipient-pc', 'activity', 636, 454, 176, 156),
     ],
   },
   {
@@ -104,11 +106,11 @@ const maps = [
     width: STD_W,
     height: STD_H,
     openEdges: [],
-    spawns: [point(1, 'front-door', 704, 768), point(5, 'near-friendone-pc', 800, 416)],
+    spawns: [point(1, 'front-door', 704, 768), point(5, 'near-friendone-pc', 561, 470)],
     exits: [rect(2, 'back-entry', 'exit', 640, 832, 128, 80)],
     interactables: [
-      rect(3, 'friendone-host', 'dialogue', 512, 384, 128, 96),
-      rect(4, 'friendone-pc', 'activity', 768, 384, 128, 96),
+      rect(3, 'friendone-host', 'dialogue', 951, 513, 128, 96),
+      rect(4, 'friendone-pc', 'activity', 497, 388, 128, 96),
     ],
   },
   {
@@ -116,11 +118,11 @@ const maps = [
     width: STD_W,
     height: STD_H,
     openEdges: [],
-    spawns: [point(1, 'front-door', 704, 768), point(5, 'near-friendtwo-pc', 704, 432)],
+    spawns: [point(1, 'front-door', 704, 768), point(5, 'near-friendtwo-pc', 640, 470)],
     exits: [rect(2, 'back-entry', 'exit', 640, 832, 128, 80)],
     interactables: [
-      rect(3, 'friend-b-host', 'activity', 640, 384, 128, 96),
-      rect(4, 'friend-b-easter-egg', 'easterEgg', 960, 384, 128, 96),
+      rect(3, 'friend-b-host', 'activity', 576, 422, 128, 96),
+      rect(4, 'friend-b-easter-egg', 'easterEgg', 1106, 380, 128, 96),
       rect(6, 'friendtwo-host', 'dialogue', 464, 384, 128, 96),
     ],
   },
@@ -128,10 +130,10 @@ const maps = [
     file: 'final-spot.tmj',
     width: STD_W,
     height: STD_H,
-    openEdges: ['north'],
-    spawns: [point(1, 'clearing-path', 704, 768), point(4, 'near-lantern', 704, 432)],
+    openEdges: [],
+    spawns: [point(1, 'clearing-path', 704, 768), point(4, 'near-lantern', 704, 640)],
     exits: [],
-    interactables: [rect(3, 'final-table', 'activity', 640, 384, 128, 96)],
+    interactables: [rect(3, 'friendtwo-finale', 'dialogue', 624, 400, 160, 128)],
   },
 ];
 
@@ -140,12 +142,18 @@ for (const map of maps) {
 }
 
 // Builds the Ground/Collision tile arrays for a map. The border is a solid
-// 1-tile wall everywhere except the walkable spans of `openEdges`, which are
-// carved out (floor + no collision) so the player can walk off that side.
+// 1-tile wall everywhere except the centred five-tile portals of `openEdges`.
 function buildTiles(width, height, openEdges) {
   const isOpen = new Set(openEdges);
   const ground = [];
   const collision = [];
+
+  const inCorridor = (index, tangentTiles) => {
+    const count = Math.min(EDGE_CORRIDOR_TILES, tangentTiles);
+    const center = Math.floor(tangentTiles / 2);
+    const start = Math.max(0, Math.min(tangentTiles - count, center - Math.floor(count / 2)));
+    return index >= start && index < start + count;
+  };
 
   for (let index = 0; index < width * height; index += 1) {
     const x = index % width;
@@ -156,10 +164,10 @@ function buildTiles(width, height, openEdges) {
 
     let wall = onBorder;
     if (onBorder && !onCorner) {
-      if (x === 0 && isOpen.has('west')) wall = false;
-      if (x === width - 1 && isOpen.has('east')) wall = false;
-      if (y === 0 && isOpen.has('north')) wall = false;
-      if (y === height - 1 && isOpen.has('south')) wall = false;
+      if (x === 0 && isOpen.has('west') && inCorridor(y, height)) wall = false;
+      if (x === width - 1 && isOpen.has('east') && inCorridor(y, height)) wall = false;
+      if (y === 0 && isOpen.has('north') && inCorridor(x, width)) wall = false;
+      if (y === height - 1 && isOpen.has('south') && inCorridor(x, width)) wall = false;
     }
 
     ground.push(wall ? 2 : 1);

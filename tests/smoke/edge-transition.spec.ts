@@ -16,16 +16,13 @@ test('walks off the west edge of main-outside into ____’s block', async ({ pag
 
   await canvas.click();
 
-  // Two Lefts + one Up nets straight world-west (y steady): screen-Left drives
-  // world (-x,+y) and screen-Up drives world (-x,-y), so 2·Left + 1·Up cancels y
-  // and pushes the player toward the west edge without drifting south.
-  const pattern = ['ArrowLeft', 'ArrowLeft', 'ArrowUp'] as const;
+  // Flat outdoor movement maps directly to world axes. Keep y fixed inside the
+  // centred five-tile portal while walking straight west.
   let arrived = false;
   for (let step = 0; step < 40 && !arrived; step += 1) {
-    const key = pattern[step % pattern.length];
-    await page.keyboard.down(key);
+    await page.keyboard.down('ArrowLeft');
     await page.waitForTimeout(110);
-    await page.keyboard.up(key);
+    await page.keyboard.up('ArrowLeft');
     await page.waitForTimeout(40);
     arrived =
       (await page.locator('body').getAttribute('data-location-id')) === 'friendtwo-yard';

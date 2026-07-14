@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   createInitialRunState,
+  createCardModeRunState,
   createSeededRunState,
   completeLocation,
   applyActivityCompletion,
@@ -9,6 +10,7 @@ import {
   hasAllFriendKeepsakes,
   hasKeepsake,
   hasSeenBeat,
+  isCardMode,
   isFinalSpotUnlocked,
   markBeatSeen,
   markEndingCompleted,
@@ -26,6 +28,8 @@ describe('runState', () => {
     const state = createInitialRunState('entry');
 
     expect(state.currentLocationId).toBe('entry');
+    expect(state.mode).toBe('story');
+    expect(isCardMode(state)).toBe(false);
     expect(state.completedLocationIds).toEqual([]);
     expect(state.collectedKeepsakeIds).toEqual([]);
     expect(state.completedActivityIds).toEqual([]);
@@ -200,5 +204,27 @@ describe('runState', () => {
     ]);
 
     expect(state.completedActivityIds).toEqual(['friendone-pc-fishing', 'valorant-split']);
+  });
+
+  it('creates an isolated cards-mode epilogue with every letter but no completed games', () => {
+    const state = createCardModeRunState();
+
+    expect(state.mode).toBe('cards');
+    expect(isCardMode(state)).toBe(true);
+    expect(state.currentLocationId).toBe('recipient-house');
+    expect(state.collectedKeepsakeIds).toEqual(REQUIRED_FINAL_KEEPSAKE_IDS);
+    expect(state.completedActivityIds).toEqual([]);
+    expect(state.wonActivityIds).toEqual([]);
+    expect(state.endingCompleted).toBe(true);
+    expect(isFinalSpotUnlocked(state)).toBe(true);
+    expect(state.seenBeatIds).toEqual(expect.arrayContaining([
+      'recipient-intro',
+      'friendone-text-read',
+      'friendone-pc-ready',
+      'friendtwo-house-entered',
+      'recipient-return-home',
+      'outside-after-violin',
+      'violin-called',
+    ]));
   });
 });

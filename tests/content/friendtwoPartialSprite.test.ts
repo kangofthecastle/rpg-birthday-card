@@ -19,12 +19,10 @@ const DIRECTIONS: readonly FriendTwoDirection[] = ['south', 'west', 'east', 'nor
 const MOTIONS: readonly FriendTwoMotion[] = ['idle', 'walk'];
 
 // The rows that were intentionally NOT generated for this NPC.
-const MISSING_WALK_DIRS: readonly FriendTwoDirection[] = ['west', 'east', 'north'];
-
 describe('resolveFriendTwoRow', () => {
-  it('returns every idle facing directly', () => {
+  it('uses the one forward idle for every idle request', () => {
     for (const direction of DIRECTIONS) {
-      expect(resolveFriendTwoRow(direction, 'idle')).toBe(`idle-${direction}`);
+      expect(resolveFriendTwoRow(direction, 'idle')).toBe('idle-south');
     }
   });
 
@@ -32,9 +30,9 @@ describe('resolveFriendTwoRow', () => {
     expect(resolveFriendTwoRow('south', 'walk')).toBe('walk-south');
   });
 
-  it('falls the missing walk facings back to the same-direction idle row', () => {
-    for (const direction of MISSING_WALK_DIRS) {
-      expect(resolveFriendTwoRow(direction, 'walk')).toBe(`idle-${direction}`);
+  it('falls side and north walk requests back to forward idle', () => {
+    for (const direction of ['west', 'east', 'north'] as const) {
+      expect(resolveFriendTwoRow(direction, 'walk')).toBe('idle-south');
     }
   });
 
@@ -46,13 +44,6 @@ describe('resolveFriendTwoRow', () => {
     }
   });
 
-  it('never returns a wrong-facing row (facing is always preserved)', () => {
-    for (const direction of DIRECTIONS) {
-      for (const motion of MOTIONS) {
-        expect(resolveFriendTwoRow(direction, motion).endsWith(direction)).toBe(true);
-      }
-    }
-  });
 });
 
 describe('resolveFriendTwoAnimationKey', () => {
@@ -60,9 +51,9 @@ describe('resolveFriendTwoAnimationKey', () => {
     expect(resolveFriendTwoAnimationKey('south', 'idle')).toBe(
       friendtwoRowAnimationKey('idle-south'),
     );
-    // walk-north falls back to idle-north's clip.
+    // walk-north falls back to the only idle clip.
     expect(resolveFriendTwoAnimationKey('north', 'walk')).toBe(
-      friendtwoRowAnimationKey('idle-north'),
+      friendtwoRowAnimationKey('idle-south'),
     );
     expect(resolveFriendTwoAnimationKey('south', 'walk')).toBe(
       friendtwoRowAnimationKey('walk-south'),
@@ -104,7 +95,7 @@ describe('FRIEND_TWO_PARTIAL_FRAMES geometry', () => {
     expect(FRIEND_TWO_PARTIAL_FRAMES.frameWidth).toBe(256);
     expect(FRIEND_TWO_PARTIAL_FRAMES.frameHeight).toBe(256);
     expect(FRIEND_TWO_PARTIAL_FRAMES.framesPerRow).toBe(6);
-    expect(FRIEND_TWO_PARTIAL_FRAMES.baselineY).toBe(247);
+    expect(FRIEND_TWO_PARTIAL_FRAMES.baselineY).toBe(248);
     expect(FRIEND_TWO_PARTIAL_FRAMES.normalizedCharacterHeight).toBe(216);
   });
 });

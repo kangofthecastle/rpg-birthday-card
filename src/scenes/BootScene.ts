@@ -2,7 +2,9 @@ import Phaser from 'phaser';
 import { RECIPIENT_SPRITE } from '../assets/recipientSpriteConfig';
 import { LOCATIONS } from '../content/locations';
 import { createTempTextures } from '../game/createTempTextures';
+import { getLaunchMode } from '../game/launchMode';
 import {
+  createCardModeRunState,
   createSeededRunState,
   markBeatSeen,
   markEndingCompleted,
@@ -260,13 +262,18 @@ export class BootScene extends Phaser.Scene {
   private startWorld(): void {
     const params = new URLSearchParams(window.location.search);
     const testMode = params.get('testMode') === '1';
+    const cardMode = !testMode && getLaunchMode() === 'cards';
     const locationId = testMode ? params.get('locationId') ?? 'recipient-house' : 'recipient-house';
-    const spawnId = testMode ? params.get('spawnId') ?? 'front-door' : 'front-door';
+    const spawnId = testMode
+      ? params.get('spawnId') ?? 'front-door'
+      : cardMode
+        ? 'near-pc'
+        : 'front-door';
 
     // testMode-only: seed collected keepsakes so a smoke can start from a
     // realistic mid/late-run state (e.g. the clearing already unlocked).
     const seedParam = testMode ? params.get('seedKeepsakes') : null;
-    let state: RunState | undefined;
+    let state: RunState | undefined = cardMode ? createCardModeRunState() : undefined;
     if (seedParam) {
       const ids =
         seedParam === 'all'

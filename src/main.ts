@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { initAudio } from './game/audio';
 import { createGameConfig } from './game/gameConfig';
+import { setLaunchMode } from './game/launchMode';
 import { runBootScreen } from './ui/bootScreen';
 import { mountMuteButton } from './ui/muteButton';
 import { syncViewportFrame } from './ui/viewportFrame';
@@ -33,7 +34,8 @@ async function bootGame(): Promise<void> {
   // testMode drives the existing smoke suite straight into a location, so the
   // cold-open overlay must be skipped entirely there.
   if (!isTestMode()) {
-    await runBootScreen();
+    const result = await runBootScreen();
+    setLaunchMode(result.mode);
   }
 
   const game = new Phaser.Game(createGameConfig(gameRoot));

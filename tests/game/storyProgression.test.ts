@@ -51,7 +51,8 @@ describe('canonical story progression', () => {
 
     state = markBeatSeen(state, FRIEND_ONE_TEXT_READ_BEAT_ID);
     expect(getStoryTravelBlock('main-outside', state)).toBeUndefined();
-    expect(getStoryTravelBlock('friendtwo-yard', state)).toContain('____');
+    expect(getStoryTravelBlock('friendtwo-yard', state)).toBeUndefined();
+    expect(getStoryTravelBlock('friend-b', state)).toBeUndefined();
 
     state = complete(state, FISHING_ACTIVITY_ID, 'friend-a');
     expect(getStoryTravelBlock('friendtwo-yard', state)).toBeUndefined();

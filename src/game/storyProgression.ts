@@ -56,13 +56,6 @@ export function getStoryTravelBlock(
   }
 
   if (
-    ['friendtwo-yard', 'friend-b'].includes(destinationLocationId) &&
-    !fishingComplete
-  ) {
-    return '____ is still waiting at her house.';
-  }
-
-  if (
     destinationLocationId === 'clearing' &&
     !isFinalSpotUnlocked(state)
   ) {

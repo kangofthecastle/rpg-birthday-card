@@ -110,6 +110,7 @@ import {
   hasActivityCompleted,
   hasKeepsake,
   hasSeenBeat,
+  isCardMode,
   isBoatFolded,
   isFinalSpotUnlocked,
   markBeatSeen,
@@ -683,6 +684,7 @@ export class LocationScene extends Phaser.Scene {
     // Mirror the current location onto the DOM so the on-screen location label
     // change is observable to smoke tests (Phaser canvas text is not queryable).
     document.body.dataset.locationId = this.location.id;
+    document.body.dataset.runMode = this.state.mode ?? 'story';
     delete document.body.dataset.interiorAwakened;
     this.createMap();
     this.createPlayer();
@@ -5022,8 +5024,10 @@ export class LocationScene extends Phaser.Scene {
 
         // Some activities deliver the player elsewhere on completion (the origami
         // ritual carries her INTO the lantern clearing). Restart into that
-        // destination instead of resuming the current location.
-        if (completion.travelTo) {
+        // destination instead of resuming the current location. Cards mode is a
+        // replay gallery, so completing Boatigami leaves ____ at its launch point
+        // instead of forcing the terminal ending sequence.
+        if (completion.travelTo && !isCardMode(this.state)) {
           this.scene.restart({
             locationId: completion.travelTo.locationId,
             spawnId: completion.travelTo.spawnId,

@@ -1,21 +1,16 @@
 /**
  * ____'s home-NPC sprite, backed by the "partial frame set" that asset-bot
- * generated at public/assets/sprites/characters/friendtwo-partial-frames-v1/.
+ * generated at public/assets/sprites/characters/friendtwo-forward-frames-v2/.
  *
  * Unlike ____/____ (single 6×8 atlases) this set ships one 1536×256 strip PER
- * ROW (6 frames of 256px each), and — deliberately — only a subset of rows:
- * idle for all four facings plus walk-south. ____'s owner confirmed this NPC
- * never needs walk-west / walk-east / walk-north for this game, so those rows
- * were intentionally not generated (manifest `intentionallyNotGenerated`).
+ * ROW (6 frames of 256px each), with only the two motions ____ needs in-game:
+ * forward idle and walk-south.
  *
  * That makes direction handling the interesting part: `resolveFriendTwoRow` maps a
- * requested (direction, motion) to a row that actually exists, falling the three
- * missing walk facings back to the SAME-direction idle row — so a caller can ask
- * for any facing/motion and always get a real, correctly-facing row (never a
- * crash, never a wrong-way walk). walk-south is the one generated walk row and
- * plays normally.
+ * requested (direction, motion) to one of those two real rows. Non-south facings
+ * fall back to forward idle because this NPC never needs side/back artwork.
  *
- * The manifest reports a 216px normalized character height on a 247px baseline
+ * The generated strips use ____'s 216px character height on a 248px baseline
  * inside a 256px cell — the same silhouette proportions as the ____/____
  * sheets — so the shared scale 0.45 + bottom-centre origin (0.5, 1) treatment
  * plants ____'s feet at the same ground point as before.
@@ -27,16 +22,10 @@ export type FriendTwoMotion = 'idle' | 'walk';
 /** The rows actually generated for this NPC (manifest `completeRows`). */
 export type FriendTwoRow =
   | 'idle-south'
-  | 'idle-west'
-  | 'idle-east'
-  | 'idle-north'
   | 'walk-south';
 
 export const FRIEND_TWO_GENERATED_ROWS: readonly FriendTwoRow[] = [
   'idle-south',
-  'idle-west',
-  'idle-east',
-  'idle-north',
   'walk-south',
 ];
 
@@ -47,11 +36,11 @@ export const FRIEND_TWO_GENERATED_ROWS: readonly FriendTwoRow[] = [
  * on-screen size and footing stay consistent with the other home NPCs.
  */
 export const FRIEND_TWO_PARTIAL_FRAMES = {
-  baseUrl: '/assets/sprites/characters/friendtwo-partial-frames-v1',
+  baseUrl: '/assets/sprites/characters/friendtwo-forward-frames-v2',
   frameWidth: 256,
   frameHeight: 256,
   framesPerRow: 6,
-  baselineY: 247,
+  baselineY: 248,
   normalizedCharacterHeight: 216,
   scale: 0.45,
   origin: { x: 0.5, y: 1 },
@@ -92,12 +81,10 @@ export function resolveFriendTwoRow(
   direction: FriendTwoDirection,
   motion: FriendTwoMotion,
 ): FriendTwoRow {
-  const requested = `${motion}-${direction}` as FriendTwoRow;
-  if (FRIEND_TWO_GENERATED_ROWS.includes(requested)) {
-    return requested;
+  if (direction === 'south' && motion === 'walk') {
+    return 'walk-south';
   }
-  // Only the three walk-{west,east,north} rows are absent; fall back to idle.
-  return `idle-${direction}` as FriendTwoRow;
+  return 'idle-south';
 }
 
 /** Resolve straight to the animation key that should play. */

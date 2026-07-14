@@ -5,6 +5,7 @@ import {
   resolveRecipientPcStory,
 } from '../../src/content/storyContent';
 import { applyActivityCompletion, createInitialRunState, markBeatSeen } from '../../src/game/runState';
+import { isInteractionLocked } from '../../src/game/interactionState';
 import {
   FISHING_ACTIVITY_ID,
   FRIEND_ONE_PC_READY_BEAT_ID,
@@ -85,9 +86,11 @@ describe('story content resolution', () => {
     ]);
   });
 
-  it('makes the RETAKE PC available only after fishing and removes ____ during the journey', () => {
+  it('shows the RETAKE PC early but keeps it locked until fishing is complete', () => {
     const invited = markBeatSeen(createInitialRunState('friend-a'), FRIEND_ONE_TEXT_READ_BEAT_ID);
-    expect(getAvailableLocationInteractions('friend-b', invited)).toEqual([]);
+    const earlyInteractions = getAvailableLocationInteractions('friend-b', invited);
+    expect(earlyInteractions.map((item) => item.id)).toEqual(['friend-b-host']);
+    expect(isInteractionLocked(earlyInteractions[0], invited)).toBe(true);
 
     const fishingDone = applyActivityCompletion(invited, {
       locationId: 'friend-a',
@@ -97,5 +100,9 @@ describe('story content resolution', () => {
       'friend-b-host',
       'friend-b-easter-egg',
     ]);
+    expect(isInteractionLocked(
+      getAvailableLocationInteractions('friend-b', fishingDone)[0],
+      fishingDone,
+    )).toBe(false);
   });
 });

@@ -82,11 +82,11 @@ export const ASSET_MANIFEST: readonly GameAsset[] = [
   {
     id: 'character-friendtwo-walk-4dir',
     kind: 'spritesheet',
-    label: '____ 4-direction idle/walk spritesheet',
+    label: '____ forward idle/walk-south spritesheet',
     status: 'review',
     locationIds: ['global'],
     notes:
-      'Saved at public/assets/sprites/characters/friendtwo-idle-walk-4dir-v1-alpha.png. Built from existing ____ walk art with idle rows, mirrored side timing, transparent background cleanup, and normalized bottom-center anchoring.',
+      'Saved at public/assets/sprites/characters/friendtwo-idle-walk-south-v2-alpha.png, with runtime row strips under friendtwo-forward-frames-v2. ____ identity is transferred onto ____ forward-idle and walk-south geometry, normalized to ____ character height and baseline.',
     qaChecks: ['8x6 idle-walk layout', 'transparent background', 'identity consistency', 'anchor consistency'],
   },
   {

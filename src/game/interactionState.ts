@@ -3,12 +3,14 @@ import {
   hasAllFriendKeepsakes,
   hasActivityCompleted,
   hasSeenBeat,
+  isCardMode,
   isFinalSpotUnlocked,
   type RunState,
 } from './runState';
 
 export function isInteractionAvailable(
   interaction: {
+    readonly kind?: string;
     readonly requiresBeatId?: string;
     readonly requiresActivityId?: string;
     readonly hiddenAfterActivityId?: string;
@@ -18,18 +20,26 @@ export function isInteractionAvailable(
   },
   state: RunState,
 ): boolean {
-  if (interaction.requiresBeatId && !hasSeenBeat(state, interaction.requiresBeatId)) {
+  const replayableActivity = isCardMode(state) && interaction.kind === 'activity';
+
+  if (
+    interaction.requiresBeatId &&
+    !hasSeenBeat(state, interaction.requiresBeatId) &&
+    !replayableActivity
+  ) {
     return false;
   }
   if (
     interaction.requiresActivityId &&
-    !hasActivityCompleted(state, interaction.requiresActivityId)
+    !hasActivityCompleted(state, interaction.requiresActivityId) &&
+    !replayableActivity
   ) {
     return false;
   }
   if (
     interaction.hiddenAfterActivityId &&
-    hasActivityCompleted(state, interaction.hiddenAfterActivityId)
+    hasActivityCompleted(state, interaction.hiddenAfterActivityId) &&
+    !replayableActivity
   ) {
     return false;
   }
@@ -47,12 +57,17 @@ export function isInteractionAvailable(
  */
 export function isInteractionLocked(
   interaction: {
+    readonly kind?: string;
     readonly requiresAllFriendKeepsakes?: boolean;
     readonly requiresAllKeepsakes?: boolean;
     readonly lockedUntilActivityId?: string;
   },
   state: RunState,
 ): boolean {
+  if (isCardMode(state) && interaction.kind === 'activity') {
+    return false;
+  }
+
   if (
     interaction.lockedUntilActivityId &&
     !hasActivityCompleted(state, interaction.lockedUntilActivityId)

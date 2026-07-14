@@ -16,6 +16,15 @@ export const REQUIRED_FINAL_KEEPSAKE_IDS: readonly string[] = LOCATIONS.flatMap(
 );
 
 export interface RunState {
+  /**
+   * The ordinary story run is the default. Cards mode is an isolated epilogue
+   * sandbox entered from the opening password prompt: it starts with the archive
+   * and keepsakes available while leaving every minigame replayable.
+   *
+   * Optional for backwards compatibility with persisted/test-authored states;
+   * an omitted mode is always treated as `story`.
+   */
+  readonly mode?: 'story' | 'cards';
   readonly currentLocationId: string;
   readonly completedLocationIds: readonly string[];
   readonly collectedKeepsakeIds: readonly string[];
@@ -76,6 +85,7 @@ export type CompletionInput = LocationKeepsakeCompletionInput;
 
 export function createInitialRunState(currentLocationId: string): RunState {
   return {
+    mode: 'story',
     currentLocationId,
     completedLocationIds: [],
     collectedKeepsakeIds: [],
@@ -84,6 +94,46 @@ export function createInitialRunState(currentLocationId: string): RunState {
     seenBeatIds: [],
     endingCompleted: false,
   };
+}
+
+/**
+ * Build the self-contained epilogue/card-gallery run unlocked by the opening
+ * password. It deliberately does not mark activities complete: their keepsakes
+ * are preloaded independently so fishing, RETAKE, violin, and Boatigami remain
+ * available to play in any order.
+ */
+export function createCardModeRunState(
+  currentLocationId = 'recipient-house',
+): RunState {
+  const completedLocationIds = LOCATIONS.flatMap((location) =>
+    location.keepsake && REQUIRED_FINAL_KEEPSAKE_IDS.includes(location.keepsake.id)
+      ? [location.id]
+      : [],
+  );
+  const enterBeatIds = LOCATIONS.flatMap((location) =>
+    location.enterBeats?.map((beat) => beat.id) ?? [],
+  );
+  const seenBeatIds = [
+    ...enterBeatIds,
+    'friendone-text-read',
+    'friendone-pc-ready',
+    'violin-called',
+  ].filter((beatId, index, beats) => beats.indexOf(beatId) === index);
+
+  return {
+    ...createInitialRunState(currentLocationId),
+    mode: 'cards',
+    completedLocationIds,
+    collectedKeepsakeIds: [...REQUIRED_FINAL_KEEPSAKE_IDS],
+    completedActivityIds: [],
+    wonActivityIds: [],
+    seenBeatIds,
+    endingCompleted: true,
+  };
+}
+
+export function isCardMode(state: RunState): boolean {
+  return state.mode === 'cards';
 }
 
 /**

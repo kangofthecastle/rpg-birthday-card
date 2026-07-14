@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_BOOT_LINES, runBootScreen } from '../../src/ui/bootScreen';
 
+const CARD_PASSWORD_KEYS = 'pewpew';
+
 function pressKey(key = 'Enter'): void {
   document.dispatchEvent(new KeyboardEvent('keydown', { key }));
 }
@@ -56,9 +58,68 @@ describe('runBootScreen', () => {
     expect(overlay()?.classList.contains('boot-screen--flash')).toBe(true);
 
     await vi.advanceTimersByTimeAsync(30);
-    await promise;
+    await expect(promise).resolves.toEqual({ mode: 'story' });
 
     expect(overlay()).toBeNull();
+  });
+
+  it('opens the password command instead of dismissing when slash is pressed at the gate', async () => {
+    const promise = runBootScreen({ lines: ['READY'], typeDelayMs: 5, flashMs: 10 });
+    await vi.advanceTimersByTimeAsync(100);
+
+    pressKey('/');
+
+    expect(overlay()?.classList.contains('boot-screen--flash')).toBe(false);
+    expect(document.querySelector<HTMLElement>('.boot-screen__prompt')?.hidden).toBe(true);
+    expect(document.querySelector('.boot-screen__completion')?.textContent).toBe('password');
+    expect(document.querySelector<HTMLElement>('.boot-screen__completion')?.hidden).toBe(false);
+    expect(document.querySelector<HTMLElement>('.boot-screen__tab-hint')?.hidden).toBe(false);
+    expect(
+      document.querySelector<HTMLElement>('.boot-screen__tab-hint')?.dataset.symbol,
+    ).toBe('⇥');
+
+    pressKey('p');
+    expect(document.querySelector('.boot-screen__completion')?.textContent).toBe('assword');
+
+    // Leave the promise settled so the test cannot leak document listeners.
+    pressKey('Tab');
+    for (const key of CARD_PASSWORD_KEYS) pressKey(key);
+    await vi.advanceTimersByTimeAsync(20);
+    await expect(promise).resolves.toEqual({ mode: 'cards' });
+  });
+
+  it('tabs the suggested command onto its own line and launches card mode for pewpew', async () => {
+    const promise = runBootScreen({ lines: ['READY'], typeDelayMs: 5, flashMs: 10 });
+    await vi.advanceTimersByTimeAsync(100);
+
+    pressKey('/');
+    pressKey('p');
+    pressKey('Tab');
+
+    expect(linesText()).toContain('READY\n/password\npassword: ');
+    expect(document.querySelector<HTMLElement>('.boot-screen__completion')?.hidden).toBe(true);
+    expect(document.querySelector<HTMLElement>('.boot-screen__tab-hint')?.hidden).toBe(true);
+
+    for (const key of CARD_PASSWORD_KEYS) pressKey(key);
+    expect(linesText()).toContain('password: pewpew');
+    expect(overlay()?.classList.contains('boot-screen--flash')).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(20);
+    await expect(promise).resolves.toEqual({ mode: 'cards' });
+    expect(overlay()).toBeNull();
+  });
+
+  it('accepts the fully typed password command without requiring Tab', async () => {
+    const promise = runBootScreen({ lines: ['READY'], typeDelayMs: 5, flashMs: 10 });
+    await vi.advanceTimersByTimeAsync(100);
+
+    pressKey('/');
+    for (const key of 'password') pressKey(key);
+    expect(linesText()).toContain('READY\n/password\npassword: ');
+
+    for (const key of CARD_PASSWORD_KEYS) pressKey(key);
+    await vi.advanceTimersByTimeAsync(20);
+    await expect(promise).resolves.toEqual({ mode: 'cards' });
   });
 
   it('lets any key fast-forward the line that is currently typing', async () => {

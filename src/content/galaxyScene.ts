@@ -5,18 +5,18 @@
  * the ground, the ____ NPC, and the arrival reveal) agree on names.
  */
 
-// ____'s 4-direction idle/walk sheet: 1536×2048, 6 columns × 8 rows of 256px
-// frames. Rows 0–3 are idle (down, left, right, up); rows 4–7 are walk. Only the
-// idle-down row is used — he stands at the glow, facing the path ____ climbs.
+// ____'s compact forward-only sheet: 1536×512, 6 columns × 2 rows of 256px
+// frames. Row 0 is forward idle and row 1 is walking south. At the galaxy edge
+// he only needs row 0, facing ____ as she approaches.
 export const FRIEND_TWO_SPRITE = {
-  key: 'friendtwo-idle-walk-4dir',
-  url: '/assets/sprites/characters/friendtwo-idle-walk-4dir-v1-alpha.png',
+  key: 'friendtwo-idle-walk-south',
+  url: '/assets/sprites/characters/friendtwo-idle-walk-south-v2-alpha.png',
   frameWidth: 256,
   frameHeight: 256,
   scale: 0.45,
   origin: { x: 0.5, y: 1 },
   idleFrameRate: 4,
-  /** First frame of the idle-down row. */
+  /** First frame of the forward-idle row. */
   idleDownStartFrame: 0,
   idleDownFrameCount: 6,
   idleAnimationKey: 'friendtwo-idle-down',

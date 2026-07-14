@@ -6,6 +6,7 @@ import {
 } from '../../src/game/interactionState';
 import {
   completeLocation,
+  createCardModeRunState,
   createInitialRunState,
   markBeatSeen,
   FRIEND_KEEPSAKE_IDS,
@@ -13,6 +14,7 @@ import {
   type RunState,
 } from '../../src/game/runState';
 import type { LocationEnterBeat } from '../../src/content/types';
+import { LOCATIONS } from '../../src/content/locations';
 
 function withAllFriendKeepsakes(): RunState {
   let state = createInitialRunState('recipient-house');
@@ -64,6 +66,16 @@ describe('isInteractionLocked', () => {
     expect(isInteractionAvailable(violin, afterRetake)).toBe(true);
     expect(isInteractionLocked(violin, afterRetake)).toBe(false);
   });
+
+  it('bypasses activity locks only in cards mode', () => {
+    const violin = {
+      kind: 'activity',
+      lockedUntilActivityId: 'valorant-split',
+    } as const;
+
+    expect(isInteractionLocked(violin, createCardModeRunState())).toBe(false);
+    expect(isInteractionLocked(violin, createInitialRunState('recipient-house'))).toBe(true);
+  });
 });
 
 describe('isInteractionAvailable', () => {
@@ -72,6 +84,43 @@ describe('isInteractionAvailable', () => {
     const fresh = createInitialRunState('friend-a');
     expect(isInteractionAvailable(interaction, fresh)).toBe(true);
     expect(isInteractionAvailable(interaction, markBeatSeen(fresh, 'friendone-pc-ready'))).toBe(false);
+  });
+
+  it('bypasses activity prerequisites and completion hiding only in cards mode', () => {
+    const retake = {
+      kind: 'activity',
+      requiresActivityId: 'friendone-pc-fishing',
+      hiddenAfterActivityId: 'valorant-split',
+    } as const;
+    const cards = createCardModeRunState();
+    const story = createInitialRunState('friend-b');
+
+    expect(isInteractionAvailable(retake, cards)).toBe(true);
+    expect(isInteractionAvailable(retake, story)).toBe(false);
+
+    const completedCards = completeLocation(cards, {
+      locationId: 'friend-b',
+      activityId: 'valorant-split',
+    });
+    expect(isInteractionAvailable(retake, completedCards)).toBe(true);
+  });
+
+  it('makes every authored game interaction immediately playable in cards mode', () => {
+    const state = createCardModeRunState();
+    const games = LOCATIONS.flatMap((location) =>
+      location.interactions.filter((interaction) => interaction.kind === 'activity'),
+    );
+
+    expect(games.map((game) => game.activityId)).toEqual([
+      'fold-the-letters',
+      'friendone-pc-fishing',
+      'valorant-split',
+      'recipient-violin-piece',
+    ]);
+    for (const game of games) {
+      expect(isInteractionAvailable(game, state), game.id).toBe(true);
+      expect(isInteractionLocked(game, state), game.id).toBe(false);
+    }
   });
 });
 

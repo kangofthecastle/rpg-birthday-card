@@ -102,9 +102,9 @@ const NOTE_RIGHT_LOCAL = 198;
 // same parchment sheet as the staff, but drops the five staff lines, the clef
 // and every note letter: pitch is read purely as HEIGHT on the page. Higher
 // pitch sits higher; a faint time axis runs along the bottom. Steps span the
-// hexachord D4(-1)..B4(4).
-const GRAPH_TOP_LOCAL = -52; // paper-local Y of the highest pitch (B4).
-const GRAPH_BOTTOM_LOCAL = 30; // paper-local Y of the lowest pitch (D4).
+// refrain's compact chromatic range G4(0)..D5(5).
+const GRAPH_TOP_LOCAL = -52; // paper-local Y of the highest pitch (D5).
+const GRAPH_BOTTOM_LOCAL = 30; // paper-local Y of the lowest pitch (G4).
 const GRAPH_AXIS_LOCAL = 52; // the time axis, just below the lowest pitch.
 const GRAPH_STEP_MIN = 0;
 const GRAPH_STEP_MAX = 5;

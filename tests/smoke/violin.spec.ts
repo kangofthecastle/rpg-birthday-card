@@ -113,9 +113,9 @@ test('plays the piece on the stand through test mode', async ({ page }) => {
 // capture swallowed the echo before the violin's separate Phaser game saw it).
 // The scene mirrors its model state onto the panel dataset (data-violin-state /
 // -phrase / -echo) so the test waits deterministically under CPU contention
-// rather than screenshot-matching. Phrase 1 is D E F♯ G A = keys A S D F G; she
-// plays every note herself (no takeover), then a short handoff beat flips the
-// phrase index as phrase 2 begins to play.
+// rather than screenshot-matching. Phrase 1 is the score's two-note opening
+// A G = keys L K; she plays every note herself (no takeover), then a short
+// handoff beat flips the phrase index as phrase 2 begins.
 test('echoes phrase 1 on the mapped keys, recovering from a wrong note', async ({
   page,
 }) => {
@@ -163,18 +163,12 @@ test('echoes phrase 1 on the mapped keys, recovering from a wrong note', async (
 
   // A wrong note gently wavers: the phrase resets and plays itself again from the
   // top (no soft-lock), then re-opens the echo.
-  await pressUntil('KeyF', 'data-violin-state', 'playback');
+  await pressUntil('KeyA', 'data-violin-state', 'playback');
   await expect(panel).toHaveAttribute('data-violin-state', 'echo', { timeout: 20000 });
   await expect(panel).toHaveAttribute('data-violin-phrase', '0');
 
-  // Echo the phrase correctly (D E F♯ G A = A S D F G), one note at a time,
-  // waiting on the echo cursor between presses.
-  await pressUntil('KeyA', 'data-violin-echo', '1');
-  await pressUntil('KeyS', 'data-violin-echo', '2');
-  await pressUntil('KeyD', 'data-violin-echo', '3');
-  await pressUntil('KeyF', 'data-violin-echo', '4');
-
-  // Landing phrase 1's last note herself opens the handoff beat, which flips the
-  // phrase index as phrase 2 begins to play (no takeover, instant handoff).
-  await pressUntil('KeyG', 'data-violin-phrase', '1');
+  // Echo the exact opening figure (A G = L K), one note at a time, waiting on
+  // the echo cursor between presses. The second note lands the whole phrase.
+  await pressUntil('KeyL', 'data-violin-echo', '1');
+  await pressUntil('KeyK', 'data-violin-phrase', '1');
 });

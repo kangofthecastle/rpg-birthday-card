@@ -3,6 +3,10 @@ import { RECIPIENT_SPRITE } from '../assets/recipientSpriteConfig';
 import { projectToIso, type IsoOrigin, type IsoPoint } from './isometricProjection';
 import { fnv1a, mulberry32 } from './rng';
 import {
+  beamTrapezoid,
+  resolveWindowBeamSource,
+} from './windowBeamGeometry';
+import {
   getPropColliders,
   propOverrideTextureKey,
   type PropColliderRect,
@@ -280,13 +284,11 @@ function addWindowShaftSet(
   container: Phaser.GameObjects.Container,
   moteKey: string,
 ): void {
-  const wallBase = projectToIso(windowProp.mapX, windowProp.mapY, origin);
-  // Light enters up on the wall (the window opening), not at the baseboard.
-  const source: IsoPoint = { x: wallBase.x, y: wallBase.y - dressing.wallHeight * 0.62 };
-  // The window texture is sheared to sit on the isometric wall. Its light mouth
-  // must follow that same diagonal; a horizontal source edge makes every shaft
-  // appear to radiate from an imaginary line cutting across the glass.
-  const sourceSlope = windowProp.wallShear ?? 0;
+  const { center: source, slope: sourceSlope } = resolveWindowBeamSource(
+    windowProp,
+    dressing.wallHeight,
+    origin,
+  );
   const rng = mulberry32(
     fnv1a(`${dressing.tilesTextureKey}:window-shafts:${index}:${windowProp.mapX},${windowProp.mapY}`),
   );
@@ -382,30 +384,6 @@ function addWindowShaftSet(
       });
     }
   }
-}
-
-// A screen-space trapezoid from a narrow source segment to a wider landing
-// segment. Window shafts pass the wall shear so their mouth follows the same
-// diagonal as the glass; doorway spill keeps the default horizontal mouth.
-export function beamTrapezoid(
-  source: IsoPoint,
-  land: IsoPoint,
-  topHalfWidth: number,
-  botHalfWidth: number,
-  sourceSlope = 0,
-): IsoPoint[] {
-  return [
-    {
-      x: source.x - topHalfWidth,
-      y: source.y - sourceSlope * topHalfWidth,
-    },
-    {
-      x: source.x + topHalfWidth,
-      y: source.y + sourceSlope * topHalfWidth,
-    },
-    { x: land.x + botHalfWidth, y: land.y },
-    { x: land.x - botHalfWidth, y: land.y },
-  ];
 }
 
 // Awakened doormat shine: a stronger steady additive glow warped onto the mat's

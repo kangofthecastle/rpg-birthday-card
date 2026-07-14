@@ -184,7 +184,7 @@ export function createSheetMusicModal(options: SheetMusicModalOptions): HTMLElem
 
   const action = document.createElement('button');
   action.type = 'button';
-  action.className = 'letter-modal__action';
+  action.className = 'letter-modal__action sheet-music-modal__action';
   action.textContent = options.actionLabel ?? 'Continue';
   action.addEventListener('click', (event) => {
     event.stopPropagation();

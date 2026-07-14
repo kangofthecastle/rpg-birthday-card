@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   VIOLIN_PHRASES,
   VIOLIN_PITCHES,
+  VIOLIN_RHYTHM_MS,
   getPitch,
   getPitchByKey,
 } from '../../../src/activities/violin/melody';
@@ -19,6 +20,7 @@ import {
   isFinalPhrase,
   isPieceComplete,
   litNoteCount,
+  noteStartMs,
   playbackDurationMs,
   playbackLitCount,
   pressViolinKey,
@@ -75,13 +77,22 @@ function handoffToNextEcho(state: ViolinState): ViolinState {
 }
 
 describe('melody data', () => {
-  it('has four phrases of 5–6 notes each', () => {
-    const lengths = VIOLIN_PHRASES.map((phrase) => phrase.notes.length);
-    expect(lengths).toEqual([5, 6, 6, 6]);
-    for (const length of lengths) {
-      expect(length).toBeGreaterThanOrEqual(5);
-      expect(length).toBeLessThanOrEqual(6);
-    }
+  it('transcribes the four playable refrain measures from the supplied score', () => {
+    expect(VIOLIN_PHRASES.map((phrase) => phrase.notes.map((note) => note.pitchId))).toEqual([
+      ['a4', 'gs4', 'a4', 'b4', 'c5', 'b4', 'a4', 'c5'],
+      ['b4', 'a4', 'g4', 'a4', 'b4', 'b4', 'c5'],
+      ['d5', 'c5', 'b4', 'c5', 'd5', 'c5', 'b4', 'd5'],
+      ['c5', 'b4', 'a4', 'b4', 'c5'],
+    ]);
+
+    const { dottedEighth, sixteenth, quarter, tripletEighth } = VIOLIN_RHYTHM_MS;
+    expect(VIOLIN_PHRASES.map((phrase) => phrase.notes.map((note) => note.durationMs))).toEqual([
+      [dottedEighth, sixteenth, dottedEighth, sixteenth, dottedEighth, sixteenth, dottedEighth, sixteenth],
+      [dottedEighth, sixteenth, dottedEighth, sixteenth, quarter, tripletEighth, tripletEighth],
+      [dottedEighth, sixteenth, dottedEighth, sixteenth, dottedEighth, sixteenth, dottedEighth, sixteenth],
+      [dottedEighth, sixteenth, dottedEighth, sixteenth, quarter],
+    ]);
+    expect(VIOLIN_PHRASES[1].notes[5].delayBeforeMs).toBe(tripletEighth);
   });
 
   it('maps every pitch to a unique key and every note to a known pitch', () => {
@@ -98,6 +109,14 @@ describe('melody data', () => {
     expect(getPitchByKey('a')?.key).toBe('A');
     expect(getPitchByKey(' h ')?.key).toBe('H');
     expect(getPitchByKey('Z')).toBeUndefined();
+  });
+
+  it('distinguishes the refrain\'s G-natural and G-sharp in notation and graph data', () => {
+    const natural = getPitch('g4');
+    const sharp = getPitch('gs4');
+    expect(sharp?.staffStep).toBe(natural?.staffStep);
+    expect(sharp?.graphStep).toBeGreaterThan(natural?.graphStep ?? -1);
+    expect(sharp?.accidental).toBe('sharp');
   });
 });
 
@@ -120,6 +139,14 @@ describe('violinModel — playback', () => {
     expect(playbackLitCount(phrase, 0, 1)).toBe(1);
     const thirdStart = phrase.notes[0].durationMs + phrase.notes[1].durationMs;
     expect(playbackLitCount(phrase, thirdStart, 1)).toBe(3);
+  });
+
+  it('preserves the printed triplet rest before phrase two closes', () => {
+    const phrase = VIOLIN_PHRASES[1];
+    const beforeRest = phrase.notes.slice(0, 5).reduce((sum, note) => sum + note.durationMs, 0);
+    expect(noteStartMs(phrase, 5, 1)).toBe(beforeRest + VIOLIN_RHYTHM_MS.tripletEighth);
+    expect(playbackLitCount(phrase, beforeRest, 1)).toBe(5);
+    expect(playbackLitCount(phrase, beforeRest + VIOLIN_RHYTHM_MS.tripletEighth, 1)).toBe(6);
   });
 
   it('opens the echo once playback (plus its tail) has elapsed', () => {

@@ -1191,6 +1191,43 @@ body {
   margin-top: 16px;
 }
 
+/* The acquired score is the violin game's final beat, so its action keeps the
+   same warm varnish, gold edge and italic sheet-music voice as the game chrome
+   instead of falling back to the square generic parchment-letter button. */
+.sheet-music-modal__action {
+  min-width: 184px;
+  min-height: 46px;
+  padding: 8px 26px;
+  border: 2px solid rgba(214, 164, 90, 0.88);
+  border-radius: 999px;
+  background: linear-gradient(160deg, #684326, #3f2b24);
+  color: #ffe6b0;
+  box-shadow:
+    0 4px 0 #2b1c18,
+    0 0 12px rgba(207, 154, 68, 0.22),
+    inset 0 1px 0 rgba(255, 240, 198, 0.22);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 18px;
+  font-style: italic;
+  letter-spacing: 0.035em;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    filter 0.15s ease;
+}
+
+.sheet-music-modal__action:hover {
+  border-color: #f0c778;
+  background: linear-gradient(160deg, #7a4d24, #503126);
+  color: #fff3d6;
+  filter: brightness(1.05);
+}
+
+.sheet-music-modal__action:focus-visible {
+  outline-color: #f1d79a;
+}
+
 .activity-panel {
   position: absolute;
   top: 50%;

@@ -155,7 +155,12 @@ import {
   type ClearingMote,
   type ClearingMotePath,
 } from '../game/clearingCurrent';
-import { createViolinInvitationSchedule } from '../game/violinInvitationCue';
+import {
+  AWAKENING_FRAGMENT,
+  VIOLIN_INVITATION_DURATION_MS,
+  createViolinInvitationSchedule,
+  type MotifNote,
+} from '../game/violinInvitationCue';
 import { getPitch } from '../activities/violin/melody';
 import {
   advanceFinaleReveal,
@@ -164,9 +169,7 @@ import {
 } from '../game/finaleReveal';
 import {
   EPILOGUE_WALL_SHEAR,
-  resolveEpilogueBeamBands,
   resolveEpilogueRoomAnchors,
-  resolveShearedWindowLightOpening,
 } from '../game/epilogueRoom';
 import { type IsoOrigin, type IsoPoint } from '../game/isometricProjection';
 import { createProjection, type Projection } from '../game/projection';
@@ -2593,10 +2596,8 @@ export class LocationScene extends Phaser.Scene {
         : undefined;
     const desk = findHandle(anchors.desk);
     const wall = findHandle(anchors.photoWall);
-    const windowHandle = findHandle(anchors.highWindow);
 
     if (wall && photo) {
-      const bounds = wall.image.getBounds();
       const photoBounds = photo.image.getBounds();
       const shearDrop = photoBounds.width * EPILOGUE_WALL_SHEAR;
       const photoCorners = {
@@ -2605,89 +2606,41 @@ export class LocationScene extends Phaser.Scene {
         bottomRight: { x: photoBounds.right, y: photoBounds.bottom },
         bottomLeft: { x: photoBounds.left, y: photoBounds.bottom - shearDrop },
       };
-      const glow = this.add
-        .ellipse(
-          bounds.centerX,
-          bounds.centerY,
-          bounds.width * 1.3,
-          bounds.height * 1.25,
-          0xffd78d,
-          0.08,
-        )
-        .setDepth(wall.image.depth - 0.15)
-        .setBlendMode(Phaser.BlendModes.ADD);
+      document.body.dataset.roomPhotoShear = String(photo.placement.wallShear ?? 0);
+      document.body.dataset.roomPhotoTexture = photo.image.texture.key;
+
+      // Once the middle portrait is filled, the surrounding patch of wall
+      // carries a quiet warm gleam. Keep it local to the frame: there is no
+      // longer a separate shaft connecting the photo wall to a window.
+      const gleam = this.add.graphics().setDepth(photo.image.depth - 0.01);
+      gleam.setBlendMode(Phaser.BlendModes.ADD);
+      const drawGleamBand = (padX: number, padY: number, color: number, alpha: number) => {
+        gleam.fillStyle(color, alpha);
+        gleam.fillPoints([
+          new Phaser.Geom.Point(photoCorners.topLeft.x - padX, photoCorners.topLeft.y - padY),
+          new Phaser.Geom.Point(photoCorners.topRight.x + padX, photoCorners.topRight.y - padY),
+          new Phaser.Geom.Point(photoCorners.bottomRight.x + padX, photoCorners.bottomRight.y + padY),
+          new Phaser.Geom.Point(photoCorners.bottomLeft.x - padX, photoCorners.bottomLeft.y + padY),
+        ], true);
+      };
+      drawGleamBand(34, 22, 0xffd995, 0.035);
+      drawGleamBand(22, 14, 0xffe4ac, 0.055);
+      drawGleamBand(11, 7, 0xffefc8, 0.08);
+      gleam.lineStyle(1.2, 0xffe9b7, 0.18);
+      gleam.strokePoints([
+        new Phaser.Geom.Point(photoCorners.topLeft.x, photoCorners.topLeft.y),
+        new Phaser.Geom.Point(photoCorners.topRight.x, photoCorners.topRight.y),
+        new Phaser.Geom.Point(photoCorners.bottomRight.x, photoCorners.bottomRight.y),
+        new Phaser.Geom.Point(photoCorners.bottomLeft.x, photoCorners.bottomLeft.y),
+      ], true);
       this.tweens.add({
-        targets: glow,
-        alpha: { from: 0.055, to: 0.115 },
-        duration: 2200,
+        targets: gleam,
+        alpha: { from: 0.68, to: 1 },
+        duration: 2400,
         yoyo: true,
         repeat: -1,
         ease: 'Sine.easeInOut',
       });
-
-      document.body.dataset.roomPhotoShear = String(photo.placement.wallShear ?? 0);
-      document.body.dataset.roomPhotoTexture = photo.image.texture.key;
-
-      if (windowHandle) {
-        const source = resolveShearedWindowLightOpening(windowHandle.image.getBounds(), -0.5);
-        const bands = resolveEpilogueBeamBands(source, photoCorners);
-        const beam = this.add.graphics().setDepth(wall.image.depth + 0.02);
-        const colors = [0xffe4aa, 0xffebbe, 0xfff3d8] as const;
-        const alphas = [0.05, 0.08, 0.1] as const;
-        bands.forEach((band, index) => {
-          beam.fillStyle(colors[index] ?? colors[0], alphas[index] ?? alphas[0]);
-          beam.fillPoints([
-            new Phaser.Geom.Point(band.source.start.x, band.source.start.y),
-            new Phaser.Geom.Point(band.source.end.x, band.source.end.y),
-            new Phaser.Geom.Point(band.target.end.x, band.target.end.y),
-            new Phaser.Geom.Point(band.target.start.x, band.target.start.y),
-          ], true);
-        });
-        beam.setBlendMode(Phaser.BlendModes.ADD);
-        this.tweens.add({
-          targets: beam,
-          alpha: { from: 0.74, to: 1 },
-          duration: 3600,
-          yoyo: true,
-          repeat: -1,
-          ease: 'Sine.easeInOut',
-        });
-
-        const pool = this.add.graphics().setDepth(wall.image.depth + 0.04);
-        pool.setBlendMode(Phaser.BlendModes.ADD);
-        pool.fillStyle(0xffe6a8, 0.16);
-        pool.fillEllipse(
-          photoBounds.centerX,
-          photoBounds.centerY,
-          Math.max(64, photoBounds.width * 2.8),
-          Math.max(28, photoBounds.width * 1.25),
-        );
-        pool.fillStyle(0xfff2cf, 0.12);
-        pool.fillEllipse(
-          photoBounds.centerX,
-          photoBounds.centerY,
-          Math.max(38, photoBounds.width * 1.65),
-          Math.max(16, photoBounds.width * 0.7),
-        );
-        this.tweens.add({
-          targets: pool,
-          alpha: { from: 0.68, to: 1 },
-          duration: 3400,
-          yoyo: true,
-          repeat: -1,
-          ease: 'Sine.easeInOut',
-        });
-
-        const rim = this.add.graphics().setDepth(wall.image.depth + 0.06);
-        rim.lineStyle(1, 0xffe5a8, 0.18);
-        rim.strokePoints([
-          new Phaser.Geom.Point(photoCorners.topLeft.x, photoCorners.topLeft.y),
-          new Phaser.Geom.Point(photoCorners.topRight.x, photoCorners.topRight.y),
-          new Phaser.Geom.Point(photoCorners.bottomRight.x, photoCorners.bottomRight.y),
-          new Phaser.Geom.Point(photoCorners.bottomLeft.x, photoCorners.bottomLeft.y),
-        ], true);
-        rim.setBlendMode(Phaser.BlendModes.ADD);
-      }
     }
 
     if (desk) {
@@ -2736,6 +2689,16 @@ export class LocationScene extends Phaser.Scene {
     }
     document.body.dataset.pcPowered = 'true';
     document.body.dataset.roomPhotoComplete = 'true';
+  }
+
+  private playViolinMotif(fragment: readonly MotifNote[], volume: number): void {
+    fragment.forEach((note) => {
+      const pitch = getPitch(note.pitchId);
+      if (!pitch) return;
+      this.time.delayedCall(note.delayMs, () => {
+        playViolinNote(pitch.frequency, note.durationMs, { volume });
+      });
+    });
   }
 
   private startStoryAudioCues(): void {
@@ -2799,11 +2762,11 @@ export class LocationScene extends Phaser.Scene {
     createViolinInvitationSchedule().forEach((note) =>
       scheduleNote(note.pitchId, note.durationMs, violinDelayMs + note.atMs, emitNote),
     );
-    // The first pass ends at 1.5s + its 650ms final note. Let that final tone
-    // breathe for a fraction of a beat, then have ____ react without requiring
-    // the player to touch the violin. Any scheduled repeat is cancelled here.
+    // Let the exact refrain fragment's final tone breathe for a fraction of a
+    // beat, then have ____ react without requiring the player to touch the
+    // violin. Any scheduled repeat is cancelled here.
     this.violinCueTimers.push(
-      this.time.delayedCall(violinDelayMs + 2270, () => {
+      this.time.delayedCall(violinDelayMs + VIOLIN_INVITATION_DURATION_MS + 320, () => {
         void this.acknowledgeViolinCall();
       }),
     );
@@ -5011,6 +4974,9 @@ export class LocationScene extends Phaser.Scene {
         // the stand — before the reward letter and any travel. Gated internally
         // on the final unlock, so only the run-completing keepsake triggers it.
         this.applyInteriorAwakening({ animate: true });
+        if (completedActivityId === VIOLIN_ACTIVITY_ID) {
+          this.playViolinMotif(AWAKENING_FRAGMENT, 0.36);
+        }
 
         if (this.location.rewardSheetMusic) {
           await showSheetMusicModal(this.location.rewardSheetMusic);

@@ -106,8 +106,8 @@ const NOTE_RIGHT_LOCAL = 198;
 const GRAPH_TOP_LOCAL = -52; // paper-local Y of the highest pitch (B4).
 const GRAPH_BOTTOM_LOCAL = 30; // paper-local Y of the lowest pitch (D4).
 const GRAPH_AXIS_LOCAL = 52; // the time axis, just below the lowest pitch.
-const GRAPH_STEP_MIN = -1;
-const GRAPH_STEP_MAX = 4;
+const GRAPH_STEP_MIN = 0;
+const GRAPH_STEP_MAX = 5;
 // Practice scroll speed (paper-local px per ms) and how long a played note
 // lingers before it scrolls off the left edge and fades out.
 const PRACTICE_SCROLL_PX_PER_MS = 0.075;
@@ -442,7 +442,7 @@ export class ViolinScene extends Phaser.Scene {
           playViolinNote(pitch.frequency, 640);
           this.glowStrength = 1;
           // Timestamp on the clamped practice clock so the scroll math matches.
-          this.practiceHits.push({ step: pitch.staffStep, t: this.practiceClock });
+          this.practiceHits.push({ step: pitch.graphStep, t: this.practiceClock });
           if (this.practiceHits.length > 240) {
             this.practiceHits.shift();
           }
@@ -1100,6 +1100,23 @@ export class ViolinScene extends Phaser.Scene {
     g.lineBetween(cx + 8, this.staffLineLocalY(0) - 8, cx + 8, this.staffLineLocalY(4) + 10);
   }
 
+  /** Compact hand-inked sharp sign for the one chromatic pitch in the supplied
+   * refrain. Kept in Graphics with the noteheads so it lights and fades as one
+   * mark instead of introducing a separately managed text object per note. */
+  private drawSharpAccidental(
+    g: Phaser.GameObjects.Graphics,
+    x: number,
+    y: number,
+    isLit: boolean,
+  ): void {
+    const color = isLit ? mixHex(NOTE_LIT, 0xffe6a6, 0.3) : INK;
+    g.lineStyle(1.35, color, isLit ? 0.95 : 0.65);
+    g.lineBetween(x - 2.5, y - 8, x - 2.5, y + 8);
+    g.lineBetween(x + 2.5, y - 9, x + 2.5, y + 7);
+    g.lineBetween(x - 6, y - 2, x + 6, y - 4);
+    g.lineBetween(x - 6, y + 4, x + 6, y + 2);
+  }
+
   private currentNoteMarks(phrase: ViolinPhrase): NoteMark[] {
     const marks: NoteMark[] = [];
     const span = NOTE_RIGHT_LOCAL - NOTE_LEFT_LOCAL;
@@ -1156,6 +1173,10 @@ export class ViolinScene extends Phaser.Scene {
       const cy = mark.y + jy;
 
       const ember = this.emberLevels[index] ?? 0;
+
+      if (pitch?.accidental === 'sharp') {
+        this.drawSharpAccidental(g, cx - 14, cy, isLit);
+      }
 
       if (isLit) {
         // Warm glow bloom + soft outer halo, richer with the fresh-ring pulse
@@ -1317,7 +1338,7 @@ export class ViolinScene extends Phaser.Scene {
     const pts = phrase.notes.map((note, i) => {
       const pitch = getPitch(note.pitchId);
       const x = NOTE_LEFT_LOCAL + (span * (i + 0.5)) / count;
-      return { x, y: this.graphY(pitch ? pitch.staffStep : 0) };
+      return { x, y: this.graphY(pitch ? pitch.graphStep : GRAPH_STEP_MIN) };
     });
 
     this.drawGraphAxis(g);

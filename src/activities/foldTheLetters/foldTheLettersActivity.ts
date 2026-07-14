@@ -33,6 +33,7 @@ import { FoldStage } from './foldStage';
 import { createActivityCloseButton } from '../activityShell';
 import { isImageUrl } from '../../game/assetProbe';
 import { getUiRoot } from '../../ui/domRoot';
+import { getPitch, VIOLIN_SHEET_ROLL_MOTIF } from '../violin/melody';
 import './foldTheLetters.css';
 
 const CLOSE_ART_URL = '/assets/activities/fold-the-letters/close-x.png';
@@ -81,9 +82,10 @@ const TEST_TIMING: FoldTiming = {
   sailIntroMs: 40,
 };
 
-// The notes of ____'s piece, plucked one by one as the sheet music rolls. A
-// warm ascending D-major motif; reused through the violin note synth.
-const ROLL_NOTE_FREQS = [293.66, 440, 587.33, 739.99, 880, 1108.73];
+// The opening of the real piece, plucked one note per threshold while ____'s
+// completed score rolls into the lantern. Resolve from the shared pitch table so
+// the minigame and this callback can never drift into different arrangements.
+const ROLL_NOTE_PITCH_IDS = VIOLIN_SHEET_ROLL_MOTIF.map((note) => note.pitchId);
 
 // Keyboard-assist gesture sizes (accessibility + deterministic driving).
 const KEY_HOIST_STEP = 0.34;
@@ -365,8 +367,11 @@ export const foldTheLettersActivity: ActivityModule = {
       // Pluck the notes of the piece, one per threshold crossed.
       const reached = rollNoteIndex(state);
       while (lastNoteSounded < reached) {
-        const freq = ROLL_NOTE_FREQS[lastNoteSounded % ROLL_NOTE_FREQS.length];
-        playViolinNote(freq, 520, { volume: 0.5 });
+        const pitchId = ROLL_NOTE_PITCH_IDS[lastNoteSounded % ROLL_NOTE_PITCH_IDS.length];
+        const pitch = getPitch(pitchId);
+        if (pitch) {
+          playViolinNote(pitch.frequency, 520, { volume: 0.5 });
+        }
         lastNoteSounded += 1;
       }
       afterGesture();

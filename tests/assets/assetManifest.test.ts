@@ -72,7 +72,7 @@ describe('assetManifest', () => {
       'public/assets/sprites/characters/friendtwo-idle-walk-south-v2-alpha.png',
     );
     expect(getManifestAsset('character-friendone-walk-4dir').notes).toContain(
-      'public/assets/sprites/characters/friendone-idle-walk-4dir-v8-light-brown-alpha.png',
+      'public/assets/sprites/characters/friendone-idle-walk-4dir-v9-light-brown-face-fixed-alpha.png',
     );
   });
 

@@ -23,11 +23,6 @@ export interface EpiloguePoint {
   readonly y: number;
 }
 
-export interface EpilogueSegment {
-  readonly start: EpiloguePoint;
-  readonly end: EpiloguePoint;
-}
-
 export interface EpilogueQuad {
   readonly topLeft: EpiloguePoint;
   readonly topRight: EpiloguePoint;
@@ -48,7 +43,6 @@ export const EPILOGUE_WALL_SHEAR = 0.5;
 export const EPILOGUE_PHOTO_MASTER_CROP = { x: 0, y: 1, width: 480, height: 616 } as const;
 export const EPILOGUE_SHEARED_PHOTO_TEXTURE_KEY =
   'story-epilogue-boat-photo-wall-sheared';
-export const EPILOGUE_HIGH_WINDOW_SOURCE_SIZE = { width: 171, height: 243 } as const;
 
 export const BOAT_PHOTO_FRAME_PIXELS = {
   x: 146,
@@ -134,71 +128,6 @@ export function resolveEpiloguePhotoPlacement(bounds: EpilogueBounds): EpilogueP
     displayHeight: maxY - minY,
     corners,
   };
-}
-
-export function resolveShearedWindowSill(
-  bounds: EpilogueBounds,
-  slope: number,
-): EpilogueSegment {
-  const source = EPILOGUE_HIGH_WINDOW_SOURCE_SIZE;
-  const scale = bounds.width / source.width;
-  const toScreen = (point: EpiloguePoint): EpiloguePoint => ({
-    x: bounds.x + point.x * scale,
-    y: bounds.y + point.y * scale,
-  });
-  const left = shearPoint({ x: source.width * 0.36, y: source.height }, slope, source.width);
-  const right = shearPoint({ x: source.width * 0.64, y: source.height }, slope, source.width);
-  return { start: toScreen(left), end: toScreen(right) };
-}
-
-/** A beam mouth set inside the lower-right glass, not on or beyond the sill. */
-export function resolveShearedWindowLightOpening(
-  bounds: EpilogueBounds,
-  slope: number,
-): EpilogueSegment {
-  const source = EPILOGUE_HIGH_WINDOW_SOURCE_SIZE;
-  const scale = bounds.width / source.width;
-  const toScreen = (point: EpiloguePoint): EpiloguePoint => ({
-    x: bounds.x + point.x * scale,
-    y: bounds.y + point.y * scale,
-  });
-  const glassY = source.height * 0.58;
-  const inner = shearPoint({ x: source.width * 0.44, y: glassY }, slope, source.width);
-  const outer = shearPoint({ x: source.width * 0.78, y: glassY }, slope, source.width);
-  return { start: toScreen(inner), end: toScreen(outer) };
-}
-
-function scaleSegment(segment: EpilogueSegment, amount: number): EpilogueSegment {
-  const center = {
-    x: (segment.start.x + segment.end.x) / 2,
-    y: (segment.start.y + segment.end.y) / 2,
-  };
-  const scalePoint = (point: EpiloguePoint): EpiloguePoint => ({
-    x: center.x + (point.x - center.x) * amount,
-    y: center.y + (point.y - center.y) * amount,
-  });
-  return { start: scalePoint(segment.start), end: scalePoint(segment.end) };
-}
-
-export function resolveEpilogueBeamBands(
-  source: EpilogueSegment,
-  photoCorners: EpilogueQuad,
-): readonly { source: EpilogueSegment; target: EpilogueSegment }[] {
-  const target: EpilogueSegment = {
-    start: {
-      x: (photoCorners.topLeft.x + photoCorners.bottomLeft.x) / 2,
-      y: (photoCorners.topLeft.y + photoCorners.bottomLeft.y) / 2,
-    },
-    end: {
-      x: (photoCorners.topRight.x + photoCorners.bottomRight.x) / 2,
-      y: (photoCorners.topRight.y + photoCorners.bottomRight.y) / 2,
-    },
-  };
-  return [
-    { source: scaleSegment(source, 0.55), target: scaleSegment(target, 2.4) },
-    { source: scaleSegment(source, 0.36), target: scaleSegment(target, 1.55) },
-    { source: scaleSegment(source, 0.18), target: scaleSegment(target, 0.8) },
-  ];
 }
 
 export function resolveEpilogueRoomAnchors<T extends EpiloguePlacement>(

@@ -116,6 +116,7 @@ export function finaleTimeline(): FinaleNote[] {
   let t = FINALE_LEAD_IN_MS;
   VIOLIN_PHRASES.forEach((phrase, phraseIndex) => {
     phrase.notes.forEach((note, noteIndex) => {
+      t += note.delayBeforeMs ?? 0;
       out.push({
         phraseIndex,
         noteIndex,
@@ -164,7 +165,10 @@ export function noteStartMs(
 ): number {
   let total = 0;
   for (let i = 0; i < index && i < phrase.notes.length; i += 1) {
-    total += phrase.notes[i].durationMs / tempoScale;
+    total += ((phrase.notes[i].delayBeforeMs ?? 0) + phrase.notes[i].durationMs) / tempoScale;
+  }
+  if (index < phrase.notes.length) {
+    total += (phrase.notes[index].delayBeforeMs ?? 0) / tempoScale;
   }
   return total;
 }

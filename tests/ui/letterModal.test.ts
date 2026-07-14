@@ -64,6 +64,7 @@ describe('createSheetMusicModal', () => {
     );
     expect(image?.getAttribute('alt')).toBe('____’s handwritten sheet music');
     expect(modal.querySelector('.letter-modal__text')).toBeNull();
+    expect(modal.querySelector('.sheet-music-modal__action')?.textContent).toBe('Continue');
 
     modal.querySelector<HTMLButtonElement>('.letter-modal__action')?.click();
     expect(onAction).toHaveBeenCalledOnce();

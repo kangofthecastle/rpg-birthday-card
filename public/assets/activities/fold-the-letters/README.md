@@ -2,8 +2,7 @@
 
 The ritual draws its three boat pieces procedurally by default. Drop any of the
 PNGs below in here and they are picked up automatically (file-first probe via
-`isImageUrl`) with **zero code changes** — both in the fold stage's boat tray and
-in the sail-away cinematic. Each piece is a SEPARATE transparent PNG that
+`isImageUrl`) with **zero code changes** in the fold stage's boat tray. Each piece is a SEPARATE transparent PNG that
 composites with the others; there is no single monolithic boat sprite.
 
 ## Pieces
@@ -13,7 +12,7 @@ composites with the others; there is no single monolithic boat sprite.
 | `hull.png` | The boat hull (____'s letter), folded flat. Sits on the waterline. | 264×88 (2×) | 132×44 | tray `(0, −16)`, centred |
 | `sail.png` | The sail (____'s letter) on its mast. Its baked-in mast foot seats DOWN into the hull deck well. | 152×156 (2×) | 76×78 | tray `(2, −43)`, centred |
 | `lantern.png` | The paper lantern (____'s sheet music), glowing. Its top handle loop rests ON the bow tip (the horn threads the loop); the body hangs just below/outboard. Author the handle loop near the top-centre of the PNG. | 60×80 (2×) | 30×40 | tray `(−43, −15)`, centred |
-| `recipient-boat.png` | OPTIONAL. ____ sitting in the finished boat, used only in the sail-away cinematic as an overlay rider. | 240×180 | fits `.fold-sail__boat` (120×90) | rider slot |
+| `recipient-boat.png` | OPTIONAL. ____ sitting in the finished boat on the live canvas. | 240×180 | stage-scaled | rider slot |
 | `backdrop.png` | OPTIONAL. Full-canvas painted stage backdrop (twilight table + water). Drawn under everything, replacing the flat gradient; opaque. Its **waterline must sit at pixel y=704** (= logical y=352 = the tray waterline) so the boat floats on the paint. When present the tray's translucent navy water band is skipped. | 1280×800 (2×) | fills the 640×400 canvas | full canvas, `(0,0)` |
 
 ## Hoist-stage art (the sail being raised)
@@ -62,12 +61,12 @@ it visibly halves and mirrors as the paper folds.
   authored to meet the hull deck; the lantern hangs from the bow (left) horn tip
   by its own handle loop — no drawn hook arm.
 
-## Sail-away cinematic
+## Completion handoff
 
-The cinematic composites the SAME `hull.png` / `sail.png` / `lantern.png` as
-`<img>` layers (falling back to the CSS shapes when a file is absent), plus the
-optional `recipient-boat.png` rider overlay. Keep the three pieces readable at small
-size — the boat scales down as it drifts out to sea.
+The assembled boat remains on the live fold canvas during the short water-lap
+beat. There is deliberately no full-screen sail-away still or persistent DOM
+bridge; the activity closes normally in card mode and story mode owns the later
+arrival sequence.
 
 ## Audio
 

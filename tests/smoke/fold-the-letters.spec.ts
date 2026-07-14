@@ -119,7 +119,6 @@ test('makes the boat with real gestures and arrives at the lantern clearing WITH
   for (let i = 0; i < 80; i += 1) {
     if ((await panel.count()) === 0) break;
     if ((await attr('data-ritual-complete')) === '1') break;
-    if ((await page.locator('[data-fold-sail]').count()) > 0) break;
     const verb = await attr('data-fold-verb');
     if (verb === 'fold') {
       // A continuous drag that carries the flap past the commit threshold; the
@@ -211,4 +210,24 @@ test('folds the boat via the test-mode skip and arrives at the lantern clearing'
   });
   // The arrival frame-sequence transition auto-plays on landing.
   await expect(page.locator('[data-ending-frames]')).toBeVisible({ timeout: 15000 });
+});
+
+test('returns to the clearing after Boatigami in card mode without a persistent still', async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  await page.goto('/?testMode=1&cardMode=1&locationId=clearing&spawnId=start');
+  const canvas = page.locator('canvas').first();
+  await expect(canvas).toBeVisible();
+  await canvas.click();
+  await walkToShore(page);
+
+  await page.getByRole('button', { name: 'Fold the boat' }).click();
+
+  await expect(page.getByRole('dialog', { name: 'fold' })).toHaveCount(0, {
+    timeout: 5000,
+  });
+  await expect(page.locator('body')).toHaveAttribute('data-location-id', 'clearing');
+  await expect(page.locator('[data-ending-bridge]')).toHaveCount(0);
+  await expect(canvas).toBeVisible();
 });

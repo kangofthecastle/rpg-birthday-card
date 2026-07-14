@@ -262,7 +262,8 @@ export class BootScene extends Phaser.Scene {
   private startWorld(): void {
     const params = new URLSearchParams(window.location.search);
     const testMode = params.get('testMode') === '1';
-    const cardMode = !testMode && getLaunchMode() === 'cards';
+    const cardMode = (!testMode && getLaunchMode() === 'cards') ||
+      (testMode && params.get('cardMode') === '1');
     const locationId = testMode ? params.get('locationId') ?? 'recipient-house' : 'recipient-house';
     const spawnId = testMode
       ? params.get('spawnId') ?? 'front-door'
@@ -273,7 +274,7 @@ export class BootScene extends Phaser.Scene {
     // testMode-only: seed collected keepsakes so a smoke can start from a
     // realistic mid/late-run state (e.g. the clearing already unlocked).
     const seedParam = testMode ? params.get('seedKeepsakes') : null;
-    let state: RunState | undefined = cardMode ? createCardModeRunState() : undefined;
+    let state: RunState | undefined = cardMode ? createCardModeRunState(locationId) : undefined;
     if (seedParam) {
       const ids =
         seedParam === 'all'

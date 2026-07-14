@@ -2,6 +2,7 @@ import type { ActivityModule } from '../activityTypes';
 import { addKeyboardActivation } from '../activityDom';
 import { createActivityCloseButton } from '../activityShell';
 import type { ViolinSceneCallbacks } from './ViolinScene';
+import { VIOLIN_KEY_HINT } from './melody';
 import { createViolinModes, type ViolinModes } from './violinModes';
 import './violin.css';
 
@@ -76,7 +77,7 @@ export function createViolinActivity(
           <div class="activity-shell__viewport">
             <div class="violin-game__host" data-violin-host></div>
           </div>
-          <p class="activity-shell__controls">Echo the melody back on A S D F G H · modes at the top · Esc to leave</p>
+          <p class="activity-shell__controls">Echo the melody back on ${VIOLIN_KEY_HINT} · modes at the top · Esc to leave</p>
           ${
             testMode
               ? '<div class="activity-shell__actions"><button type="button" data-violin-test-complete>Finish the piece</button></div>'

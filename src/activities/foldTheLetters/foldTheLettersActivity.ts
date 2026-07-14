@@ -31,19 +31,10 @@ import {
 } from './foldModel';
 import { FoldStage } from './foldStage';
 import { createActivityCloseButton } from '../activityShell';
-import { isImageUrl } from '../../game/assetProbe';
-import { getUiRoot } from '../../ui/domRoot';
 import { getPitch, VIOLIN_SHEET_ROLL_MOTIF } from '../violin/melody';
 import './foldTheLetters.css';
 
 const CLOSE_ART_URL = '/assets/activities/fold-the-letters/close-x.png';
-
-// Optional full-scene backdrop for the sail-away cinematic. File-first: when
-// present it cross-fades in over the composited boat as the drift begins and
-// holds through the travel. Absent → the procedural water/petals scene alone.
-const SAIL_AWAY_KEY_ART_URL = '/assets/activities/fold-the-letters/sail-away-key-art.png';
-let sailAwayKeyArtUrl: string | undefined;
-let sailAwayKeyArtProbed = false;
 
 /**
  * The keepsake ritual at the clearing shore. ____ makes a paper boat from her
@@ -58,9 +49,6 @@ interface FoldTiming {
   readonly assembledHoldMs: number;
   readonly expandMs: number;
   readonly sailAwayMs: number;
-  /** Cross-fade of the sail-away key art in over the fold stage. Single source
-   *  for the bridge's key-art opacity transition (set inline from here). */
-  readonly keyArtFadeMs: number;
   /** The folded-triangle → mast bridge after the sail fold commits (Change 2). In
    *  the same family as the hand-downs; fast path in test timing. */
   readonly sailIntroMs: number;
@@ -70,7 +58,6 @@ const REAL_TIMING: FoldTiming = {
   assembledHoldMs: 1000,
   expandMs: 1200,
   sailAwayMs: 7000,
-  keyArtFadeMs: 2600,
   sailIntroMs: 750,
 };
 
@@ -78,7 +65,6 @@ const TEST_TIMING: FoldTiming = {
   assembledHoldMs: 40,
   expandMs: 40,
   sailAwayMs: 80,
-  keyArtFadeMs: 40,
   sailIntroMs: 40,
 };
 
@@ -110,8 +96,11 @@ function wait(ms: number): Promise<void> {
 export const foldTheLettersActivity: ActivityModule = {
   id: 'fold-the-letters',
   title: 'fold',
-  async start({ mount, onCancel, onComplete }) {
+  async start({ state: runState, mount, onCancel, onComplete }) {
     const timing = isTestMode() || prefersReducedMotion() ? TEST_TIMING : REAL_TIMING;
+    const sailAwayMs = runState.mode === 'cards'
+      ? Math.min(timing.sailAwayMs, 900)
+      : timing.sailAwayMs;
 
     mount.innerHTML = `
       <section class="activity-panel activity-shell activity-shell--fold" role="dialog" aria-label="fold" data-fold-panel>
@@ -515,51 +504,20 @@ export const foldTheLettersActivity: ActivityModule = {
         return;
       }
 
-      if (!sailAwayKeyArtProbed) {
-        sailAwayKeyArtProbed = true;
-        sailAwayKeyArtUrl = (await isImageUrl(SAIL_AWAY_KEY_ART_URL))
-          ? SAIL_AWAY_KEY_ART_URL
-          : undefined;
-        if (finished) {
-          return;
-        }
-      }
-      // The fold stage dissolves DIRECTLY into the sail-away key art — the
-      // painting's boat IS the boat, so there is no composited DOM boat and no
-      // gradient starfield here. The bridge mounts on the persistent UI root (NOT
-      // this activity's mount) so it survives the mount teardown + scene restart
-      // into final-spot and covers the swap: the live scene is never exposed
-      // before the ending frame sequence, which removes the bridge once its own
-      // key-art layer is up.
-      const bridge = buildSailAwayBridge(sailAwayKeyArtUrl, timing.keyArtFadeMs);
-      if (bridge) {
-        getUiRoot().append(bridge);
-        void bridge.offsetWidth;
-        bridge.classList.add('fold-sail--go');
-        // Fade the fold modal chrome AND its canvas (the assembled boat is drawn
-        // on that canvas, inside the panel) out in lockstep with the key art
-        // fading IN — same duration/easing — so the painting REPLACES the modal
-        // rather than blending through it, and there is never a second boat under
-        // the transparent-host bridge. Disable + hide the buttons first so a ghost
-        // Cancel/Fold can't be clicked as the panel recedes.
-        // Non-null: the mount guard above throws if either is missing (asserted
-        // here because sailAway is a hoisted declaration, so TS widens them back).
-        const foldPanel = panel!;
-        const foldCancel = cancelButton!;
-        foldCancel.disabled = true;
-        const testCompleteButton = mount.querySelector<HTMLButtonElement>('[data-fold-test-complete]');
-        if (testCompleteButton) {
-          testCompleteButton.disabled = true;
-        }
-        foldPanel.style.pointerEvents = 'none';
-        foldPanel.style.transition = `opacity ${timing.keyArtFadeMs}ms ease`;
-        void foldPanel.offsetWidth;
-        foldPanel.style.opacity = '0';
+      // Keep the assembled boat on the live fold canvas through the short drift.
+      // The former full-screen sail-away still was mounted outside this activity
+      // as a persistent bridge. Cards mode never enters the ending sequence that
+      // removed it, so the image covered the game forever. Completion now stays
+      // self-contained: the activity host removes this mount in every run mode.
+      cancelButton!.disabled = true;
+      const testCompleteButton = mount.querySelector<HTMLButtonElement>('[data-fold-test-complete]');
+      if (testCompleteButton) {
+        testCompleteButton.disabled = true;
       }
       playSfx('sfx-water-lap');
-      await wait(timing.sailAwayMs / 2);
+      await wait(sailAwayMs / 2);
       playSfx('sfx-water-lap');
-      await wait(timing.sailAwayMs / 2);
+      await wait(sailAwayMs / 2);
       complete();
     }
 
@@ -590,43 +548,3 @@ export const foldTheLettersActivity: ActivityModule = {
     showComponent();
   },
 };
-
-// The sail-away bridge: the fold stage dissolving into the full-scene key art
-// (the painting's boat IS the boat — no composited DOM boat, no gradient sky/
-// water). Drifting petals ride over it. Transparent host so the fold stage shows
-// through as the painting cross-fades in. Mounted on the persistent UI root so it
-// holds unbroken across the scene swap into the ending frame sequence, which
-// finds it by `data-ending-bridge` and removes it once its own key-art layer is
-// up. Absent art → no bridge (graceful degrade).
-function buildSailAwayBridge(
-  keyArtUrl: string | undefined,
-  keyArtFadeMs: number,
-): HTMLElement | null {
-  if (!keyArtUrl) {
-    return null;
-  }
-  const stage = document.createElement('div');
-  stage.className = 'fold-sail';
-  stage.dataset.foldSail = '';
-  stage.dataset.endingBridge = '';
-  stage.setAttribute('aria-hidden', 'true');
-
-  const keyart = document.createElement('img');
-  keyart.className = 'fold-sail__keyart';
-  keyart.src = keyArtUrl;
-  keyart.alt = '';
-  // Single-source transition: duration from FoldTiming.keyArtFadeMs, not a
-  // hand-synced value in the CSS.
-  keyart.style.transition = `opacity ${keyArtFadeMs}ms ease`;
-
-  const petals = document.createElement('div');
-  petals.className = 'fold-sail__petals';
-  for (let i = 0; i < 7; i += 1) {
-    const petal = document.createElement('span');
-    petal.className = `fold-sail__petal fold-sail__petal--${i}`;
-    petals.append(petal);
-  }
-
-  stage.append(keyart, petals);
-  return stage;
-}

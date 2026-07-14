@@ -77,22 +77,48 @@ function handoffToNextEcho(state: ViolinState): ViolinState {
 }
 
 describe('melody data', () => {
-  it('transcribes the four playable refrain measures from the supplied score', () => {
+  it('transcribes measures 1–9 from the supplied score in short musical phrases', () => {
     expect(VIOLIN_PHRASES.map((phrase) => phrase.notes.map((note) => note.pitchId))).toEqual([
-      ['a4', 'gs4', 'a4', 'b4', 'c5', 'b4', 'a4', 'c5'],
-      ['b4', 'a4', 'g4', 'a4', 'b4', 'b4', 'c5'],
-      ['d5', 'c5', 'b4', 'c5', 'd5', 'c5', 'b4', 'd5'],
-      ['c5', 'b4', 'a4', 'b4', 'c5'],
+      ['a4', 'g4'],
+      ['f4', 'g4', 'a4', 'bb4'],
+      ['c5', 'a4', 'g4', 'f4'],
+      ['e4', 'd4', 'e4', 'f4'],
+      ['c4', 'd4', 'c4', 'bb3'],
+      ['a3', 'c4', 'f4', 'a4'],
+      ['g4', 'fs4', 'g4', 'd4'],
+      ['f4', 'e4', 'e4', 'f4'],
+      ['g4', 'a4', 'g4'],
+      ['f4', 'g4', 'a4', 'bb4'],
+      ['c5', 'a4', 'g4', 'f4'],
+      ['e4', 'd4', 'e4', 'f4'],
+      ['c4', 'd4', 'c4', 'bb3'],
+      ['a3', 'c4', 'f4', 'a4'],
+      ['g4', 'fs4', 'g4', 'bb4', 'e4'],
+      ['f4', 'e4', 'e4'],
     ]);
 
-    const { dottedEighth, sixteenth, quarter, tripletEighth } = VIOLIN_RHYTHM_MS;
+    const { dottedEighth, dottedHalf, sixteenth, quarter, tripletEighth } =
+      VIOLIN_RHYTHM_MS;
     expect(VIOLIN_PHRASES.map((phrase) => phrase.notes.map((note) => note.durationMs))).toEqual([
-      [dottedEighth, sixteenth, dottedEighth, sixteenth, dottedEighth, sixteenth, dottedEighth, sixteenth],
-      [dottedEighth, sixteenth, dottedEighth, sixteenth, quarter, tripletEighth, tripletEighth],
-      [dottedEighth, sixteenth, dottedEighth, sixteenth, dottedEighth, sixteenth, dottedEighth, sixteenth],
-      [dottedEighth, sixteenth, dottedEighth, sixteenth, quarter],
+      [dottedEighth, sixteenth],
+      [dottedEighth, sixteenth, dottedEighth, sixteenth],
+      [quarter, tripletEighth, tripletEighth, tripletEighth],
+      [dottedEighth, sixteenth, dottedEighth, sixteenth],
+      [quarter, tripletEighth, tripletEighth, tripletEighth],
+      [dottedEighth, sixteenth, dottedEighth, sixteenth],
+      [dottedEighth, sixteenth, dottedEighth, sixteenth],
+      [dottedEighth, sixteenth, dottedEighth, sixteenth],
+      [quarter, dottedEighth, sixteenth],
+      [dottedEighth, sixteenth, dottedEighth, sixteenth],
+      [quarter, tripletEighth, tripletEighth, tripletEighth],
+      [dottedEighth, sixteenth, dottedEighth, sixteenth],
+      [quarter, tripletEighth, tripletEighth, tripletEighth],
+      [dottedEighth, sixteenth, dottedEighth, sixteenth],
+      [tripletEighth, tripletEighth, tripletEighth, dottedEighth, sixteenth],
+      [dottedHalf, dottedEighth, sixteenth],
     ]);
-    expect(VIOLIN_PHRASES[1].notes[5].delayBeforeMs).toBe(tripletEighth);
+    expect(VIOLIN_PHRASES.every((phrase) => phrase.notes.length <= 6)).toBe(true);
+    expect(VIOLIN_PHRASES.every((phrase) => phrase.notes.length >= 2)).toBe(true);
   });
 
   it('maps every pitch to a unique key and every note to a known pitch', () => {
@@ -107,16 +133,18 @@ describe('melody data', () => {
 
   it('looks pitches up by key case-insensitively and rejects unmapped keys', () => {
     expect(getPitchByKey('a')?.key).toBe('A');
-    expect(getPitchByKey(' h ')?.key).toBe('H');
+    expect(getPitchByKey(" ' ")?.id).toBe('c5');
     expect(getPitchByKey('Z')).toBeUndefined();
   });
 
-  it('distinguishes the refrain\'s G-natural and G-sharp in notation and graph data', () => {
-    const natural = getPitch('g4');
-    const sharp = getPitch('gs4');
+  it('distinguishes the passage\'s flats and F-sharp in notation and graph data', () => {
+    const natural = getPitch('f4');
+    const sharp = getPitch('fs4');
     expect(sharp?.staffStep).toBe(natural?.staffStep);
     expect(sharp?.graphStep).toBeGreaterThan(natural?.graphStep ?? -1);
     expect(sharp?.accidental).toBe('sharp');
+    expect(getPitch('bb3')?.accidental).toBe('flat');
+    expect(getPitch('bb4')?.accidental).toBe('flat');
   });
 });
 
@@ -131,7 +159,7 @@ describe('violinModel — playback', () => {
   });
 
   it('lights notes one by one as playback time elapses', () => {
-    const phrase = VIOLIN_PHRASES[0];
+    const phrase = VIOLIN_PHRASES[1];
     // Between the second and third note's start times → first two lit.
     const midSecondNoteMs = phrase.notes[0].durationMs + 10;
     expect(playbackLitCount(phrase, midSecondNoteMs, 1)).toBe(2);
@@ -141,12 +169,11 @@ describe('violinModel — playback', () => {
     expect(playbackLitCount(phrase, thirdStart, 1)).toBe(3);
   });
 
-  it('preserves the printed triplet rest before phrase two closes', () => {
-    const phrase = VIOLIN_PHRASES[1];
-    const beforeRest = phrase.notes.slice(0, 5).reduce((sum, note) => sum + note.durationMs, 0);
-    expect(noteStartMs(phrase, 5, 1)).toBe(beforeRest + VIOLIN_RHYTHM_MS.tripletEighth);
-    expect(playbackLitCount(phrase, beforeRest, 1)).toBe(5);
-    expect(playbackLitCount(phrase, beforeRest + VIOLIN_RHYTHM_MS.tripletEighth, 1)).toBe(6);
+  it('preserves the printed dotted-half sustain in measure 9', () => {
+    const phrase = VIOLIN_PHRASES.at(-1)!;
+    expect(noteStartMs(phrase, 1, 1)).toBe(VIOLIN_RHYTHM_MS.dottedHalf);
+    expect(playbackLitCount(phrase, VIOLIN_RHYTHM_MS.dottedHalf - 1, 1)).toBe(1);
+    expect(playbackLitCount(phrase, VIOLIN_RHYTHM_MS.dottedHalf, 1)).toBe(2);
   });
 
   it('opens the echo once playback (plus its tail) has elapsed', () => {

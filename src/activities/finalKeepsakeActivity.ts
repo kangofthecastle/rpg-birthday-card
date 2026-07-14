@@ -134,13 +134,12 @@ export const finalKeepsakeActivity: ActivityModule = {
     // The ending swell + bed rise as the drift begins.
     playMusic('music-ending', { fadeMs: isTestMode() ? 200 : 3200 });
 
-    // Water-arrival comes up fully opaque before the preceding sail-away bridge
-    // is removed, giving a clean cut with no exposed live-scene frame. Pin this
-    // opening frame while later frames retain their gentle drift.
+    // Pin the water-arrival opening frame while later frames retain their gentle
+    // drift. Boatigami now hands off directly without a persistent still-image
+    // bridge, so this activity owns the complete arrival presentation.
     frame(0).style.animation = 'none';
     frame(0).style.opacity = '1';
     void frame(0).offsetWidth;
-    document.querySelector('[data-ending-bridge]')?.remove();
 
     appearBoat();
 

@@ -33,7 +33,7 @@ export const AWAKENING_FRAGMENT: readonly MotifNote[] = motifFrom(
   VIOLIN_THEME_MOTIF.slice(0, 3),
 );
 
-/** The violin calls from the stand with the supplied refrain's opening figure. */
+/** The violin calls from the stand with the supplied passage's opening figure. */
 export const VIOLIN_INVITATION_FRAGMENT: readonly MotifNote[] = motifFrom(VIOLIN_THEME_MOTIF);
 
 export const VIOLIN_INVITATION_DURATION_MS = VIOLIN_INVITATION_FRAGMENT.reduce(

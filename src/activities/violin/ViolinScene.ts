@@ -102,12 +102,12 @@ const NOTE_RIGHT_LOCAL = 198;
 // same parchment sheet as the staff, but drops the five staff lines, the clef
 // and every note letter: pitch is read purely as HEIGHT on the page. Higher
 // pitch sits higher; a faint time axis runs along the bottom. Steps span the
-// refrain's compact chromatic range G4(0)..D5(5).
-const GRAPH_TOP_LOCAL = -52; // paper-local Y of the highest pitch (D5).
-const GRAPH_BOTTOM_LOCAL = 30; // paper-local Y of the lowest pitch (G4).
+// selected passage's chromatic range A3(0)..C5(10).
+const GRAPH_TOP_LOCAL = -52; // paper-local Y of the highest pitch (C5).
+const GRAPH_BOTTOM_LOCAL = 30; // paper-local Y of the lowest pitch (A3).
 const GRAPH_AXIS_LOCAL = 52; // the time axis, just below the lowest pitch.
 const GRAPH_STEP_MIN = 0;
-const GRAPH_STEP_MAX = 5;
+const GRAPH_STEP_MAX = 10;
 // Practice scroll speed (paper-local px per ms) and how long a played note
 // lingers before it scrolls off the left edge and fades out.
 const PRACTICE_SCROLL_PX_PER_MS = 0.075;
@@ -122,9 +122,8 @@ const CAPTION_TEXT = 'Follow the light';
 const CAPTION_FADE_MS = 1400;
 const CAPTION_HOLD_MS = 1800;
 
-// Warm base wall colours, one rung per phrase advance (index 0 = first phrase).
-// The wall is baked once at the coolest rung; this array's length also drives
-// the warmStage clamp the transition logic keys off, so it stays 5 long.
+// Warm base wall colours. The sixteen short echo phrases are projected across
+// these five visual rungs so the room keeps warming through the whole passage.
 const WARM_STAGES = [0x241c2b, 0x33232e, 0x45302f, 0x5a3a2e, 0x6f4529] as const;
 
 // Warm ink / light palette for the note choreography.
@@ -481,7 +480,11 @@ export class ViolinScene extends Phaser.Scene {
     const keyboard = this.input.keyboard;
     if (keyboard) {
       VIOLIN_PITCHES.forEach((pitch) => {
-        const key = keyboard.addKey(pitch.key, false);
+        const keyCode =
+          Phaser.Input.Keyboard.KeyCodes[
+            pitch.inputCode as keyof typeof Phaser.Input.Keyboard.KeyCodes
+          ];
+        const key = keyboard.addKey(keyCode, false);
         this.noteKeys.set(pitch.key, key);
       });
       this.escapeKey = keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
@@ -573,7 +576,8 @@ export class ViolinScene extends Phaser.Scene {
     // whose phrase index pages back through the whole piece (0→last) as it
     // replays — the room is already at its warmest by then and must not cool.
     if (after.phase !== 'finale' && after.phraseIndex > before.phraseIndex) {
-      this.warmStage = Math.min(WARM_STAGES.length - 1, after.phraseIndex);
+      const passageProgress = after.phraseIndex / Math.max(1, VIOLIN_PHRASES.length - 1);
+      this.warmStage = Math.round(passageProgress * (WARM_STAGES.length - 1));
     }
 
     // Handed off to the whole-piece finale replay.
@@ -595,17 +599,18 @@ export class ViolinScene extends Phaser.Scene {
     // The whole piece she just played pours back through as one continuous line.
     // Every note of every phrase is scheduled on the finale clock; the model
     // (driven in update) pages the staff and lights each mark to match. The
-    // richer swell blooms underneath — retriggered at each phrase boundary so the
-    // warm D-major layer carries the entire replay, never thinning out.
+    // richer swell blooms underneath — retriggered at phrase boundaries so the
+    // warm layer carries the entire replay, never thinning out.
     const timeline = finaleTimeline();
     playSfx('sfx-violin-swell');
 
+    let lastSwellAt = 0;
     for (const note of timeline) {
-      if (note.noteIndex === 0 && note.phraseIndex > 0) {
-        // A fresh bloom at the top of each phrase keeps the bed continuous
-        // (the swell rings ~5s; phrases run ~3s, so they always overlap).
-        const at = note.startMs;
-        this.time.delayedCall(at, () => playSfx('sfx-violin-swell'));
+      if (note.noteIndex === 0 && note.startMs - lastSwellAt >= 4000) {
+        // The echo phrases are intentionally short; refresh the bed roughly
+        // once per swell instead of stacking a new layer at all 16 boundaries.
+        lastSwellAt = note.startMs;
+        this.time.delayedCall(note.startMs, () => playSfx('sfx-violin-swell'));
       }
     }
 
@@ -1100,8 +1105,8 @@ export class ViolinScene extends Phaser.Scene {
     g.lineBetween(cx + 8, this.staffLineLocalY(0) - 8, cx + 8, this.staffLineLocalY(4) + 10);
   }
 
-  /** Compact hand-inked sharp sign for the one chromatic pitch in the supplied
-   * refrain. Kept in Graphics with the noteheads so it lights and fades as one
+  /** Compact hand-inked sharp sign for a chromatic pitch in the supplied
+   * passage. Kept in Graphics with the noteheads so it lights and fades as one
    * mark instead of introducing a separately managed text object per note. */
   private drawSharpAccidental(
     g: Phaser.GameObjects.Graphics,
@@ -1115,6 +1120,19 @@ export class ViolinScene extends Phaser.Scene {
     g.lineBetween(x + 2.5, y - 9, x + 2.5, y + 7);
     g.lineBetween(x - 6, y - 2, x + 6, y - 4);
     g.lineBetween(x - 6, y + 4, x + 6, y + 2);
+  }
+
+  /** Compact flat sign matching the sharp's hand-inked treatment. */
+  private drawFlatAccidental(
+    g: Phaser.GameObjects.Graphics,
+    x: number,
+    y: number,
+    isLit: boolean,
+  ): void {
+    const color = isLit ? mixHex(NOTE_LIT, 0xffe6a6, 0.3) : INK;
+    g.lineStyle(1.5, color, isLit ? 0.95 : 0.65);
+    g.lineBetween(x - 2, y - 10, x - 2, y + 7);
+    g.strokeEllipse(x + 1.5, y + 2, 8, 10);
   }
 
   private currentNoteMarks(phrase: ViolinPhrase): NoteMark[] {
@@ -1157,10 +1175,14 @@ export class ViolinScene extends Phaser.Scene {
       const isLit = index < lit;
       const isExpected = echoing && index === this.modelState.echoIndex;
 
-      // Ledger line for notes below the staff (D4, step -1).
-      if (pitch && pitch.staffStep < 0) {
+      // Ledger lines below the treble staff: C4 (step -2), then A3 (-4).
+      // Notes in the intervening spaces still retain the ledger above them.
+      if (pitch && pitch.staffStep <= -2) {
         g.lineStyle(1.4, INK, 0.55);
-        g.lineBetween(mark.x - 11, mark.y, mark.x + 11, mark.y);
+        for (let ledgerStep = -2; ledgerStep >= pitch.staffStep; ledgerStep -= 2) {
+          const ledgerY = this.stepToLocalY(ledgerStep);
+          g.lineBetween(mark.x - 11, ledgerY, mark.x + 11, ledgerY);
+        }
       }
 
       // Slight, deterministic hand-drawn jitter per note.
@@ -1176,6 +1198,8 @@ export class ViolinScene extends Phaser.Scene {
 
       if (pitch?.accidental === 'sharp') {
         this.drawSharpAccidental(g, cx - 14, cy, isLit);
+      } else if (pitch?.accidental === 'flat') {
+        this.drawFlatAccidental(g, cx - 14, cy, isLit);
       }
 
       if (isLit) {
@@ -1502,7 +1526,7 @@ export class ViolinScene extends Phaser.Scene {
       .setDepth(60);
   }
 
-  // Six rounded key caps along the bottom; the expected key glows and any held
+  // Rounded key caps along the bottom; the expected key glows and any held
   // key depresses subtly. Caps are drawn each frame; letters/names are Text.
   // LEGEND_CAP_Y keeps the WHOLE row inside the 360-logical canvas: socket
   // shadow bottom = CAP_Y + 3 + capH(34) = 357 < 360. At the old 332 it ran to
@@ -1510,9 +1534,17 @@ export class ViolinScene extends Phaser.Scene {
   // The cap top (320) stays clear of the helper line centred at y=306.
   private static readonly LEGEND_CAP_Y = 320;
 
+  private legendCapWidth(): number {
+    return VIOLIN_PITCHES.length > 8 ? 38 : 46;
+  }
+
+  private legendCapGap(): number {
+    return VIOLIN_PITCHES.length > 8 ? 6 : 10;
+  }
+
   private legendCapX(index: number): number {
-    const capW = 46;
-    const gap = 10;
+    const capW = this.legendCapWidth();
+    const gap = this.legendCapGap();
     const total = VIOLIN_PITCHES.length * capW + (VIOLIN_PITCHES.length - 1) * gap;
     const start = CANVAS_WIDTH / 2 - total / 2;
     return start + index * (capW + gap) + capW / 2;
@@ -1531,7 +1563,7 @@ export class ViolinScene extends Phaser.Scene {
           color: '#f4e4c2',
           fontFamily: 'Georgia, serif',
           fontStyle: '700',
-          fontSize: '16px',
+          fontSize: VIOLIN_PITCHES.length > 8 ? '14px' : '16px',
           resolution: RENDER_SCALE,
         })
         .setOrigin(0.5)
@@ -1541,7 +1573,7 @@ export class ViolinScene extends Phaser.Scene {
           align: 'center',
           color: '#c9b28a',
           fontFamily: 'Georgia, serif',
-          fontSize: '10px',
+          fontSize: VIOLIN_PITCHES.length > 8 ? '9px' : '10px',
           resolution: RENDER_SCALE,
         })
         .setOrigin(0.5)
@@ -1554,7 +1586,7 @@ export class ViolinScene extends Phaser.Scene {
   private updateLegend(time: number): void {
     const g = this.legendGfx;
     g.clear();
-    const capW = 46;
+    const capW = this.legendCapWidth();
     const capH = 34;
     const capY = ViolinScene.LEGEND_CAP_Y;
     // In practice there is no expected note — the caps just react to real key

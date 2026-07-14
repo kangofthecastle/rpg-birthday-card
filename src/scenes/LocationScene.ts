@@ -275,6 +275,7 @@ interface LocationSceneData {
 }
 
 const INTRO_PC_BUZZ_DELAY_MS = 1500;
+const INTRO_THEME_HUM_VOLUME = 0.14;
 
 // Player yardstick (mirrors roomRenderer): ____ reads ~0.88 of her frame.
 const PLAYER_VISUAL_HEIGHT_PX = RECIPIENT_SPRITE.frameHeight * RECIPIENT_SPRITE.scale * 0.88;
@@ -684,6 +685,7 @@ export class LocationScene extends Phaser.Scene {
     document.body.dataset.locationId = this.location.id;
     document.body.dataset.runMode = this.state.mode ?? 'story';
     delete document.body.dataset.interiorAwakened;
+    delete document.body.dataset.introThemeHum;
     delete document.body.dataset.introPcBuzz;
     delete document.body.dataset.introPcGlitch;
     this.createMap();
@@ -884,6 +886,10 @@ export class LocationScene extends Phaser.Scene {
         continue;
       }
 
+      if (beat.id === INTRO_COMPLETE_BEAT_ID) {
+        playSfx('sfx-story-hum', { volume: INTRO_THEME_HUM_VOLUME });
+        document.body.dataset.introThemeHum = 'played';
+      }
       await this.pauseForDialogue(beat.dialogue);
       if (beat.once !== false) {
         this.state = markBeatSeen(this.state, beat.id);

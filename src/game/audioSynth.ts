@@ -1092,17 +1092,21 @@ function sfxOmenTeleport(ctx: AudioContext, output: AudioNode, { rate, volume }:
 function sfxStoryHum(ctx: AudioContext, output: AudioNode, { rate, volume }: SfxSynthOptions): number {
   const start = ctx.currentTime;
   let latest = start;
-  // A breathy, wordless fragment: enough rising contour to recur later, short
-  // enough that the melody is not yet identifiable.
-  [146.83, 164.81, 185, 196].forEach((frequency, index) => {
+  // A low, breathy shadow of the theme's opening A-G-F. It stops before the
+  // answering G, so the recurring melody is not yet identifiable here.
+  [
+    { frequency: 220, startOffset: 0, holdMs: 260 },
+    { frequency: 196, startOffset: 0.42, holdMs: 120 },
+    { frequency: 174.61, startOffset: 0.6, holdMs: 360 },
+  ].forEach(({ frequency, startOffset, holdMs }) => {
     latest = Math.max(latest, playTone(ctx, output, {
       type: 'sine',
       frequency: frequency * rate,
-      gain: 0.075 * volume,
-      attackMs: 150,
-      holdMs: index === 3 ? 430 : 250,
-      releaseMs: 360,
-      startAt: start + index * 0.48,
+      gain: 0.065 * volume,
+      attackMs: 140,
+      holdMs,
+      releaseMs: 320,
+      startAt: start + startOffset,
     }));
   });
   return (latest - start) * 1000;

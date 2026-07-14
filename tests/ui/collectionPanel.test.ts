@@ -30,7 +30,7 @@ vi.mock('../../src/content/locations', () => ({
       id: 'recipient-house',
       keepsake: {
         id: 'recipient-sheet-music',
-        label: 'The Piece You Finally Played',
+        label: 'The piece on the stand',
         description: 'This fallback should not be shown.',
         iconAssetId: 'keepsake-golden-hour-photo',
       },

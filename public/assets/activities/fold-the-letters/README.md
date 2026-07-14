@@ -50,6 +50,13 @@ it visibly halves and mirrors as the paper folds.
 | `paper-friendtwo.png` | sail — ____'s letter (HOIST) | 512×640 | Flat, straight-on, fills the frame edge-to-edge |
 | `paper-sheetmusic.png` | lantern — ____'s sheet music (ROLL) | 512×640 | Flat, straight-on, fills the frame edge-to-edge |
 
+`paper-sheetmusic.png` is generated from the complete supplied score PDF, not
+from invented decorative notation. Rebuild it after replacing the source score:
+
+```bash
+python3 scripts/build_sheet_music_asset.py /path/to/do-you-hear-the-people.pdf
+```
+
 ## Coordinate system
 
 - The fold stage canvas is a fixed **640×400** logical space.

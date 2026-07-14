@@ -260,6 +260,18 @@ describe('SFX synth definitions', () => {
     expect(fakeCtx.oscillators[0].frequency.value).toBeCloseTo(900 * 1.5, 5);
   });
 
+  it('sfx-story-hum hints at only the first three pitches of the theme', () => {
+    const { ctx, fakeCtx, output } = createFakeGraph();
+    SFX_SYNTHS['sfx-story-hum'](ctx, output as unknown as AudioNode, { rate: 1, volume: 1 });
+
+    expect(fakeCtx.oscillators).toHaveLength(3);
+    expect(fakeCtx.oscillators.map((oscillator) => oscillator.frequency.value)).toEqual([
+      220,
+      196,
+      174.61,
+    ]);
+  });
+
   it('sfx-shot is a layered gunshot: a low sine thump under noise-burst cracks', () => {
     const { ctx, fakeCtx, output } = createFakeGraph();
     SFX_SYNTHS['sfx-shot'](ctx, output as unknown as AudioNode, { rate: 1, volume: 1 });

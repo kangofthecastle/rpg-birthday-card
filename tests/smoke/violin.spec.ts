@@ -129,7 +129,7 @@ test('plays the piece on the stand through test mode', async ({ page }) => {
   await expect(page.getByText('...wait. I know this song!')).toBeVisible();
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.locator('.collection-panel')).toContainText(
-    'The Piece You Finally Played',
+    'The piece on the stand',
   );
 });
 

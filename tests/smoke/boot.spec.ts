@@ -40,6 +40,7 @@ test('cold open plays, then lands in ____’s room with the unpowered PC and ___
 
   // Cold-open intro beat.
   await expect(page.getByText('Where am I?')).toBeVisible();
+  await expect(page.locator('body')).toHaveAttribute('data-intro-theme-hum', 'played');
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.getByText('Is this my room?')).toBeVisible();
   await page.getByRole('button', { name: 'Continue' }).click();
@@ -205,6 +206,6 @@ test('the hidden password command launches the isolated cards-mode room', async 
   const letters = page.locator('.collection-panel');
   await expect(letters).toContainText('____’s Letter');
   await expect(letters).toContainText('____’s Letter');
-  await expect(letters).toContainText('The Piece You Finally Played');
+  await expect(letters).toContainText('The piece on the stand');
   await expect(page.getByText('Where am I?')).toHaveCount(0);
 });

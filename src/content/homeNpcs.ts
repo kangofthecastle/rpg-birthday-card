@@ -23,7 +23,7 @@ import {
 // visit follower sequence uses all four idle/walk directions.
 export const FRIEND_ONE_SPRITE = {
   key: 'friendone-idle-walk-4dir',
-  url: '/assets/sprites/characters/friendone-idle-walk-4dir-v6-alpha.png',
+  url: '/assets/sprites/characters/friendone-idle-walk-4dir-v8-light-brown-alpha.png',
   frameWidth: 256,
   frameHeight: 256,
   scale: 0.45,

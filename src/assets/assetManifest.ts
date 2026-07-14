@@ -76,7 +76,7 @@ export const ASSET_MANIFEST: readonly GameAsset[] = [
     status: 'review',
     locationIds: ['global'],
     notes:
-      'Saved at public/assets/sprites/characters/friendone-idle-walk-4dir-v6-alpha.png. Side-walk rows transfer ____ identity onto ____ cardinal-side walk geometry, preserving ____ leg angles, stride cadence, planted feet, and baseline; side idles and front/back rows remain unchanged.',
+      'Saved at public/assets/sprites/characters/friendone-idle-walk-4dir-v8-light-brown-alpha.png. Identical geometry, animation, clothing, and alpha to v6, with only ____ hair pixels shifted from copper-orange to soft light chestnut brown.',
     qaChecks: ['8x6 idle-walk layout', 'transparent background', 'identity consistency', 'anchor consistency'],
   },
   {

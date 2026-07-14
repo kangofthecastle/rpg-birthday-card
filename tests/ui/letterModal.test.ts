@@ -55,9 +55,7 @@ describe('createSheetMusicModal', () => {
     });
 
     expect(modal.getAttribute('aria-label')).toBe('Do You Hear the People Sing?');
-    expect(modal.querySelector('.sheet-music-modal__title')?.textContent).toBe(
-      'Do You Hear the People Sing?',
-    );
+    expect(modal.querySelector('.sheet-music-modal__title')).toBeNull();
     const image = modal.querySelector<HTMLImageElement>('.sheet-music-modal__image');
     expect(image?.getAttribute('src')).toBe(
       '/assets/activities/fold-the-letters/paper-sheetmusic.png',

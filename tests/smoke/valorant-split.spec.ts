@@ -36,6 +36,8 @@ test('completes RETAKE.EXE at ____ house through test mode', async ({ page }) =>
   await expect(page.getByText('What?')).toBeVisible();
   await page.getByRole('button', { name: 'Continue' }).click();
 
+  await expect(page.locator('body')).toHaveAttribute('data-retake-defuse-meter', 'hidden');
+
   await page.getByRole('button', { name: 'Defuse the spike' }).click();
 
   await expect(page.getByText(/Sorry I had to bail before the round ended/)).toBeVisible();

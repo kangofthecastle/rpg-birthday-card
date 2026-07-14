@@ -146,6 +146,7 @@ test('makes the boat with real gestures and arrives at the lantern clearing WITH
       const p = await toClient(CX, CY);
       await page.mouse.move(p.x, p.y);
       await page.mouse.down();
+      await expect(panel).toHaveAttribute('data-fold-kindle-music', 'violin');
       await page.waitForTimeout(1700); // hold to kindle (~1.5s)
       await page.mouse.up();
       await page.waitForTimeout(120);

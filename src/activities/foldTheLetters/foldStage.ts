@@ -180,8 +180,8 @@ const PICK_MARGIN = 24;
 const LANTERN_PAGE_W = 260;
 const LANTERN_PAGE_H = 150;
 
-// Optional drop-in paper textures, one per piece — the flat unfolded sheet (each
-// 512x640, straight-on, filling the frame edge-to-edge). When a file is present it
+// Optional drop-in paper textures, one per piece — the flat unfolded sheet
+// (straight-on, filling the frame edge-to-edge). When a file is present it
 // becomes the paper's fill in EVERY fold state, drawn to the fixed sheet frame
 // under the same clip + reflection transform as the handwriting, so it visibly
 // folds/halves with the paper. Procedural paper + handwriting is the fallback.
@@ -189,7 +189,7 @@ const LANTERN_PAGE_H = 150;
 const PIECE_PAPER_FILES: Readonly<Record<string, string>> = {
   'paper:hull': `${ASSET_BASE}/paper-friendone.png`,
   'paper:sail': `${ASSET_BASE}/paper-friendtwo.png`,
-  'paper:lantern': `${ASSET_BASE}/paper-sheetmusic.png`,
+  'paper:lantern': `${ASSET_BASE}/paper-sheetmusic-boatigami.png`,
 };
 
 // The assembled boat rides in the lower-CENTRE of the logical stage, not jammed

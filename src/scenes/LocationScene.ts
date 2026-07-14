@@ -188,7 +188,7 @@ import {
 } from '../game/mapHelpers';
 import { getPlayerFacingFromScreenMovement, PlayerController } from '../game/playerController';
 import { createCollectionPanel, type CollectionPanelHandle } from '../ui/collectionPanel';
-import { showDialogue } from '../ui/dialogueBox';
+import { showDialogue, type ShowDialogueOptions } from '../ui/dialogueBox';
 import { clearUiRoot, getUiRoot } from '../ui/domRoot';
 import { showLetterModal, showSheetMusicModal } from '../ui/letterModal';
 import { showLettersScreen } from '../ui/lettersScreen';
@@ -4811,12 +4811,18 @@ export class LocationScene extends Phaser.Scene {
       const pcStory = resolveRecipientPcStory(this.state);
       playSfx('sfx-pc-fail');
       this.glitchRecipientPcVisual();
-      if (pcStory.playNotification) {
-        const priorCount = Number(document.body.dataset.phoneNotificationCount ?? '0');
-        document.body.dataset.phoneNotificationCount = String(priorCount + 1);
-        this.time.delayedCall(950, () => playSfx('sfx-phone-notification'));
-      }
-      await this.pauseForDialogue(pcStory.dialogue);
+      let notificationPlayed = false;
+      await this.pauseForDialogue(pcStory.dialogue, {
+        onLineShown: (line) => {
+          if (!pcStory.playNotification || notificationPlayed || line.portraitTreatment !== 'phone') {
+            return;
+          }
+          notificationPlayed = true;
+          const priorCount = Number(document.body.dataset.phoneNotificationCount ?? '0');
+          document.body.dataset.phoneNotificationCount = String(priorCount + 1);
+          playSfx('sfx-phone-notification');
+        },
+      });
       if (pcStory.marksBeatId) {
         this.state = markBeatSeen(this.state, pcStory.marksBeatId);
         this.registry.set('runState', this.state);
@@ -4930,9 +4936,12 @@ export class LocationScene extends Phaser.Scene {
     this.canMove = true;
   }
 
-  private async pauseForDialogue(lines: readonly DialogueLine[]): Promise<void> {
+  private async pauseForDialogue(
+    lines: readonly DialogueLine[],
+    options: ShowDialogueOptions = {},
+  ): Promise<void> {
     this.canMove = false;
-    await showDialogue(lines);
+    await showDialogue(lines, options);
     this.canMove = true;
   }
 

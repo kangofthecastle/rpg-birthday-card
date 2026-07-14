@@ -13,6 +13,7 @@ import {
   playerShotSpreadRad,
   rayRect,
   spikeTimeRemainingMs,
+  shouldShowDefuseMeter,
   tickSplit,
   type DefuseState,
   type EnemyState,
@@ -746,13 +747,16 @@ describe('contested defuse', () => {
   }
 
   it('accumulates progress only while in radius and holding E', () => {
-    expect(isInDefuseRadius(atSpike())).toBe(true);
+    const idleAtSpike = atSpike();
+    expect(isInDefuseRadius(idleAtSpike)).toBe(true);
+    expect(shouldShowDefuseMeter(idleAtSpike)).toBe(false);
 
-    const next = hold(atSpike(), 1000, true);
+    const next = hold(idleAtSpike, 1000, true);
 
     expect(next.defuse.progressMs).toBeCloseTo(1000, 0);
     expect(next.defuse.defusing).toBe(true);
     expect(defuseProgress(next)).toBeGreaterThan(0);
+    expect(shouldShowDefuseMeter(next)).toBe(true);
   });
 
   it('makes no progress when holding E outside the defuse radius', () => {
@@ -776,6 +780,7 @@ describe('contested defuse', () => {
 
     expect(state.defuse.progressMs).toBe(0);
     expect(state.defuse.defusing).toBe(false);
+    expect(shouldShowDefuseMeter(state)).toBe(false);
   });
 
   it('snaps back to the half-defuse checkpoint (never below) once reached', () => {

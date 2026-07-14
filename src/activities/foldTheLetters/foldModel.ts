@@ -166,14 +166,14 @@ export const FOLD_COMPONENTS: readonly FoldComponent[] = [
     verb: 'fold',
     label: "____'s letter — the hull",
     letterKeepsakeId: 'glowing-koi-scale',
-    assembledLine: 'The hull holds its shape. Her words, pressed into something that floats.',
+    assembledLine: 'The hull holds its shape.',
   },
   {
     id: 'sail',
     verb: 'hoist',
     label: "____'s letter — the sail",
     letterKeepsakeId: 'defused-spike-charm',
-    assembledLine: 'The sail catches, and holds. It has your back the whole way.',
+    assembledLine: 'The sail catches and holds.',
   },
   {
     id: 'lantern',

@@ -173,10 +173,6 @@ export function createSheetMusicModal(options: SheetMusicModalOptions): HTMLElem
   const paper = document.createElement('div');
   paper.className = 'letter-modal__paper sheet-music-modal__paper';
 
-  const title = document.createElement('h2');
-  title.className = 'sheet-music-modal__title';
-  title.textContent = options.title;
-
   const image = document.createElement('img');
   image.className = 'sheet-music-modal__image';
   image.src = options.imageSrc;
@@ -191,7 +187,7 @@ export function createSheetMusicModal(options: SheetMusicModalOptions): HTMLElem
     options.onAction();
   });
 
-  paper.append(title, image, action);
+  paper.append(image, action);
   modal.append(paper);
   return modal;
 }

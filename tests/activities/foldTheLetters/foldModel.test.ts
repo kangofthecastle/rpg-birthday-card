@@ -83,7 +83,7 @@ describe('keepsake ritual model — components & verbs', () => {
       '',
     ]);
     expect(FOLD_COMPONENTS[0].assembledLine).toBe(
-      'The hull holds its shape. Her words, pressed into something that floats.',
+      'The hull holds its shape.',
     );
     expect(SAIL_FOLD_CREASE.snippet).toBe('');
     expect(SAIL_FACE_LINES).toEqual([
@@ -93,7 +93,7 @@ describe('keepsake ritual model — components & verbs', () => {
       '',
     ]);
     expect(FOLD_COMPONENTS[1].assembledLine).toBe(
-      'The sail catches, and holds. It has your back the whole way.',
+      'The sail catches and holds.',
     );
     expect(LANTERN_STAVES).toEqual([
       '𝄞 the piece, finally played',

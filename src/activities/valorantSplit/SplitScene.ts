@@ -7,6 +7,7 @@ import {
   isInDefuseRadius,
   isSplitWon,
   spikeTimeRemainingMs,
+  shouldShowDefuseMeter,
   tickSplit,
   type EnemyState,
   type SplitEvent,
@@ -368,6 +369,12 @@ export class SplitScene extends Phaser.Scene {
     this.dynamic = this.add.graphics().setDepth(700);
     this.hudGraphics = this.add.graphics().setDepth(800).setScrollFactor(0);
     this.createHud();
+    document.body.dataset.retakeDefuseMeter = 'hidden';
+    const clearDefuseMeterState = (): void => {
+      delete document.body.dataset.retakeDefuseMeter;
+    };
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, clearDefuseMeterState);
+    this.events.once(Phaser.Scenes.Events.DESTROY, clearDefuseMeterState);
 
     // Fuse timer, dead-center in the top scoreboard bar.
     this.roundText = this.add
@@ -1146,13 +1153,15 @@ export class SplitScene extends Phaser.Scene {
 
   private drawSpikeAndDefuse(now: number): void {
     const phase = this.state.phase;
+    const defusing = this.state.defuse.defusing;
+    const showDefuseMeter = shouldShowDefuseMeter(this.state);
+    document.body.dataset.retakeDefuseMeter = showDefuseMeter ? 'visible' : 'hidden';
 
     // Freeze the spike FX during the detonation / death overlays.
     if (phase === 'detonated' || phase === 'dead') {
       return;
     }
 
-    const defusing = this.state.defuse.defusing;
     const progress = defuseProgress(this.state);
 
     if (phase === 'retake') {
@@ -1213,6 +1222,10 @@ export class SplitScene extends Phaser.Scene {
         SPLIT_CONFIG.spike.y,
         SPLIT_CONFIG.defuse.radius,
       );
+    }
+
+    if (!showDefuseMeter) {
+      return;
     }
 
     const barWidth = 300;

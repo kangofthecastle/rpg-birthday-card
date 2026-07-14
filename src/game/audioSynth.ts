@@ -171,8 +171,10 @@ function playNoiseBurst(ctx: AudioContext, output: AudioNode, options: NoiseBurs
 // ---------------------------------------------------------------------------
 
 interface PadPreset {
-  /** Chord tone frequencies (Hz), low to high. */
-  chordFrequencies: number[];
+  /** Equal-sized chords (Hz, low to high) played as a slow progression. */
+  chordProgression: readonly (readonly number[])[];
+  chordChangeMs: number;
+  chordTransitionSeconds: number;
   waveform: OscillatorType;
   filterType: BiquadFilterType;
   filterFrequency: number;
@@ -192,6 +194,11 @@ interface PadPreset {
 
 function createPadBed(ctx: AudioContext, output: AudioNode, preset: PadPreset): SynthMusicHandle {
   const disposers: Array<() => void> = [];
+  const firstChord = preset.chordProgression[0];
+
+  if (!firstChord || preset.chordProgression.some((chord) => chord.length !== firstChord.length)) {
+    throw new Error('Pad progressions must contain equal-sized chords.');
+  }
 
   const filter = ctx.createBiquadFilter();
   filter.type = preset.filterType;
@@ -201,35 +208,97 @@ function createPadBed(ctx: AudioContext, output: AudioNode, preset: PadPreset): 
   disposers.push(() => filter.disconnect());
 
   const startAt = ctx.currentTime;
+  let disposed = false;
 
-  preset.chordFrequencies.forEach((frequency, index) => {
-    const osc = ctx.createOscillator();
-    osc.type = preset.waveform;
-    osc.frequency.value = frequency;
-    osc.detune.value = (index - (preset.chordFrequencies.length - 1) / 2) * preset.detuneSpreadCents;
+  interface PadChordGroup {
+    readonly bus: GainNode;
+    dispose(): void;
+  }
 
-    const voiceGain = ctx.createGain();
-    voiceGain.gain.value = 0;
-    osc.connect(voiceGain);
-    voiceGain.connect(filter);
+  const activeChordGroups = new Set<PadChordGroup>();
+  const cleanupTimers = new Set<ReturnType<typeof setTimeout>>();
 
-    voiceGain.gain.setValueAtTime(0, startAt);
-    voiceGain.gain.linearRampToValueAtTime(
-      preset.voiceGain,
-      startAt + preset.attackSeconds + index * 0.35,
-    );
+  const createChordGroup = (
+    chord: readonly number[],
+    fadeSeconds: number,
+  ): PadChordGroup => {
+    const chordBus = ctx.createGain();
+    chordBus.gain.value = 0;
+    chordBus.connect(filter);
 
-    osc.start(startAt);
-    disposers.push(() => {
-      try {
-        osc.stop();
-      } catch {
-        // already stopped
-      }
-      osc.disconnect();
-      voiceGain.disconnect();
+    const chordStart = ctx.currentTime;
+    chordBus.gain.setValueAtTime(0, chordStart);
+    chordBus.gain.linearRampToValueAtTime(1, chordStart + fadeSeconds);
+
+    const oscillators = chord.map((frequency, index) => {
+      const oscillator = ctx.createOscillator();
+      oscillator.type = preset.waveform;
+      oscillator.frequency.value = frequency;
+      oscillator.detune.value = (index - (chord.length - 1) / 2) * preset.detuneSpreadCents;
+
+      const voiceGain = ctx.createGain();
+      voiceGain.gain.value = preset.voiceGain;
+      oscillator.connect(voiceGain);
+      voiceGain.connect(chordBus);
+      oscillator.start(chordStart);
+      return { oscillator, voiceGain };
     });
-  });
+
+    let groupDisposed = false;
+    const group: PadChordGroup = {
+      bus: chordBus,
+      dispose: () => {
+        if (groupDisposed) {
+          return;
+        }
+        groupDisposed = true;
+        oscillators.forEach(({ oscillator, voiceGain }) => {
+          try {
+            oscillator.stop();
+          } catch {
+            // already stopped
+          }
+          oscillator.disconnect();
+          voiceGain.disconnect();
+        });
+        chordBus.disconnect();
+        activeChordGroups.delete(group);
+      },
+    };
+    activeChordGroups.add(group);
+    return group;
+  };
+
+  let currentChordGroup = createChordGroup(firstChord, preset.attackSeconds);
+  let progressionTimer: ReturnType<typeof setTimeout> | undefined;
+
+  if (preset.chordProgression.length > 1) {
+    let progressionIndex = 0;
+
+    const advanceProgression = () => {
+      if (disposed) {
+        return;
+      }
+      progressionIndex = (progressionIndex + 1) % preset.chordProgression.length;
+      const nextChord = preset.chordProgression[progressionIndex];
+      const previousChordGroup = currentChordGroup;
+      currentChordGroup = createChordGroup(nextChord, preset.chordTransitionSeconds);
+
+      const transitionEnd = ctx.currentTime + preset.chordTransitionSeconds;
+      previousChordGroup.bus.gain.cancelScheduledValues(ctx.currentTime);
+      previousChordGroup.bus.gain.setValueAtTime(previousChordGroup.bus.gain.value, ctx.currentTime);
+      previousChordGroup.bus.gain.linearRampToValueAtTime(0.0001, transitionEnd);
+
+      const cleanupTimer = setTimeout(() => {
+        previousChordGroup.dispose();
+        cleanupTimers.delete(cleanupTimer);
+      }, preset.chordTransitionSeconds * 1000 + 50);
+      cleanupTimers.add(cleanupTimer);
+      progressionTimer = setTimeout(advanceProgression, preset.chordChangeMs);
+    };
+
+    progressionTimer = setTimeout(advanceProgression, preset.chordChangeMs);
+  }
 
   if (preset.lfoRateHz > 0) {
     const lfo = ctx.createOscillator();
@@ -278,13 +347,31 @@ function createPadBed(ctx: AudioContext, output: AudioNode, preset: PadPreset): 
   }
 
   return {
-    dispose: () => disposers.forEach((dispose) => dispose()),
+    dispose: () => {
+      if (disposed) {
+        return;
+      }
+      disposed = true;
+      if (progressionTimer !== undefined) {
+        clearTimeout(progressionTimer);
+      }
+      cleanupTimers.forEach((timer) => clearTimeout(timer));
+      activeChordGroups.forEach((group) => group.dispose());
+      disposers.forEach((dispose) => dispose());
+    },
   };
 }
 
-// music-home: warm major pad (C3-E3-G3-C4), slow filter movement.
+// music-home: warm, unhurried C-Am-F-G movement with the original soft pad.
 const HOME_PAD_PRESET: PadPreset = {
-  chordFrequencies: [130.81, 164.81, 196.0, 261.63],
+  chordProgression: [
+    [130.81, 164.81, 196.0, 261.63], // C
+    [110.0, 164.81, 196.0, 261.63], // Am7
+    [87.31, 130.81, 164.81, 220.0], // Fmaj7
+    [98.0, 146.83, 196.0, 220.0], // Gsus2
+  ],
+  chordChangeMs: 7000,
+  chordTransitionSeconds: 1.2,
   waveform: 'triangle',
   filterType: 'lowpass',
   filterFrequency: 1400,
@@ -300,7 +387,14 @@ const HOME_PAD_PRESET: PadPreset = {
 // voices, lower level, gentler filter movement, for the post-ending
 // letters screen.
 const LETTERS_PAD_PRESET: PadPreset = {
-  chordFrequencies: [130.81, 164.81, 196.0, 261.63],
+  chordProgression: [
+    [130.81, 164.81, 196.0, 261.63],
+    [110.0, 164.81, 196.0, 261.63],
+    [87.31, 130.81, 164.81, 220.0],
+    [98.0, 146.83, 196.0, 220.0],
+  ],
+  chordChangeMs: 9500,
+  chordTransitionSeconds: 1.8,
   waveform: 'sine',
   filterType: 'lowpass',
   filterFrequency: 1000,
@@ -315,7 +409,14 @@ const LETTERS_PAD_PRESET: PadPreset = {
 // music-path: airy open fifths (no third), higher register, brighter
 // filter, plus a whisper of high-passed noise for outdoor "air".
 const PATH_PAD_PRESET: PadPreset = {
-  chordFrequencies: [196.0, 293.66, 392.0],
+  chordProgression: [
+    [196.0, 293.66, 392.0], // G-D-G
+    [146.83, 220.0, 293.66], // D-A-D
+    [164.81, 246.94, 329.63], // E-B-E
+    [130.81, 196.0, 261.63], // C-G-C
+  ],
+  chordChangeMs: 8000,
+  chordTransitionSeconds: 1.3,
   waveform: 'sine',
   filterType: 'lowpass',
   filterFrequency: 3000,
@@ -429,6 +530,8 @@ function createFriendOneBed(ctx: AudioContext, output: AudioNode): SynthMusicHan
 // music-split: low tense pulse, sparse — a soft sub-bass drone that
 // breathes in and out, plus rare dissonant high tension ticks.
 const SPLIT_DRONE_HZ = 55; // A1
+const SPLIT_BASS_NOTES_HZ = [49, 65.41, 43.65] as const; // G1-C2-F1
+const SPLIT_BASS_NOTE_GAP_MS = 6500;
 const SPLIT_PULSE_HZ = 0.4; // ~2.5s breathing cycle
 const SPLIT_TENSION_GAP_MS = [4000, 5200, 6800, 8000];
 
@@ -461,8 +564,26 @@ function createSplitBed(ctx: AudioContext, output: AudioNode): SynthMusicHandle 
   pulse.start(start);
 
   let disposed = false;
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  let tensionTimeoutId: ReturnType<typeof setTimeout> | undefined;
+  let bassNoteTimeoutId: ReturnType<typeof setTimeout> | undefined;
+  let bassNoteIndex = 0;
   const activeVoiceCleanups = new Set<() => void>();
+
+  const playNextBassNote = () => {
+    if (disposed) {
+      return;
+    }
+    playTone(ctx, filter, {
+      type: 'sine',
+      frequency: SPLIT_BASS_NOTES_HZ[bassNoteIndex],
+      gain: 0.025,
+      attackMs: 180,
+      holdMs: 420,
+      releaseMs: 900,
+    });
+    bassNoteIndex = (bassNoteIndex + 1) % SPLIT_BASS_NOTES_HZ.length;
+    bassNoteTimeoutId = setTimeout(playNextBassNote, SPLIT_BASS_NOTE_GAP_MS);
+  };
 
   const playTensionTick = () => {
     // A sparse, quiet dissonant tick a tritone above the drone register.
@@ -497,10 +618,11 @@ function createSplitBed(ctx: AudioContext, output: AudioNode): SynthMusicHandle 
     }
     playTensionTick();
     const gapMs = SPLIT_TENSION_GAP_MS[Math.floor(Math.random() * SPLIT_TENSION_GAP_MS.length)];
-    timeoutId = setTimeout(scheduleTensionTick, gapMs);
+    tensionTimeoutId = setTimeout(scheduleTensionTick, gapMs);
   };
 
   scheduleTensionTick();
+  bassNoteTimeoutId = setTimeout(playNextBassNote, SPLIT_BASS_NOTE_GAP_MS);
 
   return {
     dispose: () => {
@@ -508,8 +630,11 @@ function createSplitBed(ctx: AudioContext, output: AudioNode): SynthMusicHandle 
         return;
       }
       disposed = true;
-      if (timeoutId !== undefined) {
-        clearTimeout(timeoutId);
+      if (tensionTimeoutId !== undefined) {
+        clearTimeout(tensionTimeoutId);
+      }
+      if (bassNoteTimeoutId !== undefined) {
+        clearTimeout(bassNoteTimeoutId);
       }
       try {
         drone.stop();
@@ -1092,12 +1217,13 @@ function sfxOmenTeleport(ctx: AudioContext, output: AudioNode, { rate, volume }:
 function sfxStoryHum(ctx: AudioContext, output: AudioNode, { rate, volume }: SfxSynthOptions): number {
   const start = ctx.currentTime;
   let latest = start;
-  // A low, breathy shadow of the theme's opening A-G-F. It stops before the
-  // answering G, so the recurring melody is not yet identifiable here.
+  // A low, breathy shadow of the theme's opening A-G-F-G. Four quiet notes are
+  // enough to feel intentional without revealing the melody outright.
   [
     { frequency: 220, startOffset: 0, holdMs: 260 },
     { frequency: 196, startOffset: 0.42, holdMs: 120 },
     { frequency: 174.61, startOffset: 0.6, holdMs: 360 },
+    { frequency: 196, startOffset: 1.02, holdMs: 120 },
   ].forEach(({ frequency, startOffset, holdMs }) => {
     latest = Math.max(latest, playTone(ctx, output, {
       type: 'sine',

@@ -173,6 +173,28 @@ describe('music synth beds', () => {
     handle.dispose();
   });
 
+  it.each([
+    ['music-home', 4],
+    ['music-path', 3],
+    ['music-letters', 4],
+  ] as const)('%s moves its pad voices to a new chord over time', (key, voiceCount) => {
+    vi.useFakeTimers();
+    const { ctx, fakeCtx, output } = createFakeGraph();
+    const handle = MUSIC_SYNTHS[key](ctx, output as unknown as AudioNode);
+    const initialOscillatorCount = fakeCtx.oscillators.length;
+
+    vi.advanceTimersByTime(12_000);
+    expect(fakeCtx.oscillators.length).toBeGreaterThanOrEqual(initialOscillatorCount + voiceCount);
+    expect(fakeCtx.oscillators.every(
+      (oscillator) => oscillator.frequency.exponentialRampToValueAtTime.mock.calls.length === 0,
+    )).toBe(true);
+
+    const oscillatorCountAtDispose = fakeCtx.oscillators.length;
+    handle.dispose();
+    vi.advanceTimersByTime(30_000);
+    expect(fakeCtx.oscillators).toHaveLength(oscillatorCountAtDispose);
+  });
+
   it('music-ending adds new layers over time and dispose() halts pending layers', () => {
     vi.useFakeTimers();
     const { ctx, fakeCtx, output } = createFakeGraph();
@@ -223,6 +245,8 @@ describe('music synth beds', () => {
     vi.advanceTimersByTime(9000);
     const countAfterTicking = fakeCtx.oscillators.length;
     expect(countAfterTicking).toBeGreaterThan(initialCount);
+    expect(fakeCtx.oscillators.some((oscillator) => oscillator.frequency.value === 49)).toBe(true);
+    expect(fakeCtx.oscillators[0].frequency.exponentialRampToValueAtTime).not.toHaveBeenCalled();
 
     handle.dispose();
     vi.advanceTimersByTime(9000);
@@ -260,15 +284,16 @@ describe('SFX synth definitions', () => {
     expect(fakeCtx.oscillators[0].frequency.value).toBeCloseTo(900 * 1.5, 5);
   });
 
-  it('sfx-story-hum hints at only the first three pitches of the theme', () => {
+  it('sfx-story-hum quietly hints at the first four pitches of the theme', () => {
     const { ctx, fakeCtx, output } = createFakeGraph();
     SFX_SYNTHS['sfx-story-hum'](ctx, output as unknown as AudioNode, { rate: 1, volume: 1 });
 
-    expect(fakeCtx.oscillators).toHaveLength(3);
+    expect(fakeCtx.oscillators).toHaveLength(4);
     expect(fakeCtx.oscillators.map((oscillator) => oscillator.frequency.value)).toEqual([
       220,
       196,
       174.61,
+      196,
     ]);
   });
 

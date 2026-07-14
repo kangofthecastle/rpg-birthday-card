@@ -33,7 +33,11 @@ import {
 } from './foldModel';
 import { FoldStage } from './foldStage';
 import { createActivityCloseButton } from '../activityShell';
-import { getPitch, VIOLIN_SHEET_ROLL_MOTIF } from '../violin/melody';
+import {
+  getPitch,
+  VIOLIN_SHEET_ROLL_MOTIF,
+  VIOLIN_THEME_MOTIF,
+} from '../violin/melody';
 import './foldTheLetters.css';
 
 const CLOSE_ART_URL = '/assets/activities/fold-the-letters/close-x.png';
@@ -134,6 +138,43 @@ export const foldTheLettersActivity: ActivityModule = {
     let transitioning = false;
     let lastNoteSounded = 0;
     let state: RitualState = createRitualState();
+    let kindleHeld = false;
+    let kindleViolinStarted = false;
+    const kindleViolinTimers = new Set<number>();
+
+    const playKindleViolin = (): void => {
+      if (kindleViolinStarted) {
+        return;
+      }
+      kindleViolinStarted = true;
+      panel.dataset.foldKindleMusic = 'violin';
+
+      let startMs = 0;
+      VIOLIN_THEME_MOTIF.forEach((note, index) => {
+        startMs += note.delayBeforeMs ?? 0;
+        const playNote = (): void => {
+          const pitch = getPitch(note.pitchId);
+          if (pitch) {
+            // One octave down and quiet: recognizably bowed, but still only a
+            // shadow of the theme rather than a full musical statement.
+            playViolinNote(pitch.frequency / 2, note.durationMs, {
+              volume: 0.24,
+              connected: index > 0,
+            });
+          }
+        };
+        if (startMs === 0) {
+          playNote();
+        } else {
+          const timer = window.setTimeout(() => {
+            kindleViolinTimers.delete(timer);
+            playNote();
+          }, startMs);
+          kindleViolinTimers.add(timer);
+        }
+        startMs += note.durationMs;
+      });
+    };
 
     const stage = new FoldStage(canvas, {
       onFoldProgress: (t) => handleFoldProgress(t),
@@ -142,10 +183,11 @@ export const foldTheLettersActivity: ActivityModule = {
       onRoll: (angle) => handleRoll(angle),
       onKindleChange: (held) => {
         kindleHeld = held;
+        if (held) {
+          playKindleViolin();
+        }
       },
     });
-
-    let kindleHeld = false;
 
     const setHint = (text: string): void => {
       hint.textContent = text;
@@ -239,6 +281,8 @@ export const foldTheLettersActivity: ActivityModule = {
         return;
       }
       finished = true;
+      kindleViolinTimers.forEach((timer) => window.clearTimeout(timer));
+      kindleViolinTimers.clear();
       stage.dispose();
       window.removeEventListener('keydown', handleKeydown, true);
       callback();
@@ -476,6 +520,7 @@ export const foldTheLettersActivity: ActivityModule = {
       } else if (verb === 'roll') {
         handleRoll(KEY_ROLL_RAD);
       } else if (verb === 'kindle') {
+        playKindleViolin();
         const before = state;
         state = applyKindle(state, KEY_KINDLE_MS, true);
         if (state !== before) {

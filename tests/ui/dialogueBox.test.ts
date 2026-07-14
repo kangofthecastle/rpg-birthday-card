@@ -158,6 +158,27 @@ describe('showDialogue', () => {
     expect(root?.querySelector('[data-ui-layer="dialogue"]')).toBeNull();
   });
 
+  it('announces each line only when that line is actually shown', async () => {
+    const onLineShown = vi.fn();
+    const lines = [
+      { text: 'The PC stays dark.' },
+      { text: '1 NEW MESSAGE', portraitTreatment: 'phone' as const },
+    ];
+    const promise = showDialogue(lines, { onLineShown });
+    const root = document.querySelector<HTMLElement>('#ui-root');
+
+    expect(onLineShown).toHaveBeenCalledTimes(1);
+    expect(onLineShown).toHaveBeenLastCalledWith(lines[0], 0);
+
+    root?.querySelector<HTMLButtonElement>('.dialogue-box__action')?.click();
+    expect(root?.querySelector('.dialogue-box__text')?.textContent).toBe('1 NEW MESSAGE');
+    expect(onLineShown).toHaveBeenCalledTimes(2);
+    expect(onLineShown).toHaveBeenLastCalledWith(lines[1], 1);
+
+    root?.querySelector<HTMLButtonElement>('.dialogue-box__action')?.click();
+    await promise;
+  });
+
   it('resolves and clears the active dialogue when a new dialogue starts', async () => {
     const first = showDialogue([{ text: 'First' }]);
     const second = showDialogue([{ text: 'Second' }]);

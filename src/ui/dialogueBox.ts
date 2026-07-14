@@ -35,7 +35,14 @@ const PORTRAIT_ID_BY_SPEAKER: Readonly<Record<string, string>> = {
 
 let activeDialogue: ActiveDialogue | undefined;
 
-export function showDialogue(lines: readonly DialogueLine[]): Promise<void> {
+export interface ShowDialogueOptions {
+  readonly onLineShown?: (line: DialogueLine, index: number) => void;
+}
+
+export function showDialogue(
+  lines: readonly DialogueLine[],
+  options: ShowDialogueOptions = {},
+): Promise<void> {
   closeActiveDialogue();
 
   if (lines.length === 0) {
@@ -110,6 +117,7 @@ export function showDialogue(lines: readonly DialogueLine[]): Promise<void> {
 
       host.replaceChildren(createDialogueBox(line, advance));
       host.querySelector<HTMLButtonElement>('.dialogue-box__action')?.focus({ preventScroll: true });
+      options.onLineShown?.(line, index);
     };
 
     document.addEventListener('keydown', handleKeyDown);

@@ -122,7 +122,8 @@ test('plays the piece on the stand through test mode', async ({ page }) => {
   const rewardPaper = page.locator('.letter-modal');
   await expect(rewardPaper).toBeVisible();
   await expect(rewardPaper.getByRole('img', { name: /____’s handwritten sheet music/ })).toBeVisible();
-  await expect(rewardPaper).toContainText('Do You Hear the People Sing?');
+  await expect(rewardPaper).toHaveAttribute('aria-label', 'Do You Hear the People Sing?');
+  await expect(rewardPaper).not.toContainText('Do You Hear the People Sing?');
   await expect(rewardPaper).not.toContainText('completed sheet music');
   await expect(page.getByText('...wait. I know this song!')).toHaveCount(0);
   await rewardPaper.getByRole('button', { name: 'Continue' }).click();

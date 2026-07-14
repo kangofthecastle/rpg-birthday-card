@@ -1336,6 +1336,12 @@ export function defuseProgress(state: SplitState): number {
   return state.defuse.progressMs / SPLIT_CONFIG.defuse.totalMs;
 }
 
+/** The progress meter is an active-action cue, not persistent HUD. Banked
+ * checkpoint progress reappears only when ____ resumes defusing. */
+export function shouldShowDefuseMeter(state: SplitState): boolean {
+  return state.phase === 'retake' && state.defuse.defusing;
+}
+
 // Remaining fuse in ms, clamped to zero.
 export function spikeTimeRemainingMs(state: SplitState): number {
   return Math.max(0, state.spikeTimerMs);

@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Build the in-game sheet-music keepsake from the supplied score PDF.
+"""Build the sheet-music keepsake and Boatigami texture from the score PDF.
 
 The complete PDF page is preserved and placed on the 512x640 parchment texture
-used by the reward modal and paper-folding game. No notes are re-typeset or
-omitted, so the keepsake remains an exact visual copy of the supplied score.
+used by the reward modal. A second texture rotates that finished page onto a
+landscape parchment canvas for Boatigami, so the existing game sheet can remain
+260x150 without stretching the score. No notes are re-typeset or omitted.
 """
 
 from __future__ import annotations
@@ -18,16 +19,25 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 
 OUTPUT_SIZE = (512, 640)
+BOATIGAMI_OUTPUT_SIZE = (832, 480)
 WORK_SCALE = 2
 CANVAS_SIZE = tuple(value * WORK_SCALE for value in OUTPUT_SIZE)
+BOATIGAMI_CANVAS_SIZE = tuple(value * WORK_SCALE for value in BOATIGAMI_OUTPUT_SIZE)
 INK = (43, 73, 84)
 
 
 def font(size: int, *, italic: bool = False, bold: bool = False) -> ImageFont.FreeTypeFont:
-    suffix = "BoldItalic" if bold and italic else "Bold" if bold else "Italic" if italic else ""
+    georgia_name = (
+        "Georgia Bold Italic.ttf"
+        if bold and italic
+        else "Georgia Bold.ttf"
+        if bold
+        else "Georgia Italic.ttf"
+        if italic
+        else "Georgia.ttf"
+    )
     candidates = [
-        Path(f"/System/Library/Fonts/Supplemental/Georgia{suffix}.ttf"),
-        Path(f"/System/Library/Fonts/Supplemental/Times New Roman {suffix}.ttf"),
+        Path("/System/Library/Fonts/Supplemental") / georgia_name,
         Path("/System/Library/Fonts/Supplemental/Georgia.ttf"),
         Path("/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf"),
     ]
@@ -35,6 +45,18 @@ def font(size: int, *, italic: bool = False, bold: bool = False) -> ImageFont.Fr
         if candidate.exists():
             return ImageFont.truetype(str(candidate), size)
     return ImageFont.load_default(size=size)
+
+
+def centered(
+    draw: ImageDraw.ImageDraw,
+    text: str,
+    y: int,
+    face: ImageFont.ImageFont,
+    fill: tuple[int, ...],
+) -> None:
+    box = draw.textbbox((0, 0), text, font=face)
+    x = (CANVAS_SIZE[0] - (box[2] - box[0])) // 2
+    draw.text((x, y), text, font=face, fill=fill)
 
 
 def render_pdf_page(source_pdf: Path) -> Image.Image:
@@ -68,10 +90,10 @@ def notation_layer(page: Image.Image, target_width: int) -> Image.Image:
     return ink
 
 
-def parchment() -> Image.Image:
-    width, height = CANVAS_SIZE
+def parchment(size: tuple[int, int] = CANVAS_SIZE) -> Image.Image:
+    width, height = size
     rng = random.Random(19021832)
-    image = Image.new("RGB", CANVAS_SIZE, (247, 237, 204))
+    image = Image.new("RGB", size, (247, 237, 204))
     pixels = image.load()
     for y in range(height):
         edge = abs(y - height / 2) / (height / 2)
@@ -85,7 +107,7 @@ def parchment() -> Image.Image:
                 max(0, min(255, 204 + grain - shade)),
             )
 
-    wash = Image.new("RGBA", CANVAS_SIZE, (0, 0, 0, 0))
+    wash = Image.new("RGBA", size, (0, 0, 0, 0))
     wash_draw = ImageDraw.Draw(wash)
     for _ in range(70):
         x = rng.randrange(width)
@@ -99,20 +121,47 @@ def parchment() -> Image.Image:
     return Image.alpha_composite(image.convert("RGBA"), wash)
 
 
-def build(source_pdf: Path, output_path: Path) -> None:
+def build_boatigami_texture(portrait_canvas: Image.Image) -> Image.Image:
+    """Rotate the portrait page without changing Boatigami's landscape geometry."""
+    canvas = parchment(BOATIGAMI_CANVAS_SIZE)
+    rotated = portrait_canvas.rotate(90, expand=True)
+    target_height = BOATIGAMI_CANVAS_SIZE[1]
+    scale = target_height / rotated.height
+    rotated = rotated.resize(
+        (round(rotated.width * scale), target_height),
+        Image.Resampling.LANCZOS,
+    )
+    x = (BOATIGAMI_CANVAS_SIZE[0] - rotated.width) // 2
+    canvas.alpha_composite(rotated, (x, 0))
+    return canvas.convert("RGB").resize(BOATIGAMI_OUTPUT_SIZE, Image.Resampling.LANCZOS)
+
+
+def build(source_pdf: Path, output_path: Path, boatigami_output_path: Path) -> None:
     source = render_pdf_page(source_pdf)
+    # Replace only the PDF's heading; the notation below remains untouched.
+    source_draw = ImageDraw.Draw(source)
+    source_draw.rectangle((0, 0, source.width, round(source.height * 0.12)), fill="white")
+
     canvas = parchment()
     draw = ImageDraw.Draw(canvas)
     rendered = notation_layer(source, 944)
     x = (CANVAS_SIZE[0] - rendered.width) // 2
     canvas.alpha_composite(rendered, (x, 32))
-
-    draw.line((56, 1138, CANVAS_SIZE[0] - 56, 1138), fill=(108, 82, 48, 90), width=2)
-    draw.text((CANVAS_SIZE[0] - 204, 1158), "____", font=font(34, italic=True), fill=(57, 88, 96, 220))
+    centered(
+        draw,
+        "Do You Hear the People Sing?",
+        70,
+        font(44, italic=True),
+        (*INK, 255),
+    )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     final = canvas.convert("RGB").resize(OUTPUT_SIZE, Image.Resampling.LANCZOS)
     final.save(output_path, format="PNG", optimize=True)
+
+    boatigami_output_path.parent.mkdir(parents=True, exist_ok=True)
+    boatigami = build_boatigami_texture(canvas)
+    boatigami.save(boatigami_output_path, format="PNG", optimize=True)
 
 
 def main() -> None:
@@ -123,10 +172,17 @@ def main() -> None:
         type=Path,
         default=Path("public/assets/activities/fold-the-letters/paper-sheetmusic.png"),
     )
+    parser.add_argument(
+        "--boatigami-output",
+        type=Path,
+        default=Path(
+            "public/assets/activities/fold-the-letters/paper-sheetmusic-boatigami.png"
+        ),
+    )
     args = parser.parse_args()
     if not args.source_pdf.exists():
         parser.error(f"source PDF does not exist: {args.source_pdf}")
-    build(args.source_pdf, args.output)
+    build(args.source_pdf, args.output, args.boatigami_output)
 
 
 if __name__ == "__main__":

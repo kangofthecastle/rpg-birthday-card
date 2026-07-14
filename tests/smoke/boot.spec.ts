@@ -73,10 +73,13 @@ test('cold open plays, then lands in ____’s room with the unpowered PC and ___
     await dismissDialogue(page);
   }
   expect(pcBeatShown).toBe(true);
+  await expect(page.locator('body')).not.toHaveAttribute('data-phone-notification-count');
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.getByText('Nothing. It won’t even turn on.')).toBeVisible();
+  await expect(page.locator('body')).not.toHaveAttribute('data-phone-notification-count');
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.getByText('1 NEW MESSAGE')).toBeVisible();
+  await expect(page.locator('body')).toHaveAttribute('data-phone-notification-count', '1');
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.getByText('Heyy! Happy birthday! you still coming over today?')).toBeVisible();
   await page.getByRole('button', { name: 'Continue' }).click();

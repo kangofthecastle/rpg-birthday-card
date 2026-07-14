@@ -48,10 +48,12 @@ it visibly halves and mirrors as the paper folds.
 | --- | --- | --- | --- |
 | `paper-friendone.png` | hull — ____'s letter (FOLD) | 512×640 | Flat, straight-on, fills the frame edge-to-edge |
 | `paper-friendtwo.png` | sail — ____'s letter (HOIST) | 512×640 | Flat, straight-on, fills the frame edge-to-edge |
-| `paper-sheetmusic.png` | lantern — ____'s sheet music (ROLL) | 512×640 | Flat, straight-on, fills the frame edge-to-edge |
+| `paper-sheetmusic-boatigami.png` | lantern — rotated ____ sheet music (ROLL) | 832×480 | Landscape texture for the unchanged 260×150 game sheet |
 
-`paper-sheetmusic.png` is generated from the complete supplied score PDF, not
-from invented decorative notation. Rebuild it after replacing the source score:
+`paper-sheetmusic.png` (the portrait reward) and
+`paper-sheetmusic-boatigami.png` (the rotated game texture) are generated from
+the complete supplied score PDF, not from invented decorative notation. Rebuild
+both after replacing the source score:
 
 ```bash
 python3 scripts/build_sheet_music_asset.py /path/to/do-you-hear-the-people.pdf

@@ -669,6 +669,10 @@ export class LocationScene extends Phaser.Scene {
     // clearUiRoot (including the terminal goHome) still does a full wipe, so the
     // bridge can never survive past its one hand-off.
     clearUiRoot(true);
+    document.body.classList.toggle(
+      'ending-transition-active',
+      this.autoStartActivityId === 'final-keepsake-reveal',
+    );
     const params = new URLSearchParams(window.location.search);
     // The zone editor forces the collider/zone debug overlay on so the author
     // always sees current collision truth while editing.
@@ -2295,7 +2299,8 @@ export class LocationScene extends Phaser.Scene {
     if (walkingToPc) {
       this.friendoneFollowerRoute = createFriendTwoRoomFriendOneRoute({ x: this.player.x, y: this.player.y });
     } else {
-      this.friendoneFollowerTrail = createFollowerTrail(start);
+      // Nearly match ____'s 250px/s walk without letting ____ overtake her.
+      this.friendoneFollowerTrail = createFollowerTrail(start, { speed: 246 });
     }
     const projected = this.getProjection().project(start.x, start.y);
     this.friendoneFollower = this.add
@@ -2463,13 +2468,6 @@ export class LocationScene extends Phaser.Scene {
       0.62,
     );
     glassShine.fillRect(screenLeft, screenTop, screenWidth, screenHeight);
-    glassShine.fillStyle(0xedfbff, 0.38);
-    glassShine.fillEllipse(
-      screenLeft + screenWidth * 0.3,
-      screenTop + screenHeight * 0.2,
-      screenWidth * 0.58,
-      screenHeight * 0.26,
-    );
     glassShine.setBlendMode(Phaser.BlendModes.ADD);
     this.tweens.add({
       targets: glassShine,
@@ -2697,7 +2695,10 @@ export class LocationScene extends Phaser.Scene {
       const screenTop = bounds.y + bounds.height * screenCue.top;
       const screenWidth = bounds.width * screenCue.width;
       const screenHeight = bounds.height * screenCue.height;
-      const centerX = screenLeft + screenWidth / 2;
+      // The painted CRT glass is visually weighted a touch to the right within
+      // its rectangular bounds, so center the cue on the glass rather than the
+      // raw crop midpoint.
+      const centerX = screenLeft + screenWidth * 0.55;
       const centerY = screenTop + screenHeight / 2;
 
       // Leave the original CRT glass untouched. A restrained yellow halo and a
@@ -4888,7 +4889,11 @@ export class LocationScene extends Phaser.Scene {
     }
     const restoreHud = (): void => {
       document.body.classList.remove('minigame-active');
+      document.body.classList.remove('ending-transition-active');
     };
+    if (activityId === 'final-keepsake-reveal') {
+      document.body.classList.add('ending-transition-active');
+    }
 
     const activityMusic = ACTIVITY_MUSIC_BY_ID[activityId];
     if (activityMusic) {
@@ -4912,7 +4917,6 @@ export class LocationScene extends Phaser.Scene {
         this.canMove = true;
       },
       onComplete: async (completion) => {
-        restoreHud();
         // The scene knows which registered activity produced this callback.
         // Normalize the completion here so a module can never award its keepsake
         // while accidentally failing to persist its completed activity ID.
@@ -4930,8 +4934,11 @@ export class LocationScene extends Phaser.Scene {
           this.state = completeLocation(this.state, recordedCompletion);
           this.registry.set('runState', this.state);
           await this.revealGalaxyArrival(activityMount);
+          restoreHud();
           return;
         }
+
+        restoreHud();
 
         activityMount.remove();
 

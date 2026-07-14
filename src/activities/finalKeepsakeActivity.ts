@@ -6,13 +6,12 @@ import { isImageUrl } from '../game/assetProbe';
  * The ending transition. It mounts with the sail-away key art ALREADY held at
  * full opacity — the persistent bridge on the UI root has been covering the scene
  * swap, so the painting continues unbroken with no re-fade and no opening hold.
- * Then a single dissolve carries the key art into water-arrival (the composited
- * paper boat — the SAME hull / sail / lantern / rider pieces the sail-away
- * bridge implied — fading in as the painting's boat is covered, so only ever one
- * boat is visible). From there it breathes on through water-to-galaxy and the
- * composed ocean-galaxy, the boat drifting smaller toward (but never across) the
- * painted horizon, then fading out as the galaxy settles. It ends holding on the
- * galaxy and hands off (`endingArrival`) to the live, playable galaxy scene.
+ * The preceding fold activity may hold its sail-away painting across the scene
+ * swap, but that painting is not one of this transition's frames. This sequence
+ * starts directly on water-arrival, then breathes through water-to-galaxy and the
+ * composed ocean-galaxy. The composited boat drifts smaller toward (but never
+ * across) the painted horizon, then fades out as the galaxy settles. It ends
+ * holding on the galaxy and hands off (`endingArrival`) to the live scene.
  *
  * File-first and gracefully degrading: each painted frame is probed; an absent
  * frame is simply skipped (both absent → the key art fades straight into the
@@ -21,7 +20,6 @@ import { isImageUrl } from '../game/assetProbe';
  */
 
 const ASSET = {
-  keyArt: '/assets/activities/fold-the-letters/sail-away-key-art.png',
   waterArrival: '/assets/ending/water-arrival.png',
   waterToGalaxy: '/assets/ending/water-to-galaxy.png',
   hull: '/assets/activities/fold-the-letters/hull.png',
@@ -35,8 +33,6 @@ const ASSET = {
 // from the value for the dissolve that reveals it; the boat drift duration is
 // derived from their sum (see start()). Single source: every ms lives here.
 interface EndingTiming {
-  /** Key art → water-arrival: the single boat-reveal dissolve. */
-  readonly keyArtToWaterMs: number;
   /** Water-arrival → water-to-galaxy dissolve. */
   readonly waterToGalaxyMs: number;
   /** Water-to-galaxy → composed galaxy dissolve (more room to breathe). */
@@ -47,18 +43,9 @@ interface EndingTiming {
   readonly galaxyHoldMs: number;
 }
 
-// Single-boat handoff tuning for the key-art → water dissolve (fractions of that
-// dissolve). Frame 0 (the painted key art, whose painted boat is the "boat")
-// fades OUT over the back portion so it has receded before the composited drift
-// boat appears; the drift boat holds hidden until near the end, then fades in
-// quickly — so the painted boat is essentially gone first (only a trace overlap).
-const FRAME0_FADE_START_FRAC = 0.5;
-const BOAT_REVEAL_START_FRAC = 0.75;
-
 const REAL_TIMING: EndingTiming = {
-  keyArtToWaterMs: 3200,
-  waterToGalaxyMs: 3200,
-  galaxyComposeMs: 4200,
+  waterToGalaxyMs: 3600,
+  galaxyComposeMs: 4700,
   boatFadeMs: 2200,
   galaxyHoldMs: 2400,
 };
@@ -66,7 +53,6 @@ const REAL_TIMING: EndingTiming = {
 // testMode collapses the pacing so the Playwright full-run smoke stays fast and
 // deterministic without losing a beat of the sequence.
 const TEST_TIMING: EndingTiming = {
-  keyArtToWaterMs: 50,
   waterToGalaxyMs: 50,
   galaxyComposeMs: 50,
   boatFadeMs: 40,
@@ -92,7 +78,6 @@ function wait(ms: number): Promise<void> {
 // re-probes (and the graceful-degradation smoke, which renames frames aside, is
 // unaffected because the fresh page reloads the module).
 let probed: {
-  keyArt: boolean;
   waterArrival: boolean;
   waterToGalaxy: boolean;
   hull: boolean;
@@ -105,9 +90,8 @@ async function probeAssets(): Promise<NonNullable<typeof probed>> {
   if (probed) {
     return probed;
   }
-  const [keyArt, waterArrival, waterToGalaxy, hull, sail, lantern, rider] =
+  const [waterArrival, waterToGalaxy, hull, sail, lantern, rider] =
     await Promise.all([
-      isImageUrl(ASSET.keyArt),
       isImageUrl(ASSET.waterArrival),
       isImageUrl(ASSET.waterToGalaxy),
       isImageUrl(ASSET.hull),
@@ -115,7 +99,7 @@ async function probeAssets(): Promise<NonNullable<typeof probed>> {
       isImageUrl(ASSET.lantern),
       isImageUrl(ASSET.rider),
     ]);
-  probed = { keyArt, waterArrival, waterToGalaxy, hull, sail, lantern, rider };
+  probed = { waterArrival, waterToGalaxy, hull, sail, lantern, rider };
   return probed;
 }
 
@@ -128,28 +112,12 @@ export const finalKeepsakeActivity: ActivityModule = {
 
     const { frame, boat, galaxy, layers, frameFades } = buildTransition(mount, assets, timing);
 
-    // The boat rides from the water-arrival dissolve onward: with key art present
-    // it fades in as the (boatless) water frame dissolves over the painting, so
-    // the painting's boat hands off to the composited one with never two visible.
-    // Without key art (graceful degrade) the water frame is frame 0, so the boat
-    // is present from the start.
-    const boatAppearIndex = assets.keyArt ? 1 : 0;
     // The drift spans every fade AFTER frame 0 — the boat is on screen for all of
     // them and lands exactly as the galaxy settles. Synced to the frame-sequence
     // length from one JS source (the CSS drift no longer hard-codes a duration).
     const driftMs = frameFades.slice(1).reduce((sum, ms) => sum + ms, 0);
-    // Hold the composited boat hidden until the LAST quarter of the water-arrival
-    // dissolve, then fade it in over that quarter: by then the empty-ocean frame
-    // has all but covered the key art's (large, foreground) painted boat AND the
-    // key art itself is fading out (see below), so the painted boat is essentially
-    // gone before the (small, distant) composited boat appears — never two boats
-    // at once. In the degraded frame-0 path there is no dissolve, so plain-fade it.
-    const boatDissolveMs = boatAppearIndex >= 1 ? frameFades[boatAppearIndex]! : timing.boatFadeMs;
-    const boatFadeInMs =
-      boatAppearIndex >= 1
-        ? Math.round(boatDissolveMs * (1 - BOAT_REVEAL_START_FRAC))
-        : timing.boatFadeMs;
-    const boatFadeInDelayMs = boatAppearIndex >= 1 ? boatDissolveMs - boatFadeInMs : 0;
+    const boatFadeInMs = timing.boatFadeMs;
+    const boatFadeInDelayMs = 0;
 
     const appearBoat = (): void => {
       if (!boat) {
@@ -166,43 +134,19 @@ export const finalKeepsakeActivity: ActivityModule = {
     // The ending swell + bed rise as the drift begins.
     playMusic('music-ending', { fadeMs: isTestMode() ? 200 : 3200 });
 
-    // Frame 0 comes up at full opacity IMMEDIATELY — the sail-away key art holds
-    // unbroken (the bridge on the UI root has been covering the scene swap). No
-    // re-fade, no opening hold. The bridge key art is STATIC (no Ken-Burns), so
-    // pin frame 0 to the same static scale (kill the ending-frame-drift it would
-    // otherwise inherit) — otherwise the swap pops from scale 1.0 to the drift's
-    // 1.015 start. Subsequent frames keep their drift. Set opacity before any
-    // forced reflow so the layer never paints transparent, then remove the bridge
-    // now that we cover it. (Degraded path: no bridge/key art, keep the drift.)
-    if (assets.keyArt) {
-      frame(0).style.animation = 'none';
-    }
+    // Water-arrival comes up fully opaque before the preceding sail-away bridge
+    // is removed, giving a clean cut with no exposed live-scene frame. Pin this
+    // opening frame while later frames retain their gentle drift.
+    frame(0).style.animation = 'none';
     frame(0).style.opacity = '1';
     void frame(0).offsetWidth;
     document.querySelector('[data-ending-bridge]')?.remove();
 
-    if (boatAppearIndex === 0) {
-      appearBoat();
-    }
+    appearBoat();
 
     // Cross-fade through each subsequent painted frame, ending on the galaxy.
     for (let index = 1; index < layers; index += 1) {
       frame(index).style.opacity = '1';
-      // As the water frame dissolves in over the painted key art (the boat-reveal
-      // dissolve), fade the key art (frame 0) OUT over the back portion of the
-      // SAME dissolve — it is never left pinned at 1 under the stack, and its
-      // painted boat has receded by the time the composited boat appears.
-      if (index === boatAppearIndex && assets.keyArt) {
-        const dissolveMs = frameFades[index]!;
-        const frame0FadeMs = Math.round(dissolveMs * (1 - FRAME0_FADE_START_FRAC));
-        const frame0FadeDelayMs = dissolveMs - frame0FadeMs;
-        frame(0).style.transition = `opacity ${frame0FadeMs}ms ease ${frame0FadeDelayMs}ms`;
-        void frame(0).offsetWidth;
-        frame(0).style.opacity = '0';
-      }
-      if (index === boatAppearIndex) {
-        appearBoat();
-      }
       // The swell lands as the water turns to galaxy (the penultimate fade).
       if (index === layers - 1) {
         playSfx('sfx-ending-swell');
@@ -268,11 +212,8 @@ function buildTransition(
     stage.append(layer);
   };
 
-  if (assets.keyArt) {
-    push(imageLayer(ASSET.keyArt, timing.keyArtToWaterMs), timing.keyArtToWaterMs);
-  }
   if (assets.waterArrival) {
-    push(imageLayer(ASSET.waterArrival, timing.keyArtToWaterMs), timing.keyArtToWaterMs);
+    push(imageLayer(ASSET.waterArrival, timing.waterToGalaxyMs), timing.waterToGalaxyMs);
   }
   if (assets.waterToGalaxy) {
     push(imageLayer(ASSET.waterToGalaxy, timing.waterToGalaxyMs), timing.waterToGalaxyMs);

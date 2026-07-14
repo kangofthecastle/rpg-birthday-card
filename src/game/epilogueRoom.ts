@@ -195,9 +195,9 @@ export function resolveEpilogueBeamBands(
     },
   };
   return [
-    { source: scaleSegment(source, 2), target: scaleSegment(target, 3.1) },
-    { source: scaleSegment(source, 1.45), target: scaleSegment(target, 2.1) },
-    { source: scaleSegment(source, 0.8), target: scaleSegment(target, 1.1) },
+    { source: scaleSegment(source, 0.55), target: scaleSegment(target, 2.4) },
+    { source: scaleSegment(source, 0.36), target: scaleSegment(target, 1.55) },
+    { source: scaleSegment(source, 0.18), target: scaleSegment(target, 0.8) },
   ];
 }
 

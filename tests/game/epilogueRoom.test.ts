@@ -5,7 +5,7 @@ import {
   resolveEpiloguePhotoPlacement,
   resolveEpilogueRoomAnchors,
   resolveShearedCanvasSize,
-  resolveShearedWindowSill,
+  resolveShearedWindowLightOpening,
 } from '../../src/game/epilogueRoom';
 
 describe('epilogueRoom', () => {
@@ -53,20 +53,28 @@ describe('epilogueRoom', () => {
     expect(resolveShearedCanvasSize(480, 616, 0.5)).toEqual({ width: 480, height: 856 });
   });
 
-  it('aims nested beam bands from the sheared high-window sill into the frame', () => {
-    const source = resolveShearedWindowSill({ x: 20, y: 30, width: 171, height: 329 }, -0.5);
+  it('widens nested beam bands from the high-window opening into the frame', () => {
+    const source = resolveShearedWindowLightOpening(
+      { x: 20, y: 30, width: 171, height: 329 },
+      -0.5,
+    );
     expect(source.start.y).toBeGreaterThan(source.end.y);
     expect(source.start.y).toBeLessThan(359);
 
     const photo = resolveEpiloguePhotoPlacement({ x: 100, y: 200, width: 716, height: 838 });
     const bands = resolveEpilogueBeamBands(source, photo.corners);
     expect(bands).toHaveLength(3);
-    const widths = bands.map((band) => Math.hypot(
+    const targetWidths = bands.map((band) => Math.hypot(
       band.target.end.x - band.target.start.x,
       band.target.end.y - band.target.start.y,
     ));
-    expect(widths[0]).toBeGreaterThan(widths[1]);
-    expect(widths[1]).toBeGreaterThan(widths[2]);
+    const sourceWidths = bands.map((band) => Math.hypot(
+      band.source.end.x - band.source.start.x,
+      band.source.end.y - band.source.start.y,
+    ));
+    expect(targetWidths[0]).toBeGreaterThan(targetWidths[1]);
+    expect(targetWidths[1]).toBeGreaterThan(targetWidths[2]);
+    expect(targetWidths.every((width, index) => width > sourceWidths[index]!)).toBe(true);
     expect(bands[0]?.target.start.y).toBeLessThan(photo.corners.bottomLeft.y);
     expect(bands[0]?.target.end.y).toBeLessThan(photo.corners.bottomRight.y);
   });

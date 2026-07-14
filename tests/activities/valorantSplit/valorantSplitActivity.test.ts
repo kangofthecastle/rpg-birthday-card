@@ -57,19 +57,25 @@ describe('valorantSplitActivity', () => {
         released = true;
       });
 
-      expect(document.body.textContent).toContain('Omen? You don’t play Omen very often.');
+      expect(document.body.textContent).toContain('Omen? Don’t think I’ve ever seen you play him');
       expect(released).toBe(false);
       expect(playSfx).not.toHaveBeenCalledWith('sfx-omen-void');
 
       document.querySelector<HTMLButtonElement>('.dialogue-box__action')?.click();
       await Promise.resolve();
 
-      expect(document.body.textContent).toContain('~~');
+      expect(document.body.textContent).toContain('Unintelligible sounds from the void');
+      expect(document.querySelector('.dialogue-box__text--italic')).not.toBeNull();
       expect(playSfx).toHaveBeenCalledWith('sfx-omen-void');
       expect(
         document.querySelector<HTMLImageElement>('.dialogue-box__portrait')?.getAttribute('src'),
       ).toBe('/assets/activities/valorant-split/omen.png');
       expect(playSfx.mock.calls.filter(([key]) => key === 'sfx-omen-void')).toHaveLength(1);
+      expect(released).toBe(false);
+
+      document.querySelector<HTMLButtonElement>('.dialogue-box__action')?.click();
+      expect(document.body.textContent).toContain('What?');
+      expect(document.querySelector('.dialogue-box__text--italic')).toBeNull();
       expect(released).toBe(false);
 
       document.querySelector<HTMLButtonElement>('.dialogue-box__action')?.click();

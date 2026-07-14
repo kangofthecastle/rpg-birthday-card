@@ -127,7 +127,7 @@ describe('isInteractionAvailable', () => {
 describe('shouldPlayEnterBeat', () => {
   const introBeat: LocationEnterBeat = {
     id: 'recipient-intro',
-    dialogue: [{ text: '…wait. Where am I?' }],
+    dialogue: [{ text: '...wait. Where am I?' }],
   };
   const returnBeat: LocationEnterBeat = {
     id: 'recipient-return-home',

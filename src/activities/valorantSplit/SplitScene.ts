@@ -1521,7 +1521,7 @@ export class SplitScene extends Phaser.Scene {
       return;
     }
 
-    this.promptText.setText(this.state.defuse.defusing ? 'DEFUSING…' : 'HOLD 4 TO DEFUSE');
+    this.promptText.setText(this.state.defuse.defusing ? 'DEFUSING...' : 'HOLD 4 TO DEFUSE');
 
   }
 

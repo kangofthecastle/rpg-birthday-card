@@ -12,6 +12,8 @@ export interface DialogueLine {
   readonly speaker?: string;
   readonly text: string;
   readonly portraitId?: string;
+  /** Optional authored emphasis applied to the dialogue text only. */
+  readonly emphasis?: 'italic';
   /** Optional non-character portrait treatment rendered by the dialogue UI. */
   readonly portraitTreatment?: 'phone';
 }

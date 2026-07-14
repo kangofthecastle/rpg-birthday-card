@@ -1132,6 +1132,32 @@ function sfxPcFail(ctx: AudioContext, output: AudioNode, { rate, volume }: SfxSy
   return (end - start) * 1000;
 }
 
+function sfxPcReady(ctx: AudioContext, output: AudioNode, { rate, volume }: SfxSynthOptions): number {
+  const start = ctx.currentTime;
+  playNoiseBurst(ctx, output, {
+    seconds: 0.32,
+    filterType: 'lowpass',
+    filterFreq: 1100 * rate,
+    gain: 0.035 * volume,
+    attackMs: 45,
+    releaseMs: 240,
+    startAt: start,
+  });
+  let latest = start;
+  [392, 659.25].forEach((frequency, index) => {
+    latest = Math.max(latest, playTone(ctx, output, {
+      type: 'triangle',
+      frequency: frequency * rate,
+      gain: 0.1 * volume,
+      attackMs: 5,
+      holdMs: 45,
+      releaseMs: 180,
+      startAt: start + 0.05 + index * 0.14,
+    }));
+  });
+  return (latest - start) * 1000;
+}
+
 function sfxPhoneNotification(ctx: AudioContext, output: AudioNode, { rate, volume }: SfxSynthOptions): number {
   const start = ctx.currentTime;
   let latest = start;
@@ -1661,6 +1687,7 @@ export const SFX_SYNTHS: Record<SfxKey, SfxSynthFactory> = {
   'sfx-letter-open': sfxLetterOpen,
   'sfx-story-hum': sfxStoryHum,
   'sfx-pc-fail': sfxPcFail,
+  'sfx-pc-ready': sfxPcReady,
   'sfx-phone-notification': sfxPhoneNotification,
   'sfx-koi-arrive': sfxKoiArrive,
   'sfx-omen-void': sfxOmenVoid,

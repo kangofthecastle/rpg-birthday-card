@@ -24,16 +24,16 @@ describe('violin sample selection', () => {
     expect(Math.abs(12 * Math.log2(fs4.playbackRate))).toBeLessThanOrEqual(2.01);
   });
 
-  it('uses spiccato for fast notes and sustained arco for longer notes', () => {
-    expect(selectViolinSample(440, 150).articulation).toBe('spiccato');
-    expect(selectViolinSample(440, 200).articulation).toBe('spiccato');
-    expect(selectViolinSample(440, 299).articulation).toBe('spiccato');
+  it('uses smooth arco for short scored notes as well as longer notes', () => {
+    expect(selectViolinSample(440, 150).articulation).toBe('arco');
+    expect(selectViolinSample(440, 200).articulation).toBe('arco');
+    expect(selectViolinSample(440, 299).articulation).toBe('arco');
     expect(selectViolinSample(440, 300).articulation).toBe('arco');
     expect(selectViolinSample(440, 450).articulation).toBe('arco');
     expect(selectViolinSample(440, 1800).articulation).toBe('arco');
   });
 
-  it('publishes one arco and one spiccato URL for every anchor', () => {
+  it('preloads only the smooth arco URL for every anchor', () => {
     expect(VIOLIN_SAMPLE_ANCHORS.map((anchor) => anchor.id)).toEqual([
       'a3',
       'c4',
@@ -42,7 +42,7 @@ describe('violin sample selection', () => {
       'a4',
       'c5',
     ]);
-    expect(VIOLIN_SAMPLE_URLS).toHaveLength(VIOLIN_SAMPLE_ANCHORS.length * 2);
+    expect(VIOLIN_SAMPLE_URLS).toHaveLength(VIOLIN_SAMPLE_ANCHORS.length);
     expect(new Set(VIOLIN_SAMPLE_URLS).size).toBe(VIOLIN_SAMPLE_URLS.length);
   });
 });

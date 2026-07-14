@@ -41,12 +41,16 @@ test('cold open plays, then lands in ____’s room with the unpowered PC and ___
   // Cold-open intro beat.
   await expect(page.getByText('Where am I?')).toBeVisible();
   await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(page.getByText('This is my room?')).toBeVisible();
+  await expect(page.getByText('Is this my room?')).toBeVisible();
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.getByText('Or... somebody’s version of it.')).toBeVisible();
   await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(page.getByText('Whoever put me here knows me!')).toBeVisible();
+  await expect(page.getByText('Whoever put me here must know me pretty well.')).toBeVisible();
   await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.locator('body')).not.toHaveAttribute('data-intro-pc-buzz');
+  await expect(page.locator('body')).toHaveAttribute('data-intro-pc-buzz', 'played', {
+    timeout: 2500,
+  });
 
   // The PC is dark and fails to boot, then ____'s phone message supplies the
   // first destination. The room was rearranged
@@ -73,6 +77,10 @@ test('cold open plays, then lands in ____’s room with the unpowered PC and ___
   await expect(page.getByText('1 NEW MESSAGE')).toBeVisible();
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.getByText('Heyy! Happy birthday! you still coming over today?')).toBeVisible();
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByText('I’m coming over today?')).toBeVisible();
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByText('Must’ve forgot... I’ll head over now.')).toBeVisible();
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.locator('body')).toHaveAttribute('data-phone-notification-count', '1');
 

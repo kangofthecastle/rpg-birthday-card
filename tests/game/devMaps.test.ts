@@ -206,16 +206,18 @@ describe('dev maps', () => {
     expect(at(0, 0)).not.toBe(0); // corner stays solid
   });
 
-  it('opens both the clearing north and south edges (the gated way down)', () => {
+  it('opens the clearing entrance but seals both water rows along the south shore', () => {
     const map = readMap('clearing.tmj');
     const collision = collisionLayer(map);
     const at = (x: number, y: number) => collision[y * map.width + x];
     const midX = Math.floor(map.width / 2);
 
     expect(at(midX, 0)).toBe(0); // north open (to main-outside)
-    expect(at(midX, map.height - 1)).toBe(0); // south open (gated, to final-spot)
+    for (let x = 0; x < map.width; x += 1) {
+      expect(at(x, map.height - 2)).not.toBe(0);
+      expect(at(x, map.height - 1)).not.toBe(0);
+    }
     expect(at(midX - 3, 0)).not.toBe(0);
-    expect(at(midX + 3, map.height - 1)).not.toBe(0);
   });
 
   it('fully closes the final spot so the ending cannot return to the clearing', () => {

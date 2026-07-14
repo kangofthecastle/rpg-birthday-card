@@ -38,7 +38,7 @@ export const FINALE_CONVERSATION: readonly DialogueLine[] = [
   },
   {
     speaker: '____',
-    text: 'Did you make all of this? The roads, the houses… the whole world?',
+    text: 'Did you make all of this? The roads, the houses... the whole world?',
     portraitId: 'portrait-recipient',
   },
   {
@@ -48,27 +48,27 @@ export const FINALE_CONVERSATION: readonly DialogueLine[] = [
   },
   {
     speaker: '____',
-    text: 'Figured if I built you a whole world, you’d have to take a moment…',
+    text: 'Figured if I built you a whole world, you’d have to take a moment...',
     portraitId: 'portrait-friend-b',
   },
   {
     speaker: '____',
-    text: '…and reflect on how much people care about you.',
+    text: '...and reflect on how much people care about you.',
     portraitId: 'portrait-friend-b',
   },
   {
     speaker: '____',
-    text: 'This wasn’t just a game, though. Some of this year was… a lot.',
+    text: 'This wasn’t just a game, though. Some of this year was... a lot.',
     portraitId: 'portrait-recipient',
   },
   {
     speaker: '____',
-    text: 'I know. As we grow older, life blurs by. It gets harder to notice the little things. Just for a moment, I wanted to create the illusion that…',
+    text: 'I know. As we grow older, life blurs by. It gets harder to notice the little things. Just for a moment, I wanted to create the illusion that...',
     portraitId: 'portrait-friend-b',
   },
   {
     speaker: '____',
-    text: '…we had all the time in the world.',
+    text: '...we had all the time in the world.',
     portraitId: 'portrait-friend-b',
   },
   {

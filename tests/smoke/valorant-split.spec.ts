@@ -27,9 +27,13 @@ test('completes RETAKE.EXE at ____ house through test mode', async ({ page }) =>
 
   // The game is visibly loaded before ____ comments on the selected agent.
   await expect(page.getByRole('dialog', { name: 'RETAKE.EXE' })).toBeVisible();
-  await expect(page.getByText('Omen? You don’t play Omen very often.')).toBeVisible();
+  await expect(page.getByText('Omen? Don’t think I’ve ever seen you play him')).toBeVisible();
   await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(page.getByText('~~')).toBeVisible();
+  const omenVoidLine = page.getByText('Unintelligible sounds from the void');
+  await expect(omenVoidLine).toBeVisible();
+  await expect(omenVoidLine).toHaveCSS('font-style', 'italic');
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByText('What?')).toBeVisible();
   await page.getByRole('button', { name: 'Continue' }).click();
 
   await page.getByRole('button', { name: 'Defuse the spike' }).click();

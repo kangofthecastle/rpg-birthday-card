@@ -232,6 +232,9 @@ function createDialogueBox(line: DialogueLine, onNext: () => void): HTMLElement 
 
   const text = document.createElement('p');
   text.className = 'dialogue-box__text';
+  if (line.emphasis === 'italic') {
+    text.classList.add('dialogue-box__text--italic');
+  }
   text.textContent = line.text;
   content.append(text);
 

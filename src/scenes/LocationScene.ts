@@ -13,7 +13,11 @@ import {
 } from '../content/galaxyScene';
 import { HOME_HOST_NPCS, FRIEND_ONE_SPRITE, resolveHomeNpcPosition } from '../content/homeNpcs';
 import { LETTERS } from '../content/letters';
-import { getActivityCompletionStory, resolveRecipientPcStory } from '../content/storyContent';
+import {
+  getActivityCompletionStory,
+  resolveRecipientPcStory,
+  resolveMangoRiceDialogue,
+} from '../content/storyContent';
 import {
   RECIPIENT_PC_MAIL_CUE,
   CLEARING_KOI_KEY,
@@ -268,6 +272,8 @@ interface LocationSceneData {
    */
   readonly autoStartActivityId?: string;
 }
+
+const INTRO_PC_BUZZ_DELAY_MS = 1500;
 
 // Player yardstick (mirrors roomRenderer): ____ reads ~0.88 of her frame.
 const PLAYER_VISUAL_HEIGHT_PX = RECIPIENT_SPRITE.frameHeight * RECIPIENT_SPRITE.scale * 0.88;
@@ -677,6 +683,7 @@ export class LocationScene extends Phaser.Scene {
     document.body.dataset.locationId = this.location.id;
     document.body.dataset.runMode = this.state.mode ?? 'story';
     delete document.body.dataset.interiorAwakened;
+    delete document.body.dataset.introPcBuzz;
     this.createMap();
     this.createPlayer();
     this.createFriendOneFollower();
@@ -876,6 +883,12 @@ export class LocationScene extends Phaser.Scene {
       if (beat.once !== false) {
         this.state = markBeatSeen(this.state, beat.id);
         this.registry.set('runState', this.state);
+      }
+      if (beat.id === INTRO_COMPLETE_BEAT_ID) {
+        this.time.delayedCall(INTRO_PC_BUZZ_DELAY_MS, () => {
+          playSfx('sfx-pc-fail', { volume: 0.9 });
+          document.body.dataset.introPcBuzz = 'played';
+        });
       }
     }
   }
@@ -2737,10 +2750,6 @@ export class LocationScene extends Phaser.Scene {
         }),
       );
     };
-
-    if (this.location.id === 'recipient-house' && !hasSeenBeat(this.state, INTRO_COMPLETE_BEAT_ID)) {
-      this.time.delayedCall(450, () => playSfx('sfx-story-hum', { volume: 0.28 }));
-    }
 
     if (
       this.location.id !== 'recipient-house' ||
@@ -4763,6 +4772,14 @@ export class LocationScene extends Phaser.Scene {
       this.cancelViolinCue();
     }
 
+    if (interaction.id === 'recipient-mango-rice') {
+      const postRetakeDialogue = resolveMangoRiceDialogue(this.state);
+      if (postRetakeDialogue) {
+        await this.pauseForDialogue(postRetakeDialogue);
+        return;
+      }
+    }
+
     if (interaction.endingConversation) {
       await this.runFinaleConversation(interaction);
       return;
@@ -4776,6 +4793,9 @@ export class LocationScene extends Phaser.Scene {
       this.state = markBeatSeen(this.state, interaction.marksBeatId);
       this.registry.set('runState', this.state);
       this.applyFriendOnePcReadyState();
+      if (interaction.marksBeatId === FRIEND_ONE_PC_READY_BEAT_ID) {
+        playSfx('sfx-pc-ready', { volume: 0.55 });
+      }
     }
 
     if (interaction.kind === 'activity') {

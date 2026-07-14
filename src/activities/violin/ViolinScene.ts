@@ -1649,7 +1649,7 @@ export class ViolinScene extends Phaser.Scene {
     if (phase === 'playback' || phase === 'handoff') {
       // Handoff flows straight into the next listen, so it wears the same prompt
       // — the beat reads as the piece drawing breath, not a pause.
-      this.titleText.setText('listen…');
+      this.titleText.setText('listen...');
       this.helperText.setText('');
     } else if (phase === 'echo') {
       this.titleText.setText('now you — play it back');

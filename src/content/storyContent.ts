@@ -1,5 +1,5 @@
 import { isInteractionAvailable } from '../game/interactionState';
-import { hasSeenBeat, type RunState } from '../game/runState';
+import { hasActivityCompleted, hasSeenBeat, type RunState } from '../game/runState';
 import {
   FISHING_ACTIVITY_ID,
   FRIEND_ONE_TEXT_READ_BEAT_ID,
@@ -33,10 +33,27 @@ const RECIPIENT_PC_FIRST_MESSAGE: readonly DialogueLine[] = [
     text: 'Heyy! Happy birthday! you still coming over today?',
     portraitId: 'portrait-friendone',
   },
+  {
+    speaker: '____',
+    text: 'I’m coming over today?',
+    portraitId: 'portrait-recipient',
+  },
+  {
+    speaker: '____',
+    text: 'Must’ve forgot... I’ll head over now.',
+    portraitId: 'portrait-recipient',
+  },
 ];
 
 const RECIPIENT_PC_STILL_DARK: readonly DialogueLine[] = [
   { text: 'Still nothing. The screen is dark.', portraitId: 'inspect-recipient-pc' },
+];
+
+const MANGO_RICE_AFTER_RETAKE: readonly DialogueLine[] = [
+  {
+    text: 'Mango sticky rice, somehow still warm.',
+    portraitId: 'inspect-mango-rice',
+  },
 ];
 
 const ACTIVITY_COMPLETION_STORY: Readonly<Record<string, ActivityCompletionStory>> = {
@@ -62,7 +79,7 @@ const ACTIVITY_COMPLETION_STORY: Readonly<Record<string, ActivityCompletionStory
     worldDialogue: [
       {
         speaker: '____',
-        text: '…wait. I know this song!',
+        text: '...wait. I know this song!',
         portraitId: 'portrait-recipient',
       },
     ],
@@ -84,6 +101,14 @@ export function resolveRecipientPcStory(state: RunState): RecipientPcStory {
     playNotification: true,
     marksBeatId: FRIEND_ONE_TEXT_READ_BEAT_ID,
   };
+}
+
+export function resolveMangoRiceDialogue(
+  state: RunState,
+): readonly DialogueLine[] | undefined {
+  return hasActivityCompleted(state, RETAKE_ACTIVITY_ID)
+    ? MANGO_RICE_AFTER_RETAKE
+    : undefined;
 }
 
 export function getActivityCompletionStory(

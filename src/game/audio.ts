@@ -54,6 +54,7 @@ export const SFX_KEYS = [
   'sfx-letter-open',
   'sfx-story-hum',
   'sfx-pc-fail',
+  'sfx-pc-ready',
   'sfx-phone-notification',
   'sfx-koi-arrive',
   'sfx-omen-void',

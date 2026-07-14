@@ -16,7 +16,6 @@ export interface SelectedViolinSample {
 }
 
 const SAMPLE_BASE_URL = '/assets/audio/violin';
-const SPICCATO_MAX_DURATION_MS = 299;
 
 export const VIOLIN_SAMPLE_ANCHORS: readonly ViolinSampleAnchor[] = [
   {
@@ -57,13 +56,13 @@ export const VIOLIN_SAMPLE_ANCHORS: readonly ViolinSampleAnchor[] = [
   },
 ] as const;
 
-export const VIOLIN_SAMPLE_URLS: readonly string[] = VIOLIN_SAMPLE_ANCHORS.flatMap(
-  (anchor) => [anchor.arcoUrl, anchor.spiccatoUrl],
+export const VIOLIN_SAMPLE_URLS: readonly string[] = VIOLIN_SAMPLE_ANCHORS.map(
+  (anchor) => anchor.arcoUrl,
 );
 
 export function selectViolinSample(
   frequency: number,
-  durationMs: number,
+  _durationMs: number,
 ): SelectedViolinSample {
   const safeFrequency = Math.max(1, frequency);
   const anchor = VIOLIN_SAMPLE_ANCHORS.reduce((nearest, candidate) => {
@@ -71,14 +70,16 @@ export function selectViolinSample(
     const candidateDistance = Math.abs(Math.log2(safeFrequency / candidate.rootFrequency));
     return candidateDistance < nearestDistance ? candidate : nearest;
   });
-  const articulation: ViolinArticulation =
-    durationMs <= SPICCATO_MAX_DURATION_MS ? 'spiccato' : 'arco';
+  // The game's fast melody values still use the smooth bowed recording. The
+  // spiccato masters have a deliberately sharp bow bite that reads as an audio
+  // artifact in this intimate scene; duration is shaped by the gain envelope.
+  const articulation: ViolinArticulation = 'arco';
 
   return {
     anchorId: anchor.id,
     articulation,
     rootFrequency: anchor.rootFrequency,
     playbackRate: safeFrequency / anchor.rootFrequency,
-    url: articulation === 'spiccato' ? anchor.spiccatoUrl : anchor.arcoUrl,
+    url: anchor.arcoUrl,
   };
 }

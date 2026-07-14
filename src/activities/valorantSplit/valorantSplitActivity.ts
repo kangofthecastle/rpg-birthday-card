@@ -115,7 +115,7 @@ export function createValorantSplitActivity(
         await showDialogue([
           {
             speaker: '____',
-            text: 'Omen? You don’t play Omen very often.',
+            text: 'Omen? Don’t think I’ve ever seen you play him',
             portraitId: 'portrait-recipient',
           },
         ]);
@@ -126,7 +126,13 @@ export function createValorantSplitActivity(
 
         playSfx('sfx-omen-void');
         await showDialogue([
-          { speaker: 'Omen', text: '~~', portraitId: 'portrait-omen' },
+          {
+            speaker: 'Omen',
+            text: 'Unintelligible sounds from the void',
+            portraitId: 'portrait-omen',
+            emphasis: 'italic',
+          },
+          { speaker: '____', text: 'What?', portraitId: 'portrait-recipient' },
         ]);
       };
       const sceneCallbacks: SplitSceneCallbacks = {

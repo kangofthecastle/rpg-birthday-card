@@ -98,13 +98,21 @@ describe('showDialogue', () => {
 
   it('renders Omen dialogue with the existing in-game Omen portrait', async () => {
     const promise = showDialogue([
-      { speaker: 'Omen', text: '~~', portraitId: 'portrait-omen' },
+      {
+        speaker: 'Omen',
+        text: 'Unintelligible sounds from the void',
+        portraitId: 'portrait-omen',
+        emphasis: 'italic',
+      },
     ]);
     const root = document.querySelector<HTMLElement>('#ui-root');
 
     expect(
       root?.querySelector<HTMLImageElement>('.dialogue-box__portrait')?.getAttribute('src'),
     ).toBe('/assets/activities/valorant-split/omen.png');
+    expect(root?.querySelector('.dialogue-box__text--italic')?.textContent).toBe(
+      'Unintelligible sounds from the void',
+    );
 
     root?.querySelector<HTMLButtonElement>('.dialogue-box__action')?.click();
     await promise;

@@ -980,6 +980,10 @@ body {
   white-space: pre-line;
 }
 
+.dialogue-box__text--italic {
+  font-style: italic;
+}
+
 .dialogue-box__action {
   position: absolute;
   right: 13px;

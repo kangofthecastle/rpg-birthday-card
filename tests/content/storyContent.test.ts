@@ -3,6 +3,7 @@ import {
   getActivityCompletionStory,
   getAvailableLocationInteractions,
   resolveRecipientPcStory,
+  resolveMangoRiceDialogue,
 } from '../../src/content/storyContent';
 import { applyActivityCompletion, createInitialRunState, markBeatSeen } from '../../src/game/runState';
 import { isInteractionLocked } from '../../src/game/interactionState';
@@ -15,6 +16,22 @@ import {
 } from '../../src/game/storyProgression';
 
 describe('story content resolution', () => {
+  it('keeps the mango sticky rice warm after RETAKE', () => {
+    const fresh = createInitialRunState('recipient-house');
+    expect(resolveMangoRiceDialogue(fresh)).toBeUndefined();
+
+    const afterRetake = applyActivityCompletion(fresh, {
+      locationId: 'friend-b',
+      activityId: RETAKE_ACTIVITY_ID,
+    });
+    expect(resolveMangoRiceDialogue(afterRetake)).toEqual([
+      {
+        text: 'Mango sticky rice, somehow still warm.',
+        portraitId: 'inspect-mango-rice',
+      },
+    ]);
+  });
+
   it('keeps ____ activities hidden until her text and hides fishing after completion', () => {
     const fresh = createInitialRunState('recipient-house');
     expect(getAvailableLocationInteractions('friend-a', fresh)).toEqual([]);
@@ -41,18 +58,27 @@ describe('story content resolution', () => {
     expect(first.mode).toBe('first-message');
     expect(first.playNotification).toBe(true);
     expect(first.marksBeatId).toBe(FRIEND_ONE_TEXT_READ_BEAT_ID);
-    expect(first.dialogue.at(-1)?.text).toBe(
+    expect(first.dialogue.map((line) => line.text)).toEqual([
+      'Come on...',
+      'Nothing. It won’t even turn on.',
+      '1 NEW MESSAGE',
       'Heyy! Happy birthday! you still coming over today?',
-    );
+      'I’m coming over today?',
+      'Must’ve forgot... I’ll head over now.',
+    ]);
     expect(first.dialogue[2]).toMatchObject({
       text: '1 NEW MESSAGE',
       portraitTreatment: 'phone',
     });
-    expect(first.dialogue.at(-1)).toMatchObject({
+    expect(first.dialogue[3]).toMatchObject({
       speaker: '____',
       portraitId: 'portrait-friendone',
     });
-    expect(first.dialogue.at(-1)?.portraitTreatment).toBeUndefined();
+    expect(first.dialogue.at(-1)).toMatchObject({
+      speaker: '____',
+      portraitId: 'portrait-recipient',
+    });
+    expect(first.dialogue[3]?.portraitTreatment).toBeUndefined();
 
     const repeat = resolveRecipientPcStory(
       markBeatSeen(createInitialRunState('recipient-house'), FRIEND_ONE_TEXT_READ_BEAT_ID),
@@ -82,7 +108,7 @@ describe('story content resolution', () => {
     expect(getActivityCompletionStory(VIOLIN_ACTIVITY_ID)?.worldDialogue).toEqual([
       {
         speaker: '____',
-        text: '…wait. I know this song!',
+        text: '...wait. I know this song!',
         portraitId: 'portrait-recipient',
       },
     ]);

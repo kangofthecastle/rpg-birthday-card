@@ -123,9 +123,9 @@ test('plays the piece on the stand through test mode', async ({ page }) => {
   await expect(rewardPaper.getByRole('img', { name: /____’s handwritten sheet music/ })).toBeVisible();
   await expect(rewardPaper).toContainText('Do You Hear the People Sing?');
   await expect(rewardPaper).not.toContainText('completed sheet music');
-  await expect(page.getByText('…wait. I know this song!')).toHaveCount(0);
+  await expect(page.getByText('...wait. I know this song!')).toHaveCount(0);
   await rewardPaper.getByRole('button', { name: 'Continue' }).click();
-  await expect(page.getByText('…wait. I know this song!')).toBeVisible();
+  await expect(page.getByText('...wait. I know this song!')).toBeVisible();
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.locator('.collection-panel')).toContainText(
     'The Piece You Finally Played',

@@ -206,7 +206,9 @@ const WATERLINE_Y = 352;
 const BOAT_REST_Y = 346;
 /** How far above rest the finished boat floats down from. */
 const BOAT_DROP_RISE = 55;
-/** Gentle eased descent duration for the finished boat settling onto the water. */
+/** Default descent duration; the activity supplies its timing so reduced-motion
+ * and smoke-test runs can collapse the same visual beat without special-casing
+ * the renderer. */
 const BOAT_DROP_MS = 1000;
 
 // Composite anchors in the boat-tray's local frame (origin = waterline centre).
@@ -374,9 +376,13 @@ export class FoldStage {
   // is set. Suppresses the big verb-stage draw for the gap until then (and, for
   // the final piece, right through the sail-away).
   private componentSettledToTray = false;
-  // Timestamp the finished boat began its float-down onto the water (undefined =
-  // rest at BOAT_REST_Y, no descent in flight).
+  // Completing the final hand-down leaves the whole boat poised above the water.
+  // sailAway() starts the descent explicitly, so the player sees the COMPLETE
+  // silhouette travel all the way to the water instead of the motion being spent
+  // behind the lantern's hand-down animation.
+  private boatDropPrepared = false;
   private boatDropStart?: number;
+  private boatDropDurationMs = BOAT_DROP_MS;
 
   private pointerDown = false;
   private hoistGrabOffset = 0;
@@ -492,10 +498,26 @@ export class FoldStage {
   setAssembled(count: number): void {
     const wasComplete = this.assembled >= BOAT_PIECE_COUNT;
     this.assembled = count;
-    // The moment the boat is whole, animate it floating down onto the water.
+    // Hold the completed boat above the water until the ending beat explicitly
+    // begins. This is also used by the deterministic test-mode completion path.
     if (count >= BOAT_PIECE_COUNT && !wasComplete) {
-      this.boatDropStart = performance.now();
+      this.prepareBoatLanding();
     }
+  }
+
+  /** Starts the visible final descent of the complete boat onto the waterline. */
+  playBoatLanding(durationMs = BOAT_DROP_MS): void {
+    if (this.assembled < BOAT_PIECE_COUNT) {
+      return;
+    }
+    this.boatDropPrepared = true;
+    this.boatDropDurationMs = Math.max(1, durationMs);
+    this.boatDropStart = performance.now();
+  }
+
+  private prepareBoatLanding(): void {
+    this.boatDropPrepared = true;
+    this.boatDropStart = undefined;
   }
 
   setHoist(progress: number, _catching: boolean): void {
@@ -550,12 +572,12 @@ export class FoldStage {
    * roll/kindle 1) so the captured frame shows the finished piece.
    *
    * `target` is the tray-piece count it lands as. For the final piece the whole
-   * boat's settle-onto-water begins now so the pieces already in the tray drift
-   * down together while this one flies into its (moving) anchor.
+   * boat is held above the water so this piece lands into the complete elevated
+   * silhouette; the ending beat then lowers that complete boat to the water.
    */
   playHandDown(key: 'hull' | 'sail' | 'lantern', target: number, durationMs: number): void {
-    if (target >= BOAT_PIECE_COUNT && this.boatDropStart === undefined) {
-      this.boatDropStart = performance.now();
+    if (target >= BOAT_PIECE_COUNT) {
+      this.prepareBoatLanding();
     }
     this.handDown = {
       phase: 'capture',
@@ -2008,15 +2030,17 @@ export class FoldStage {
 
   // The boat coming together along the bottom — a COMPOSITE of the three pieces
   // (file-first images when present, else procedural), never one monolith.
-  /** The boat-tray's animated origin Y: rest at BOAT_REST_Y, or eased down onto
-   * the water from BOAT_DROP_RISE above when the finished boat first assembles,
-   * with a gentle decaying settle bob at the end (a boat easing onto water, not a
-   * hard stop). */
+  /** The boat-tray's animated origin Y: incomplete pieces rest at the waterline;
+   * once complete, the boat waits above it until playBoatLanding() begins, then
+   * eases down with a small decaying bob. */
   private boatOriginY(): number {
-    if (this.boatDropStart === undefined) {
+    if (!this.boatDropPrepared) {
       return BOAT_REST_Y;
     }
-    const t = clamp01((performance.now() - this.boatDropStart) / BOAT_DROP_MS);
+    if (this.boatDropStart === undefined) {
+      return BOAT_REST_Y - BOAT_DROP_RISE;
+    }
+    const t = clamp01((performance.now() - this.boatDropStart) / this.boatDropDurationMs);
     const ease = 1 - Math.pow(1 - t, 3); // ease-out cubic descent
     const bob = Math.sin(t * Math.PI * 3) * (1 - t) * 5; // small decaying settle
     return BOAT_REST_Y - BOAT_DROP_RISE * (1 - ease) + bob;

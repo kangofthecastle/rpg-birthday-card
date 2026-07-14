@@ -49,8 +49,8 @@ const CLOSE_ART_URL = '/assets/activities/fold-the-letters/close-x.png';
 
 interface FoldTiming {
   readonly assembledHoldMs: number;
-  readonly expandMs: number;
-  readonly sailAwayMs: number;
+  readonly landingMs: number;
+  readonly landingHoldMs: number;
   /** The folded-triangle → mast bridge after the sail fold commits (Change 2). In
    *  the same family as the hand-downs; fast path in test timing. */
   readonly sailIntroMs: number;
@@ -58,15 +58,15 @@ interface FoldTiming {
 
 const REAL_TIMING: FoldTiming = {
   assembledHoldMs: 1000,
-  expandMs: 1200,
-  sailAwayMs: 7000,
+  landingMs: 1100,
+  landingHoldMs: 250,
   sailIntroMs: 750,
 };
 
 const TEST_TIMING: FoldTiming = {
   assembledHoldMs: 40,
-  expandMs: 40,
-  sailAwayMs: 80,
+  landingMs: 40,
+  landingHoldMs: 40,
   sailIntroMs: 40,
 };
 
@@ -98,11 +98,8 @@ function wait(ms: number): Promise<void> {
 export const foldTheLettersActivity: ActivityModule = {
   id: 'fold-the-letters',
   title: 'fold',
-  async start({ state: runState, mount, onCancel, onComplete }) {
+  async start({ mount, onCancel, onComplete }) {
     const timing = isTestMode() || prefersReducedMotion() ? TEST_TIMING : REAL_TIMING;
-    const sailAwayMs = runState.mode === 'cards'
-      ? Math.min(timing.sailAwayMs, 900)
-      : timing.sailAwayMs;
 
     mount.innerHTML = `
       <section class="activity-panel activity-shell activity-shell--fold" role="dialog" aria-label="fold" data-fold-panel>
@@ -500,26 +497,26 @@ export const foldTheLettersActivity: ActivityModule = {
       sailingAway = true;
       syncDataAttrs();
       setHint(BOATIGAMI_COMPLETE_LINE);
-      playSfx('sfx-boat-expand');
-      await wait(timing.expandMs);
-      if (finished) {
-        return;
-      }
-
-      // Keep the assembled boat on the live fold canvas through the short drift.
-      // The former full-screen sail-away still was mounted outside this activity
-      // as a persistent bridge. Cards mode never enters the ending sequence that
-      // removed it, so the image covered the game forever. Completion now stays
-      // self-contained: the activity host removes this mount in every run mode.
       cancelButton!.disabled = true;
       const testCompleteButton = mount.querySelector<HTMLButtonElement>('[data-fold-test-complete]');
       if (testCompleteButton) {
         testCompleteButton.disabled = true;
       }
+
+      // The final component has already landed, leaving the complete boat poised
+      // above the painted water. Start its descent NOW so the ending never spends
+      // seven seconds on a static hovering frame before handing off to the story.
+      panel!.dataset.foldLanding = 'descending';
+      playSfx('sfx-boat-expand');
+      stage.playBoatLanding(timing.landingMs);
       playSfx('sfx-water-lap');
-      await wait(sailAwayMs / 2);
+      await wait(timing.landingMs);
+      if (finished) {
+        return;
+      }
+      panel!.dataset.foldLanding = 'landed';
       playSfx('sfx-water-lap');
-      await wait(sailAwayMs / 2);
+      await wait(timing.landingHoldMs);
       complete();
     }
 

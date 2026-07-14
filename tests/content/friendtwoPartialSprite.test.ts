@@ -70,7 +70,7 @@ describe('row key + url helpers', () => {
   });
 
   it('namespaces animation keys away from the galaxy ____ clip name', () => {
-    // The galaxy-ending ____ registers `friendtwo-idle-down` on the old atlas;
+    // The galaxy-ending ____ registers `friendtwo-idle-down` on the compact atlas;
     // the partial-set clips must not collide with it in the global anim manager.
     for (const row of FRIEND_TWO_GENERATED_ROWS) {
       expect(friendtwoRowAnimationKey(row)).not.toBe('friendtwo-idle-down');

@@ -96,10 +96,12 @@ export function runBootScreen(options: BootScreenOptions = {}): Promise<BootScre
     const renderCommandInput = (): void => {
       textNode.nodeValue = `${bootText()}\n${commandInput}`;
       const isKnownPrefix = PASSWORD_COMMAND.startsWith(commandInput);
-      completionEl.textContent = isKnownPrefix
+      const showSuggestion =
+        isKnownPrefix && commandInput.length > 1 && commandInput !== PASSWORD_COMMAND;
+      completionEl.textContent = showSuggestion
         ? PASSWORD_COMMAND.slice(commandInput.length)
         : '';
-      completionEl.hidden = !isKnownPrefix || commandInput === PASSWORD_COMMAND;
+      completionEl.hidden = !showSuggestion;
       tabHintEl.hidden = completionEl.hidden;
     };
 
@@ -196,7 +198,11 @@ export function runBootScreen(options: BootScreenOptions = {}): Promise<BootScre
     const handleCommandKey = (event: KeyboardEvent): void => {
       acknowledgeKey();
 
-      if (event.key === 'Tab' && PASSWORD_COMMAND.startsWith(commandInput)) {
+      if (
+        event.key === 'Tab' &&
+        commandInput.length > 1 &&
+        PASSWORD_COMMAND.startsWith(commandInput)
+      ) {
         enterPasswordPhase();
         return;
       }

@@ -71,14 +71,22 @@ describe('runBootScreen', () => {
 
     expect(overlay()?.classList.contains('boot-screen--flash')).toBe(false);
     expect(document.querySelector<HTMLElement>('.boot-screen__prompt')?.hidden).toBe(true);
-    expect(document.querySelector('.boot-screen__completion')?.textContent).toBe('password');
+    expect(document.querySelector('.boot-screen__completion')?.textContent).toBe('');
+    expect(document.querySelector<HTMLElement>('.boot-screen__completion')?.hidden).toBe(true);
+    expect(document.querySelector<HTMLElement>('.boot-screen__tab-hint')?.hidden).toBe(true);
+
+    // A bare slash is only the doorway. The autocomplete appears once the
+    // command is recognisable as /password.
+    pressKey('Tab');
+    expect(linesText()).toContain('READY\n/');
+    expect(linesText()).not.toContain('/password\npassword:');
+
+    pressKey('p');
     expect(document.querySelector<HTMLElement>('.boot-screen__completion')?.hidden).toBe(false);
     expect(document.querySelector<HTMLElement>('.boot-screen__tab-hint')?.hidden).toBe(false);
     expect(
       document.querySelector<HTMLElement>('.boot-screen__tab-hint')?.dataset.symbol,
     ).toBe('⇥');
-
-    pressKey('p');
     expect(document.querySelector('.boot-screen__completion')?.textContent).toBe('assword');
 
     // Leave the promise settled so the test cannot leak document listeners.

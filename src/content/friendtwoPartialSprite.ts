@@ -60,7 +60,7 @@ export function friendtwoRowStripUrl(row: FriendTwoRow): string {
 
 /**
  * Phaser animation key for a row. Namespaced away from the galaxy-ending ____
- * (`friendtwo-idle-down`, built on the old full atlas) so the two never collide in
+ * (`friendtwo-idle-down`, built on the compact two-row atlas) so the two never collide in
  * the global animation manager.
  */
 export function friendtwoRowAnimationKey(row: FriendTwoRow): string {

@@ -80,7 +80,7 @@ test('plays the piece on the stand through test mode', async ({ page }) => {
 
   const canvas = page.locator('canvas').first();
   await expect(canvas).toBeVisible();
-  await expect(page.locator('.collection-panel')).toContainText('Letters');
+  await expect(page.locator('.collection-panel')).toContainText('Backpack');
 
   // Clear the intro + warm return-home enter beats.
   await dismissContinues(page, 6);
@@ -152,7 +152,7 @@ test('echoes phrase 1 on the mapped keys, recovering from a wrong note', async (
 
   const canvas = page.locator('canvas').first();
   await expect(canvas).toBeVisible();
-  await expect(page.locator('.collection-panel')).toContainText('Letters');
+  await expect(page.locator('.collection-panel')).toContainText('Backpack');
 
   await dismissContinues(page, 6);
   await canvas.click();

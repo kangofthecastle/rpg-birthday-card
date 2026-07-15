@@ -25,7 +25,7 @@ export type FishBehaviorPhase =
 export interface FishBehaviorState {
   readonly position: Vec2;
   readonly velocity: Vec2;
-  /** Facing angle in radians, smoothed toward the velocity for rendering. */
+  /** Facing angle in radians, aligned with the eased velocity for rendering. */
   readonly heading: number;
   readonly phase: FishBehaviorPhase;
   /** Free-running wander target angle used by the roam/approach steering. */
@@ -93,14 +93,6 @@ function clamp(value: number, min: number, max: number): number {
 
 function length(v: Vec2): number {
   return Math.hypot(v.x, v.y);
-}
-
-/** Shortest signed delta to rotate `from` toward `to`, in [-PI, PI]. */
-function angleDelta(from: number, to: number): number {
-  let d = (to - from) % TWO_PI;
-  if (d > Math.PI) d -= TWO_PI;
-  if (d < -Math.PI) d += TWO_PI;
-  return d;
 }
 
 /**
@@ -306,12 +298,15 @@ export function updateFishBehavior(
   x = clamp(x, b.minX, b.maxX);
   y = clamp(y, b.minY, b.maxY);
 
-  // Heading chases the velocity direction.
+  // Velocity is already eased toward the steering target above, so it is the
+  // smooth source of truth for the fish's rendered direction. Easing heading a
+  // second time made it lag behind tight inspect/orbit turns near the bobber;
+  // during that lag the fish could be moving right while still facing left
+  // (visibly swimming tail-first).
   let heading = state.heading;
   const movingSpeed = Math.hypot(vx, vy);
   if (movingSpeed > 1) {
-    const velAngle = Math.atan2(vy, vx);
-    heading = state.heading + angleDelta(state.heading, velAngle) * ease;
+    heading = Math.atan2(vy, vx);
   }
 
   return {

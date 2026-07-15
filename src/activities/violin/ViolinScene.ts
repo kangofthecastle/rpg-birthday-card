@@ -799,22 +799,13 @@ export class ViolinScene extends Phaser.Scene {
   }
 
   private drawStand(g: Phaser.GameObjects.Graphics): void {
-    // A suggestion of a wooden music stand under the sheet: a tray ledge the
-    // paper rests on and a central post. The splayed tripod legs are drawn
-    // separately (drawStandLegs) so they can be dropped when the backdrop art —
-    // which paints its own legs — is present.
+    // A suggestion of a wooden music stand under the sheet: only the tray ledge
+    // the paper rests on. The painted room backdrop supplies the stand below it;
+    // drawing another central post here left a doubled pole over that art.
     const cx = SHEET_CX;
     const dark = 0x2c1d12;
     const wood = 0x4a3120;
     const lit = 0x6b4a2e;
-
-    // Central post.
-    g.fillStyle(dark, 1);
-    g.fillRect(cx - 5, 236, 10, 60);
-    g.fillStyle(wood, 1);
-    g.fillRect(cx - 4, 236, 6, 60);
-    g.fillStyle(lit, 0.7);
-    g.fillRect(cx - 4, 236, 2, 60);
 
     // Tray ledge that the sheet leans against.
     g.fillStyle(dark, 1);
@@ -825,7 +816,7 @@ export class ViolinScene extends Phaser.Scene {
     g.fillRect(cx - 66, 231, 132, 2);
   }
 
-  // The splayed tripod legs fading into shadow beneath the post. Kept on their
+  // The splayed tripod legs fading into shadow beneath the tray. Kept on their
   // own fallback layer so the drop-in backdrop art (which paints its own legs)
   // hides them, avoiding a doubled, ghosted tripod through the 0.6-alpha art.
   private drawStandLegs(g: Phaser.GameObjects.Graphics): void {

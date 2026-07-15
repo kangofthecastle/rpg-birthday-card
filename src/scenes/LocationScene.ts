@@ -178,10 +178,8 @@ import {
   type ClearingMotePath,
 } from '../game/clearingCurrent';
 import {
-  AWAKENING_FRAGMENT,
   VIOLIN_INVITATION_DURATION_MS,
   createViolinInvitationSchedule,
-  type MotifNote,
 } from '../game/violinInvitationCue';
 import { getPitch } from '../activities/violin/melody';
 import {
@@ -195,7 +193,13 @@ import {
 } from '../game/epilogueRoom';
 import { type IsoOrigin, type IsoPoint } from '../game/isometricProjection';
 import { createProjection, type Projection } from '../game/projection';
-import { playMusic, playSfx, playViolinNote, type MusicKey } from '../game/audio';
+import {
+  playMusic,
+  playSfx,
+  playViolinNote,
+  stopMusic,
+  type MusicKey,
+} from '../game/audio';
 import {
   getObjectLayer,
   getPointObject,
@@ -456,8 +460,12 @@ const MUSIC_BY_LOCATION_ID: Readonly<Record<string, MusicKey>> = {
 
 const ACTIVITY_MUSIC_BY_ID: Readonly<Record<string, MusicKey | undefined>> = {
   'friendone-pc-fishing': 'music-friendone',
-  'valorant-split': 'music-split',
 };
+
+// RETAKE relies on its weapon, spike, defuse, and kill cues for its soundscape.
+// Fade out the room bed while it is open instead of layering synth music under
+// those gameplay sounds.
+const MUSIC_SILENT_ACTIVITY_IDS: ReadonlySet<string> = new Set(['valorant-split']);
 
 // The four full-screen minigames. While one is open the global HUD chrome (the
 // top-right mute toggle and the Letters/envelope inventory) is hidden via a
@@ -2822,19 +2830,6 @@ export class LocationScene extends Phaser.Scene {
     document.body.dataset.roomPhotoComplete = 'true';
   }
 
-  private playViolinMotif(fragment: readonly MotifNote[], volume: number): void {
-    fragment.forEach((note, noteIndex) => {
-      const pitch = getPitch(note.pitchId);
-      if (!pitch) return;
-      this.time.delayedCall(note.delayMs, () => {
-        playViolinNote(pitch.frequency, note.durationMs, {
-          volume,
-          connected: noteIndex > 0,
-        });
-      });
-    });
-  }
-
   private startStoryAudioCues(): void {
     const scheduleNote = (
       pitchId: string,
@@ -5191,11 +5186,14 @@ export class LocationScene extends Phaser.Scene {
     }
 
     const activityMusic = ACTIVITY_MUSIC_BY_ID[activityId];
+    const silencesMusic = MUSIC_SILENT_ACTIVITY_IDS.has(activityId);
     if (activityMusic) {
       playMusic(activityMusic, { fadeMs: 900 });
+    } else if (silencesMusic) {
+      stopMusic({ fadeMs: 900 });
     }
     const resumeLocationMusic = () => {
-      if (activityMusic) {
+      if (activityMusic || silencesMusic) {
         playMusic(locationMusicKey(this.location.id), { fadeMs: 1200 });
       }
     };
@@ -5285,10 +5283,6 @@ export class LocationScene extends Phaser.Scene {
         // the stand — before the reward letter and any travel. Gated internally
         // on the final unlock, so only the run-completing keepsake triggers it.
         this.applyInteriorAwakening({ animate: true });
-        if (completedActivityId === VIOLIN_ACTIVITY_ID) {
-          this.playViolinMotif(AWAKENING_FRAGMENT, 0.36);
-        }
-
         // Epilogue/card-mode launches are clean replays: return to the room on
         // completion without re-awarding keepsakes or replaying story dialogue.
         if (!replayingAfterEnding) {

@@ -46,11 +46,11 @@ export const SPLIT_CONFIG = {
     // The Phantom fires 11 rounds/sec (660 RPM) on hold: one round every
     // 1000/11 ≈ 90.9ms. tickSplit gates the trigger on this shot clock.
     shotCooldownMs: 1000 / 11,
-    // Weapon: the Phantom's 30-round magazine, four mags total (one loaded +
-    // three in reserve = 90 reserve rounds). Reload refills the current mag from
-    // the reserve pool and takes 2.5 seconds (locked out of firing during it).
+    // Weapon: the Phantom carries 90 rounds total — one loaded 30-round mag plus
+    // two spare mags (60 reserve rounds). Reload refills the current mag from the
+    // reserve pool and takes 2.5 seconds (locked out of firing during it).
     magSize: 30,
-    magazines: 4,
+    magazines: 3,
     reloadMs: 2500,
     // Valorant-style spread, two independent contributors summed into the cone:
     //   • Character movement — near-pinpoint standing still (spreadStillRad), a

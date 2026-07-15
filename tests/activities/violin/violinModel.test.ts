@@ -4,6 +4,8 @@ import {
   VIOLIN_PHRASES,
   VIOLIN_PITCHES,
   VIOLIN_RHYTHM_MS,
+  VIOLIN_SHEET_KINDLE_MOTIF,
+  VIOLIN_SHEET_ROLL_MOTIF,
   getPitch,
   getPitchByKey,
 } from '../../../src/activities/violin/melody';
@@ -164,6 +166,27 @@ describe('melody data', () => {
       VIOLIN_FINALE_PHRASES.flatMap((phrase) => phrase.notes).slice(0, 31).map((note) => note.pitchId),
     );
     expect(getPitch(interactiveNotes.at(-1)?.pitchId ?? '')?.key).toBe('K');
+  });
+
+  it('continues the Boatigami lantern melody from rolling into kindling', () => {
+    const fullPassage = VIOLIN_FINALE_PHRASES.flatMap((phrase) => phrase.notes);
+    expect(VIOLIN_SHEET_ROLL_MOTIF.map((note) => note.pitchId)).toEqual([
+      'a4',
+      'g4',
+      'f4',
+      'g4',
+      'a4',
+      'bb4',
+    ]);
+    expect(VIOLIN_SHEET_KINDLE_MOTIF.map((note) => note.pitchId)).toEqual([
+      'c5',
+      'a4',
+      'g4',
+      'f4',
+    ]);
+    expect([...VIOLIN_SHEET_ROLL_MOTIF, ...VIOLIN_SHEET_KINDLE_MOTIF]).toEqual(
+      fullPassage.slice(0, 10),
+    );
   });
 
   it('maps every pitch to a unique key and every note to a known pitch', () => {

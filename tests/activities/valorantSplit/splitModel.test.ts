@@ -292,7 +292,7 @@ describe('ammo, reload, and dry fire', () => {
     return { ...IDLE_INPUT, fire: true, ...extra };
   }
 
-  it('starts with a full mag and three mags in reserve', () => {
+  it('starts with a full mag and two mags in reserve', () => {
     const state = createSplitState(1);
 
     expect(state.player.ammoInMag).toBe(SPLIT_CONFIG.player.magSize);
@@ -418,14 +418,15 @@ describe('Phantom rate of fire (11 rounds/sec)', () => {
   });
 });
 
-describe('Phantom magazine (30 loaded, 90 reserve)', () => {
-  it('carries a 30-round mag and three spare mags (90 reserve)', () => {
+describe('Phantom magazine (30 loaded, 90 rounds total)', () => {
+  it('carries a 30-round mag and two spare mags (60 reserve)', () => {
     const state = createSplitState(1);
 
     expect(SPLIT_CONFIG.player.magSize).toBe(30);
-    expect(SPLIT_CONFIG.player.magazines).toBe(4);
+    expect(SPLIT_CONFIG.player.magazines).toBe(3);
     expect(state.player.ammoInMag).toBe(30);
-    expect(state.player.reserveRounds).toBe(90);
+    expect(state.player.reserveRounds).toBe(60);
+    expect(state.player.ammoInMag + state.player.reserveRounds).toBe(90);
     expect(state.player.reserveRounds).toBe(
       (SPLIT_CONFIG.player.magazines - 1) * SPLIT_CONFIG.player.magSize,
     );

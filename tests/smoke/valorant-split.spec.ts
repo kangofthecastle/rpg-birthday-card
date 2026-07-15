@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 async function openRetakeFromFriendTwoPc(page: import('@playwright/test').Page): Promise<void> {
   const canvas = page.locator('canvas').first();
   await expect(canvas).toBeVisible();
-  await expect(page.locator('.collection-panel')).toContainText('Letters');
+  await expect(page.locator('.collection-panel')).toContainText('Backpack');
   await canvas.click();
   await page.keyboard.down('E');
   await page.waitForTimeout(120);
@@ -50,7 +50,7 @@ test('completes RETAKE.EXE at ____ house through test mode', async ({ page }) =>
 
   const canvas = page.locator('canvas').first();
   await expect(canvas).toBeVisible();
-  await expect(page.locator('.collection-panel')).toContainText('Letters');
+  await expect(page.locator('.collection-panel')).toContainText('Backpack');
   await expect(page.locator('body')).toHaveAttribute('data-friendone-mode', 'waiting');
 
   // ____ stays beside ____ through the empty-house exchange. Her walk begins

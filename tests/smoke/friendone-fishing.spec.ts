@@ -7,7 +7,7 @@ test('completes ____ PC fishing activity through test mode', async ({ page }) =>
 
   const canvas = page.locator('canvas').first();
   await expect(canvas).toBeVisible();
-  await expect(page.locator('.collection-panel')).toContainText('Letters');
+  await expect(page.locator('.collection-panel')).toContainText('Backpack');
   await expect(page.locator('body')).toHaveAttribute('data-friendone-pc-ready', 'true');
   await expect(page.locator('body')).toHaveAttribute('data-friendone-pc-cue', 'glass-shine');
 

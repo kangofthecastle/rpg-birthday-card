@@ -29,9 +29,10 @@ export interface CollisionZonesFile {
   readonly locationId: string;
   readonly zones: readonly CollisionZone[];
   /**
-   * Per-prop depth-line overrides, keyed by prop frame name. Existing numeric
-   * values retain the horizontal map-y threshold. A line object supports a
-   * rotated boundary and explicitly identifies the side where ____ is in front.
+   * Per-prop depth-line overrides. Room props are keyed by frame name; outdoor
+   * props use their stable placed-instance id (`tree-1#0`, `tree-1#1`, etc.).
+   * Existing numeric values retain the horizontal map-y threshold. A line object
+   * supports a rotated boundary and explicitly identifies ____'s front side.
    */
   readonly propDepthOverrides?: Readonly<Record<string, PropDepthOverride>>;
 }

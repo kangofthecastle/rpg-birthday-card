@@ -5,7 +5,12 @@ import {
   resolveRecipientPcStory,
   resolveMangoRiceDialogue,
 } from '../../src/content/storyContent';
-import { applyActivityCompletion, createInitialRunState, markBeatSeen } from '../../src/game/runState';
+import {
+  applyActivityCompletion,
+  createCardModeRunState,
+  createInitialRunState,
+  markBeatSeen,
+} from '../../src/game/runState';
 import { isInteractionLocked } from '../../src/game/interactionState';
 import {
   FISHING_ACTIVITY_ID,
@@ -132,5 +137,13 @@ describe('story content resolution', () => {
       getAvailableLocationInteractions('friend-b', fishingDone)[0],
       fishingDone,
     )).toBe(false);
+  });
+
+  it('keeps the other ____-house desk inspectable in /password mode', () => {
+    expect(
+      getAvailableLocationInteractions('friend-b', createCardModeRunState()).map(
+        (item) => item.id,
+      ),
+    ).toContain('friend-b-easter-egg');
   });
 });

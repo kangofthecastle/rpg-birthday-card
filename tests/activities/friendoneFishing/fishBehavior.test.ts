@@ -97,4 +97,32 @@ describe('fishBehavior', () => {
     expect(a.position).toEqual(b.position);
     expect(a.phase).toBe(b.phase);
   });
+
+  it('keeps its rendered heading aligned with its travel near the bobber', () => {
+    const bobber = { x: 210, y: 250 };
+    const target: FishBehaviorTarget = { ...bobber, active: true, reeling: 0.7 };
+    let state = createFishBehaviorState({ x: 560, y: 286 }, 4242);
+    let checkedCloseTurn = false;
+
+    for (let i = 0; i < 260; i += 1) {
+      state = updateFishBehavior(state, target, params(), 32);
+      const distance = distanceTo(state, bobber);
+      const speed = Math.hypot(state.velocity.x, state.velocity.y);
+      if (distance > params().nibbleRadius * 1.5 || speed <= 5) continue;
+
+      checkedCloseTurn = true;
+      const facingDirection = {
+        x: Math.cos(state.heading),
+        y: Math.sin(state.heading),
+      };
+      const travelDot =
+        facingDirection.x * state.velocity.x + facingDirection.y * state.velocity.y;
+      expect(travelDot).toBeGreaterThanOrEqual(0);
+      if (Math.abs(state.velocity.x) > 5 && Math.abs(facingDirection.x) > 0.2) {
+        expect(Math.sign(facingDirection.x)).toBe(Math.sign(state.velocity.x));
+      }
+    }
+
+    expect(checkedCloseTurn).toBe(true);
+  });
 });

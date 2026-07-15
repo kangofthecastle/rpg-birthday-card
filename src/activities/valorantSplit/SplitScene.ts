@@ -1308,7 +1308,7 @@ export class SplitScene extends Phaser.Scene {
       .setDepth(811)
       .setScrollFactor(0);
     this.ammoReserveText = this.add
-      .text(ARENA.width - 24, midY + 6, '90', {
+      .text(ARENA.width - 24, midY + 6, '60', {
         color: '#c7b06a',
         fontFamily: 'Consolas, "Courier New", monospace',
         fontSize: '20px',

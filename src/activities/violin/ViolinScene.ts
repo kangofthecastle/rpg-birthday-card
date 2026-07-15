@@ -73,6 +73,12 @@ const CLEF_URL = '/assets/activities/violin/treble-clef.png';
 // incoming hand-inked art) keeps its true proportions — width follows.
 const CLEF_DISPLAY_HEIGHT = 120;
 
+// Authored flat accidental. The source is a white alpha mask so the live staff
+// can tint it with the same ink/amber palette as each note's current state.
+const FLAT_ACCIDENTAL_KEY = 'violin-flat-accidental';
+const FLAT_ACCIDENTAL_URL = '/assets/activities/violin/flat-accidental.png';
+const FLAT_ACCIDENTAL_DISPLAY_HEIGHT = 22;
+
 // The model is driven by real elapsed wall-clock time (not Phaser's smoothed
 // per-frame delta), so playback tempo is correct regardless of render FPS. A
 // single step is clamped so a backgrounded tab resuming can't teleport the model.
@@ -175,6 +181,8 @@ export class ViolinScene extends Phaser.Scene {
   private beamFx!: Phaser.GameObjects.Graphics; // additive finale flood
   private sheet!: Phaser.GameObjects.Container; // tilted paper + staff + notes
   private staff!: Phaser.GameObjects.Graphics; // (child of sheet) live note/graph layer
+  private flatAccidentalLayer!: Phaser.GameObjects.Container; // tintable authored flat glyphs
+  private flatAccidentalImages: Phaser.GameObjects.Image[] = [];
   private staffRuling!: Phaser.GameObjects.Graphics; // static 5-line ruling + bars (staff view only)
   private clefFallback?: Phaser.GameObjects.Graphics; // vector clef, hidden if art loads
   private clefArt?: Phaser.GameObjects.Image; // drop-in clef image, when present
@@ -217,6 +225,7 @@ export class ViolinScene extends Phaser.Scene {
   }
 
   preload(): void {
+    this.load.image(FLAT_ACCIDENTAL_KEY, FLAT_ACCIDENTAL_URL);
     // The optional drop-in backdrop art is probed + loaded in create() via a
     // content-type check, so a missing file never logs a red loader error.
   }
@@ -419,6 +428,7 @@ export class ViolinScene extends Phaser.Scene {
   // read as height. The live layer (this.staff) is redrawn per-frame either way.
   private applyViewMode(graph: boolean): void {
     this.staffRuling?.setVisible(!graph);
+    this.flatAccidentalLayer?.setVisible(!graph);
     this.clefArt?.setVisible(!graph);
     this.clefFallback?.setVisible(!graph && !this.clefArt);
     if (graph) {
@@ -789,22 +799,13 @@ export class ViolinScene extends Phaser.Scene {
   }
 
   private drawStand(g: Phaser.GameObjects.Graphics): void {
-    // A suggestion of a wooden music stand under the sheet: a tray ledge the
-    // paper rests on and a central post. The splayed tripod legs are drawn
-    // separately (drawStandLegs) so they can be dropped when the backdrop art —
-    // which paints its own legs — is present.
+    // A suggestion of a wooden music stand under the sheet: only the tray ledge
+    // the paper rests on. The painted room backdrop supplies the stand below it;
+    // drawing another central post here left a doubled pole over that art.
     const cx = SHEET_CX;
     const dark = 0x2c1d12;
     const wood = 0x4a3120;
     const lit = 0x6b4a2e;
-
-    // Central post.
-    g.fillStyle(dark, 1);
-    g.fillRect(cx - 5, 236, 10, 60);
-    g.fillStyle(wood, 1);
-    g.fillRect(cx - 4, 236, 6, 60);
-    g.fillStyle(lit, 0.7);
-    g.fillRect(cx - 4, 236, 2, 60);
 
     // Tray ledge that the sheet leans against.
     g.fillStyle(dark, 1);
@@ -815,7 +816,7 @@ export class ViolinScene extends Phaser.Scene {
     g.fillRect(cx - 66, 231, 132, 2);
   }
 
-  // The splayed tripod legs fading into shadow beneath the post. Kept on their
+  // The splayed tripod legs fading into shadow beneath the tray. Kept on their
   // own fallback layer so the drop-in backdrop art (which paints its own legs)
   // hides them, avoiding a doubled, ghosted tripod through the 0.6-alpha art.
   private drawStandLegs(g: Phaser.GameObjects.Graphics): void {
@@ -1017,6 +1018,11 @@ export class ViolinScene extends Phaser.Scene {
     this.clefFallback = clef;
     void this.maybeLoadClef();
 
+    // Authored accidentals sit immediately under the live Graphics layer so
+    // note glows still bloom over them as the phrase plays.
+    this.flatAccidentalLayer = this.add.container(0, 0);
+    this.sheet.add(this.flatAccidentalLayer);
+
     // Live note layer (redrawn each frame).
     this.staff = this.add.graphics();
     this.sheet.add(this.staff);
@@ -1138,17 +1144,30 @@ export class ViolinScene extends Phaser.Scene {
     g.lineBetween(x - 6, y + 4, x + 6, y + 2);
   }
 
-  /** Compact flat sign matching the sharp's hand-inked treatment. */
+  /** Authored flat sign pooled as tintable images so staff redraws stay cheap. */
   private drawFlatAccidental(
-    g: Phaser.GameObjects.Graphics,
     x: number,
     y: number,
     isLit: boolean,
+    imageIndex: number,
   ): void {
     const color = isLit ? mixHex(NOTE_LIT, 0xffe6a6, 0.3) : INK;
-    g.lineStyle(1.5, color, isLit ? 0.95 : 0.65);
-    g.lineBetween(x - 2, y - 10, x - 2, y + 7);
-    g.strokeEllipse(x + 1.5, y + 2, 8, 10);
+    let image = this.flatAccidentalImages[imageIndex];
+    if (!image) {
+      image = this.add
+        .image(0, 0, FLAT_ACCIDENTAL_KEY)
+        // The note centre sits roughly two-thirds down a conventional flat:
+        // its stem reaches farther above the note than its bowl falls below.
+        .setOrigin(0.5, 0.66)
+        .setScale(FLAT_ACCIDENTAL_DISPLAY_HEIGHT / 256);
+      this.flatAccidentalLayer.add(image);
+      this.flatAccidentalImages.push(image);
+    }
+    image
+      .setPosition(x, y)
+      .setTint(color)
+      .setAlpha(isLit ? 0.95 : 0.65)
+      .setVisible(true);
   }
 
   private currentNoteMarks(phrase: ViolinPhrase): NoteMark[] {
@@ -1167,6 +1186,7 @@ export class ViolinScene extends Phaser.Scene {
   private drawStaff(time: number): void {
     const g = this.staff;
     g.clear();
+    this.flatAccidentalImages.forEach((image) => image.setVisible(false));
 
     const phrase = getPhrase(this.modelState);
     if (!phrase) {
@@ -1188,6 +1208,7 @@ export class ViolinScene extends Phaser.Scene {
     }
     this.litShown = lit;
 
+    let flatAccidentalIndex = 0;
     marks.forEach((mark, index) => {
       const pitch = getPitch(phrase.notes[index].pitchId);
       const isLit = index < lit;
@@ -1217,7 +1238,8 @@ export class ViolinScene extends Phaser.Scene {
       if (pitch?.accidental === 'sharp') {
         this.drawSharpAccidental(g, cx - 14, cy, isLit);
       } else if (pitch?.accidental === 'flat') {
-        this.drawFlatAccidental(g, cx - 14, cy, isLit);
+        this.drawFlatAccidental(cx - 14, cy, isLit, flatAccidentalIndex);
+        flatAccidentalIndex += 1;
       }
 
       if (isLit) {

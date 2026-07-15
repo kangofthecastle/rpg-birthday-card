@@ -77,7 +77,11 @@ describe('createCollectionPanel', () => {
     const { element } = createCollectionPanel(stateWith([]));
 
     expect(element.classList.contains('collection-panel')).toBe(true);
-    expect(element.querySelector('h2')?.textContent).toBe('Letters');
+    expect(element.getAttribute('aria-label')).toBe('Backpack');
+    expect(element.querySelector('h2')?.textContent).toBe('Backpack');
+    expect(element.querySelector('.collection-panel__empty')?.textContent).toBe(
+      'The keepsakes you gather will rest here.',
+    );
     expect(element.querySelector('.collection-panel__empty')).not.toBeNull();
     expect(element.querySelector('.letter-stack')).toBeNull();
   });

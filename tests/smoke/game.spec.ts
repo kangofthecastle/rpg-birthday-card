@@ -6,7 +6,7 @@ test('boots the game and shows the canvas', async ({ page }) => {
 
   const canvas = page.locator('canvas');
   await expect(canvas).toBeVisible();
-  await expect(page.locator('.collection-panel')).toContainText('Letters');
+  await expect(page.locator('.collection-panel')).toContainText('Backpack');
 });
 
 test('shows an interaction prompt when the player reaches the signpost', async ({
@@ -15,7 +15,7 @@ test('shows an interaction prompt when the player reaches the signpost', async (
   await page.goto('/?testMode=1&locationId=main-outside&spawnId=start');
   const canvas = page.locator('canvas');
   await expect(canvas).toBeVisible();
-  await expect(page.locator('.collection-panel')).toContainText('Letters');
+  await expect(page.locator('.collection-panel')).toContainText('Backpack');
 
   await canvas.click();
 

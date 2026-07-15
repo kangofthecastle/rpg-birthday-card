@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   BED_DEPTH_LAYER_SPECS,
   bedDepthOverrideKey,
+  getBedDepthLines,
   getBedDepthMask,
   getBedDepthOverride,
   getDefaultBedDepthOverrides,
+  isPlayerInFrontOfBedDepthLines,
 } from '../../src/content/bedDepth';
 
 const placement = {
@@ -32,14 +34,23 @@ describe('bed depth layers', () => {
     expect(getBedDepthMask('friend-a').id).not.toBe(getBedDepthMask('friend-b').id);
   });
 
-  it('derives parallel default boundaries from the bed footprint', () => {
+  it('derives an L-shaped side and foot boundary from the bed footprint', () => {
     const defaults = getDefaultBedDepthOverrides(placement);
-    expect(defaults['bed:back'].start).toEqual([171, 590]);
-    expect(defaults['bed:back'].end).toEqual([329, 590]);
+    expect(defaults['bed:back'].start).toEqual([329, 590]);
+    expect(defaults['bed:back'].end).toEqual([329, 700]);
     expect(defaults['bed:front'].start).toEqual([171, 700]);
     expect(defaults['bed:front'].end).toEqual([329, 700]);
-    expect(defaults['bed:back'].frontSide[1]).toBeGreaterThan(590);
+    expect(defaults['bed:back'].frontSide[0]).toBeGreaterThan(329);
     expect(defaults['bed:front'].frontSide[1]).toBeGreaterThan(700);
+  });
+
+  it('combines the side and foot segments into one bed boundary', () => {
+    const lines = getBedDepthLines(getDefaultBedDepthOverrides(placement), 'bed');
+
+    expect(lines).toHaveLength(2);
+    expect(isPlayerInFrontOfBedDepthLines(lines, 250, 590)).toBe(false);
+    expect(isPlayerInFrontOfBedDepthLines(lines, 370, 640)).toBe(true);
+    expect(isPlayerInFrontOfBedDepthLines(lines, 250, 750)).toBe(true);
   });
 
   it('prefers a layered override and falls back to the legacy frame key', () => {
@@ -53,5 +64,7 @@ describe('bed depth layers', () => {
 
     expect(getBedDepthOverride(legacy, 'bed', 'back')).toBe(legacy.bed);
     expect(getBedDepthOverride(layered, 'bed', 'front')).toBe(layered['bed:front']);
+    expect(getBedDepthLines(legacy, 'bed')).toEqual([legacy.bed]);
+    expect(getBedDepthLines(layered, 'bed')).toEqual([layered['bed:front']]);
   });
 });

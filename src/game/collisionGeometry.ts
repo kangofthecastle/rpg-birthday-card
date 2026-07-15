@@ -181,20 +181,18 @@ export function rasterizePolygonsToRects(
 }
 
 /**
- * Outdoor collision model: hand-drawn polygon zones are ADDITIVE to the
- * scenery-derived colliders (exteriors, props, signposts). This differs from
- * interiors, where a zones file REPLACES the footprint colliders. The scenery
- * rects are returned first, followed by the rasterised zone rects, so a saved
- * outdoor zones file adds extra no-go shapes without dropping any scenery
- * collision. Overlap is fine — duplicate/overlapping static bodies are
- * harmless. With no (or only degenerate) zone polygons, the scenery rects are
- * returned as-is, in order.
+ * Outdoor collision follows the same authored-file semantics as rooms. Before
+ * a zones file exists, scenery footprints are the fallback. Once the editor
+ * saves a file, its polygons replace those generated footprints completely.
+ * `undefined` therefore means "no authored file", while an empty array means
+ * "an authored file with no collision".
  */
-export function combineOutdoorColliders(
+export function resolveOutdoorColliders(
   sceneryRects: readonly Rect[],
-  zonePolygons: readonly Polygon[],
+  zonePolygons: readonly Polygon[] | undefined,
   cellSize: number,
 ): Rect[] {
-  const zoneRects = rasterizePolygonsToRects(zonePolygons, cellSize);
-  return [...sceneryRects, ...zoneRects];
+  return zonePolygons === undefined
+    ? [...sceneryRects]
+    : rasterizePolygonsToRects(zonePolygons, cellSize);
 }

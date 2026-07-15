@@ -260,6 +260,10 @@ export const VIOLIN_THEME_MOTIF: readonly ViolinNote[] = FULL_NOTE_STREAM.slice(
 /** The first six sounded notes for the six sheet-roll note thresholds. */
 export const VIOLIN_SHEET_ROLL_MOTIF: readonly ViolinNote[] = FULL_NOTE_STREAM.slice(0, 6);
 
+/** The next four notes after the sheet-roll plucks. HOLD TO LIGHT continues
+ * straight into this figure instead of restarting the opening motif. */
+export const VIOLIN_SHEET_KINDLE_MOTIF: readonly ViolinNote[] = FULL_NOTE_STREAM.slice(6, 10);
+
 const PITCH_BY_ID = new Map(VIOLIN_PITCHES.map((pitch) => [pitch.id, pitch]));
 const PITCH_BY_KEY = new Map(VIOLIN_PITCHES.map((pitch) => [pitch.key, pitch]));
 

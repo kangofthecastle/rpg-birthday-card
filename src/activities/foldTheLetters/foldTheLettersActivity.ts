@@ -35,8 +35,8 @@ import { FoldStage } from './foldStage';
 import { createActivityCloseButton } from '../activityShell';
 import {
   getPitch,
+  VIOLIN_SHEET_KINDLE_MOTIF,
   VIOLIN_SHEET_ROLL_MOTIF,
-  VIOLIN_THEME_MOTIF,
 } from '../violin/melody';
 import './foldTheLetters.css';
 
@@ -150,16 +150,16 @@ export const foldTheLettersActivity: ActivityModule = {
       panel.dataset.foldKindleMusic = 'violin';
 
       let startMs = 0;
-      VIOLIN_THEME_MOTIF.forEach((note, index) => {
+      VIOLIN_SHEET_KINDLE_MOTIF.forEach((note) => {
         startMs += note.delayBeforeMs ?? 0;
         const playNote = (): void => {
           const pitch = getPitch(note.pitchId);
           if (pitch) {
-            // One octave down and quiet: recognizably bowed, but still only a
-            // shadow of the theme rather than a full musical statement.
-            playViolinNote(pitch.frequency / 2, note.durationMs, {
-              volume: 0.24,
-              connected: index > 0,
+            // Continue the exact score line sounded by the six roll thresholds:
+            // same written register, same gain, and a connected bow entry.
+            playViolinNote(pitch.frequency, note.durationMs, {
+              volume: 0.5,
+              connected: true,
             });
           }
         };

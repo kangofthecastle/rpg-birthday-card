@@ -15,29 +15,34 @@ export function isInteractionAvailable(
     readonly requiresActivityId?: string;
     readonly hiddenAfterActivityId?: string;
     readonly replayAfterEnding?: boolean;
+    readonly availableAfterEnding?: boolean;
     readonly hiddenAfterBeatId?: string;
     readonly requiresEndingCompleted?: boolean;
     readonly lockedUntilActivityId?: string;
   },
   state: RunState,
 ): boolean {
-  // Cards mode makes every activity replayable. The story epilogue only revives
-  // activities explicitly authored for post-ending replay (currently RETAKE).
+  // Cards mode makes every activity replayable. The epilogue also revives
+  // activities and inspect hotspots explicitly authored for post-ending use.
   const replayableActivity =
     interaction.kind === 'activity' &&
     (isCardMode(state) || (state.endingCompleted && interaction.replayAfterEnding));
+  const availableAfterEnding =
+    state.endingCompleted && interaction.availableAfterEnding;
 
   if (
     interaction.requiresBeatId &&
     !hasSeenBeat(state, interaction.requiresBeatId) &&
-    !replayableActivity
+    !replayableActivity &&
+    !availableAfterEnding
   ) {
     return false;
   }
   if (
     interaction.requiresActivityId &&
     !hasActivityCompleted(state, interaction.requiresActivityId) &&
-    !replayableActivity
+    !replayableActivity &&
+    !availableAfterEnding
   ) {
     return false;
   }

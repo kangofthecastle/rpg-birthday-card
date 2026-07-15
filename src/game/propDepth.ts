@@ -1,3 +1,25 @@
+import type { Projection } from './projection';
+
+/** ____'s billboard sorts slightly below her physics feet for visual grounding. */
+export const PLAYER_VISUAL_DEPTH_BIAS = 10;
+
+/**
+ * Converts ____'s biased billboard depth back into the same map space used by
+ * authorable prop lines. Testing a raw physics point while rendering at a
+ * different depth makes a line appear visually crossed before it can fire.
+ */
+export function getPlayerDepthSortingPoint(
+  projection: Pick<Projection, 'project' | 'unproject'>,
+  playerMapX: number,
+  playerMapY: number,
+): { readonly x: number; readonly y: number } {
+  const screenPoint = projection.project(playerMapX, playerMapY);
+  return projection.unproject(
+    screenPoint.x,
+    screenPoint.y + PLAYER_VISUAL_DEPTH_BIAS,
+  );
+}
+
 /**
  * Resolves a prop's depth against ____ without erasing the prop's natural
  * ordering relative to other furniture. The line only clamps the prop across
@@ -25,4 +47,19 @@ export function resolvePropDepthRelativeToPlayer(
   return playerInFront
     ? Math.min(naturalDepth, stableCrossingDepth)
     : Math.max(naturalDepth, stableCrossingDepth);
+}
+
+/**
+ * Enforces a fixed furniture stack after player-relative sorting. Phaser draws
+ * larger depths in front, so an object that must stay behind a layered prop has
+ * to sit below even that prop's rearmost part.
+ */
+export function clampDepthBehindLayers(
+  depth: number,
+  foregroundDepths: readonly number[],
+): number {
+  if (foregroundDepths.length === 0) {
+    return depth;
+  }
+  return Math.min(depth, Math.min(...foregroundDepths) - 0.01);
 }

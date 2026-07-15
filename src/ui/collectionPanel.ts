@@ -5,7 +5,7 @@ import type { RunState } from '../game/runState';
 import { showLetterModal, showSheetMusicModal } from './letterModal';
 
 /**
- * The in-world "Letters" HUD. Every keepsake a friend gives ____ is a letter;
+ * The in-world "Backpack" HUD. Every keepsake a friend gives ____ is a letter;
  * once collected it lives here as a little envelope in a soft stack. Hovering
  * (or focusing, for keyboard) fans the stack out like a hand of cards so she can
  * pick one to read again. Letters reopen through {@link showLetterModal}; ____'s
@@ -127,16 +127,16 @@ export function createCollectionPanel(
 
   const panel = document.createElement('aside');
   panel.className = 'collection-panel';
-  panel.setAttribute('aria-label', 'Letters collection');
+  panel.setAttribute('aria-label', 'Backpack');
 
   const heading = document.createElement('h2');
-  heading.textContent = 'Letters';
+  heading.textContent = 'Backpack';
   panel.append(heading);
 
   if (letters.length === 0) {
     const empty = document.createElement('p');
     empty.className = 'collection-panel__empty';
-    empty.textContent = 'The letters you gather will rest here.';
+    empty.textContent = 'The keepsakes you gather will rest here.';
     panel.append(empty);
     return { element: panel };
   }

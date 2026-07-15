@@ -46,19 +46,19 @@ export const SPLIT_CONFIG = {
     // The Phantom fires 11 rounds/sec (660 RPM) on hold: one round every
     // 1000/11 ≈ 90.9ms. tickSplit gates the trigger on this shot clock.
     shotCooldownMs: 1000 / 11,
-    // Weapon: the Phantom's 30-round magazine, four mags total (one loaded +
-    // three in reserve = 90 reserve rounds). Reload refills the current mag from
-    // the reserve pool and takes 2.5 seconds (locked out of firing during it).
+    // Weapon: the Phantom carries 90 rounds total — one loaded 30-round mag plus
+    // two spare mags (60 reserve rounds). Reload refills the current mag from the
+    // reserve pool and takes 2.5 seconds (locked out of firing during it).
     magSize: 30,
-    magazines: 4,
+    magazines: 3,
     reloadMs: 2500,
     // Valorant-style spread, two independent contributors summed into the cone:
     //   • Character movement — near-pinpoint standing still (spreadStillRad), a
     //     heavy cone while the CHARACTER moves (spreadMovingRad). Mouse/cursor
     //     aiming motion is NOT movement and never widens the cone (only
     //     input.move does; see resolvePlayerFire / playerShotSpreadRad).
-    //   • Spray bloom — the first rested shot is ~99% accurate (spreadStillRad);
-    //     holding the trigger blooms the cone per consecutive shot, staying
+    //   • Spray bloom — the first rested shot is exact to the crosshair;
+    //     holding the trigger adds the standing spread and blooms the cone, staying
     //     tight through the first ~4 then growing clearly to a capped max
     //     (sprayBloomMaxRad) reached at sprayFullShots. A pause of sprayResetMs
     //     with no shot resets the spray back to rested. The moving penalty rides
@@ -747,9 +747,10 @@ function knockOffDefuse(state: SplitState): SplitState {
 
 // The ± half-angle (radians) of the shot cone for a shot fired at the given
 // spray depth. `sprayShots` is the number of consecutive shots ALREADY fired in
-// the current spray (0 for the first, rested shot). Standing still starts at the
-// rested floor (spreadStillRad, ~99% accurate) and blooms per shot up to a
-// capped max; a moving character pays the flat movement penalty (spreadMovingRad)
+// the current spray (0 for the first, rested shot). The first stationary shot is
+// exact to the crosshair; following shots start at the rested floor
+// (spreadStillRad) and bloom up to a capped max. A moving character pays the
+// flat movement penalty (spreadMovingRad)
 // on TOP of the same bloom, so a moving shot is never tighter than a stationary
 // one at the same depth. Aim/cursor motion is deliberately NOT an input here —
 // only character movement and spray depth affect the cone.
@@ -762,6 +763,8 @@ export function playerShotSpreadRad(sprayShots: number, moving: boolean): number
     sprayBloomExponent,
   } = SPLIT_CONFIG.player;
   const depth = clamp(sprayShots, 0, sprayFullShots);
+  if (depth === 0 && !moving) return 0;
+
   const bloom = sprayBloomMaxRad * Math.pow(depth / sprayFullShots, sprayBloomExponent);
   const base = moving ? spreadMovingRad : spreadStillRad;
 

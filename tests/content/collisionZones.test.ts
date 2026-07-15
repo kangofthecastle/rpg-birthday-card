@@ -6,6 +6,10 @@ import {
   isValidZonesFile,
   type RotatedPropDepthLine,
 } from '../../src/content/collisionZones';
+import {
+  getBedDepthLines,
+  isPlayerInFrontOfBedDepthLines,
+} from '../../src/content/bedDepth';
 
 describe('getCollisionZones', () => {
   it('loads the recipient-house zones file with polygon zones', () => {
@@ -71,8 +75,19 @@ describe('getCollisionZones', () => {
     )).toBe(true);
   });
 
-  it('returns undefined for locations without a zones file', () => {
-    expect(getCollisionZones('main-outside')).toBeUndefined();
+  it('combines ____ bed side and foot lines at reachable approaches', () => {
+    const overrides = getCollisionZones('recipient-house')!.propDepthOverrides!;
+    const lines = getBedDepthLines(overrides, 'bed');
+
+    expect(lines).toHaveLength(2);
+    // The screenshot position is south of the foot but west of the diagonal
+    // side line. Either segment must be enough to put ____ in front.
+    expect(isPlayerInFrontOfBedDepthLines(lines, 347, 918)).toBe(true);
+    expect(isPlayerInFrontOfBedDepthLines(lines, 432, 741)).toBe(true);
+    expect(isPlayerInFrontOfBedDepthLines(lines, 300, 580)).toBe(false);
+  });
+
+  it('returns undefined for an unknown location without a zones file', () => {
     expect(getCollisionZones('nope')).toBeUndefined();
   });
 });

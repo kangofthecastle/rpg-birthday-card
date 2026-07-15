@@ -95,7 +95,13 @@ describe('melody data', () => {
       ['e4', 'e4', 'f4', 'g4'],
     ]);
 
-    const { dottedEighth, eighth, sixteenth, quarter, tripletEighth } = VIOLIN_RHYTHM_MS;
+    const {
+      dottedEighth,
+      eighth,
+      sixteenth,
+      quarter,
+      tripletEighth,
+    } = VIOLIN_RHYTHM_MS;
     expect(VIOLIN_PHRASES.map((phrase) => phrase.notes.map((note) => note.durationMs))).toEqual([
       [dottedEighth, sixteenth, dottedEighth, sixteenth],
       [dottedEighth, sixteenth, quarter, tripletEighth, tripletEighth],
@@ -128,8 +134,13 @@ describe('melody data', () => {
       ['g4', 'bb4', 'e4', 'f4'],
     ]);
 
-    const { dottedEighth, dottedHalf, sixteenth, quarter, tripletEighth } =
-      VIOLIN_RHYTHM_MS;
+    const {
+      dottedEighth,
+      dottedHalf,
+      sixteenth,
+      quarter,
+      tripletEighth,
+    } = VIOLIN_RHYTHM_MS;
     expect(
       VIOLIN_FINALE_PHRASES.map((phrase) => phrase.notes.map((note) => note.durationMs)),
     ).toEqual([

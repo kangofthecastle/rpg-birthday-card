@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   getCollisionZones,
   isPlayerInFrontOfDepthLine,
+  isRotatedPropDepthLine,
   isValidZonesFile,
   type RotatedPropDepthLine,
 } from '../../src/content/collisionZones';
@@ -26,24 +27,48 @@ describe('getCollisionZones', () => {
 
   it('exposes a depth override for the desk so the player can pass behind it', () => {
     const file = getCollisionZones('recipient-house')!;
-    expect(file.propDepthOverrides?.desk).toBeTypeOf('number');
+    const deskDepth = file.propDepthOverrides?.desk;
+    expect(typeof deskDepth === 'number' || isRotatedPropDepthLine(deskDepth)).toBe(true);
   });
 
   it('keeps the desk render-depth threshold at its south-side collision edge', () => {
     const file = getCollisionZones('recipient-house')!;
     const desk = file.zones.find((zone) => zone.id === 'desk')!;
     const deskSouthEdge = Math.max(...desk.points.map(([, y]) => y));
-    const deskDepthMapY = file.propDepthOverrides?.desk!;
-    expect(deskDepthMapY).toBeTypeOf('number');
-    if (typeof deskDepthMapY !== 'number') {
-      throw new Error('Expected the legacy desk override to remain numeric');
+    const deskDepth = file.propDepthOverrides?.desk!;
+    if (isRotatedPropDepthLine(deskDepth)) {
+      expect(isPlayerInFrontOfDepthLine(deskDepth, deskDepth.frontSide[0], deskDepth.frontSide[1])).toBe(
+        true,
+      );
+      return;
+    }
+    expect(deskDepth).toBeTypeOf('number');
+    if (typeof deskDepth !== 'number') {
+      throw new Error('Expected a numeric or rotated desk override');
     }
 
     // ____'s visual depth is projected from her feet plus a 10px billboard
     // bias. With the room's 0.5 vertical scale, that bias is equivalent to 40
     // map px, so the player should switch in front at (depthMapY - 40), no
     // farther south than the desk's blocking edge plus her 16px body half-size.
-    expect(deskDepthMapY - 40).toBeLessThanOrEqual(deskSouthEdge + 16);
+    expect(deskDepth - 40).toBeLessThanOrEqual(deskSouthEdge + 16);
+  });
+
+  it('keeps the ____ bed front depth override independently authorable', () => {
+    const file = getCollisionZones('recipient-house')!;
+    const bedFrontDepth = file.propDepthOverrides?.['bed:front'];
+    expect(isRotatedPropDepthLine(bedFrontDepth)).toBe(true);
+    if (!isRotatedPropDepthLine(bedFrontDepth)) {
+      throw new Error('Expected a rotated bed:front override');
+    }
+
+    // The exact line is user-authored in the editor, so only its semantic
+    // contract belongs in this fixture: the marker must identify a front side.
+    expect(isPlayerInFrontOfDepthLine(
+      bedFrontDepth,
+      bedFrontDepth.frontSide[0],
+      bedFrontDepth.frontSide[1],
+    )).toBe(true);
   });
 
   it('returns undefined for locations without a zones file', () => {

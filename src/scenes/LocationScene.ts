@@ -73,12 +73,15 @@ import {
   isPlayerInFrontOfDepthLine,
   isRotatedPropDepthLine,
   type CollisionZonesFile,
+  type PropDepthOverride,
 } from '../content/collisionZones';
+import { getDefaultBedDepthOverrides } from '../content/bedDepth';
 import {
   combineOutdoorColliders,
   rasterizePolygonsToRects,
   type Polygon,
 } from '../game/collisionGeometry';
+import { resolvePropDepthRelativeToPlayer } from '../game/propDepth';
 import type {
   DialogueLine,
   LocationDefinition,
@@ -192,7 +195,11 @@ import {
   type TiledMapJson,
 } from '../game/mapHelpers';
 import { getPlayerFacingFromScreenMovement, PlayerController } from '../game/playerController';
-import { createCollectionPanel, type CollectionPanelHandle } from '../ui/collectionPanel';
+import {
+  createCollectionPanel,
+  getCollectedFriendLetters,
+  type CollectionPanelHandle,
+} from '../ui/collectionPanel';
 import { showDialogue, type ShowDialogueOptions } from '../ui/dialogueBox';
 import { clearUiRoot, getUiRoot } from '../ui/domRoot';
 import { showLetterModal, showSheetMusicModal } from '../ui/letterModal';
@@ -768,6 +775,15 @@ export class LocationScene extends Phaser.Scene {
   // Dev-only in-game polygon editor, lazily imported so it is excluded from
   // production bundles. Keeps the player controllable but detaches strict camera
   // follow (the editor manages pan/zoom).
+  private getEffectivePropDepthOverrides(): Readonly<Record<string, PropDepthOverride>> {
+    const bed = this.dressing?.props.find((placement) => placement.frame === 'bed');
+    const defaults = bed ? getDefaultBedDepthOverrides(bed) : {};
+    return {
+      ...defaults,
+      ...(this.zonesFile?.propDepthOverrides ?? {}),
+    };
+  }
+
   private maybeStartZoneEditor(): void {
     if (!import.meta.env.DEV) {
       return;
@@ -779,13 +795,20 @@ export class LocationScene extends Phaser.Scene {
 
     const projection = this.projection;
     const playerVisual = this.playerVisual;
+    const initialZonesFile: CollisionZonesFile | undefined = this.dressing
+      ? {
+          locationId: this.location.id,
+          zones: this.zonesFile?.zones ?? [],
+          propDepthOverrides: this.getEffectivePropDepthOverrides(),
+        }
+      : this.zonesFile;
     void import('../game/zoneEditor').then(({ startZoneEditor }) => {
       startZoneEditor(this, {
         locationId: this.location.id,
         projection,
         playerVisual,
         dressing: this.dressing,
-        initial: this.zonesFile,
+        initial: initialZonesFile,
       });
     });
   }
@@ -1145,7 +1168,7 @@ export class LocationScene extends Phaser.Scene {
         this.dressing,
         tilemap,
         origin,
-        this.zonesFile?.propDepthOverrides ?? {},
+        this.getEffectivePropDepthOverrides(),
       );
       this.propHandles = rendered.propHandles;
       contentBounds = { ...rendered.contentBounds };
@@ -4507,28 +4530,45 @@ export class LocationScene extends Phaser.Scene {
   }
 
   private syncRotatedPropDepths(): void {
-    const overrides = this.zonesFile?.propDepthOverrides;
+    const overrides = this.getEffectivePropDepthOverrides();
     const playerVisual = this.playerVisual;
     if (!overrides || !playerVisual || this.propHandles.length === 0) {
       return;
     }
 
-    // Use the same biased screen-depth point as ____'s billboard (`+10`) and
-    // unproject it to map space. This preserves the old numeric threshold feel
-    // while allowing an arbitrarily rotated authored boundary.
+    // Depth lines are authored in map space against ____'s feet. Use the
+    // controller position directly: the sprite's screen depth includes a
+    // deliberate visual `+10` bias, and unprojecting that biased value shifts
+    // ____ across short/diagonal boundaries before the side test runs.
     const projection = this.getProjection();
-    const sortingPoint = projection.unproject(playerVisual.x, playerVisual.depth);
-    for (const { placement, image } of this.propHandles) {
-      const line = overrides[placement.frame];
-      if (placement.fixedDepth !== undefined || !isRotatedPropDepthLine(line)) {
+    const sortingPoint = { x: this.player.x, y: this.player.y };
+    for (const { placement, depthParts } of this.propHandles) {
+      if (placement.fixedDepth !== undefined) {
         continue;
       }
-      const recipientInFront = isPlayerInFrontOfDepthLine(
-        line,
-        sortingPoint.x,
-        sortingPoint.y,
-      );
-      image.setDepth(playerVisual.depth + (recipientInFront ? -0.01 : 0.01));
+      for (const part of depthParts) {
+        const line = overrides[part.depthKey] ?? overrides[placement.frame];
+        if (!isRotatedPropDepthLine(line)) {
+          continue;
+        }
+        const recipientInFront = isPlayerInFrontOfDepthLine(
+          line,
+          sortingPoint.x,
+          sortingPoint.y,
+        );
+        // Keep each part's own line midpoint as its natural depth. The old
+        // player +/- epsilon assignment made every rotated prop tie at ____'s
+        // depth, so display-list order could put the bedside table over the bed
+        // in one position and under it in another. Only move the part across
+        // ____ when its natural depth is on the wrong side.
+        const naturalDepth = projection.project(
+          (line.start[0] + line.end[0]) / 2,
+          (line.start[1] + line.end[1]) / 2,
+        ).y;
+        part.image.setDepth(
+          resolvePropDepthRelativeToPlayer(naturalDepth, playerVisual.depth, recipientInFront),
+        );
+      }
     }
   }
 
@@ -4837,7 +4877,7 @@ export class LocationScene extends Phaser.Scene {
       this.canMove = false;
       const archive = showLettersScreen({
         mode: 'archive',
-        letters: LETTERS,
+        letters: [...getCollectedFriendLetters(this.state), ...LETTERS],
         onGoHome: () => this.goHome(),
       });
       await archive.closed;
@@ -4956,7 +4996,12 @@ export class LocationScene extends Phaser.Scene {
     this.registry.set('runState', this.state);
 
     this.scene.sleep();
-    showLettersScreen({ host: getUiRoot(), fadeIn: true, onGoHome: () => this.goHome() });
+    showLettersScreen({
+      host: getUiRoot(),
+      fadeIn: true,
+      letters: [...getCollectedFriendLetters(this.state), ...LETTERS],
+      onGoHome: () => this.goHome(),
+    });
   }
 
   // Cross-fades the ending transition's held galaxy frame out to reveal the live,

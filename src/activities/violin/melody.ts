@@ -95,8 +95,14 @@ export const VIOLIN_RHYTHM_MS = {
   dottedHalf: 1800,
 } as const;
 
-const { dottedEighth, dottedHalf, eighth, sixteenth, quarter, tripletEighth } =
-  VIOLIN_RHYTHM_MS;
+const {
+  dottedEighth,
+  dottedHalf,
+  eighth,
+  sixteenth,
+  quarter,
+  tripletEighth,
+} = VIOLIN_RHYTHM_MS;
 
 export const VIOLIN_FINALE_PHRASES: readonly ViolinPhrase[] = [
   {

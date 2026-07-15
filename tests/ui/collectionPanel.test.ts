@@ -129,9 +129,7 @@ describe('createCollectionPanel', () => {
     element.querySelector<HTMLButtonElement>('.letter-stack__item')?.click();
 
     expect(onOpenLetter).toHaveBeenCalledOnce();
-    expect(onOpenLetter).toHaveBeenCalledWith([
-      { speaker: '____', text: 'The koi scale description.' },
-    ]);
+    expect(onOpenLetter).toHaveBeenCalledWith([{ speaker: '____', text: '' }]);
   });
 
   it('falls back to the keepsake description when there is no reward message', () => {
@@ -151,7 +149,7 @@ describe('createCollectionPanel', () => {
         stateWith(['glowing-koi-scale', 'friend-b-keepsake', 'recipient-sheet-music']),
       ),
     ).toEqual([
-      { from: '____', text: 'The koi scale description.' },
+      { from: '____', text: '' },
       { from: '____', text: '____’s existing reward copy.' },
     ]);
   });

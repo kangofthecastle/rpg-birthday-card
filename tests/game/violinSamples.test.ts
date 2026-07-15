@@ -15,12 +15,16 @@ describe('violin sample selection', () => {
     expect(a3.articulation).toBe('arco');
     expect(a3.recordedFrequency * a3.playbackRate).toBeCloseTo(220, 5);
     expect(bb3.recordedFrequency * bb3.playbackRate).toBeCloseTo(233.08, 5);
-    expect(a3.url).toBe('/assets/audio/violin/arco-a3.ogg');
+    expect(a3.url).toBe('/assets/audio/violin/arco-a3.ogg?v=stereo-1');
   });
 
-  it('chooses and tunes the nearest anchor outside the low-register override', () => {
+  it('uses native D4 and tunes the nearest remaining anchors', () => {
+    const d4 = selectViolinSample(293.66, 450);
     const fs4 = selectViolinSample(369.99, 450);
 
+    expect(d4.anchorId).toBe('d4');
+    expect(d4.url).toBe('/assets/audio/violin/arco-iowa-d4.ogg?v=native-stereo-low-1');
+    expect(d4.recordedFrequency * d4.playbackRate).toBeCloseTo(293.66, 5);
     expect(fs4.anchorId).toBe('g4');
     expect(Math.abs(12 * Math.log2(fs4.playbackRate))).toBeLessThanOrEqual(2.01);
     expect(fs4.recordedFrequency * fs4.playbackRate).toBeCloseTo(369.99, 5);
@@ -39,6 +43,7 @@ describe('violin sample selection', () => {
     expect(VIOLIN_SAMPLE_ANCHORS.map((anchor) => anchor.id)).toEqual([
       'a3',
       'c4',
+      'd4',
       'e4',
       'g4',
       'a4',

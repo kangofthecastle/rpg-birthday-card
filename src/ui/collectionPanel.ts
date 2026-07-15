@@ -1,4 +1,5 @@
 import { LOCATIONS } from '../content/locations';
+import type { Letter } from '../content/letters';
 import type { DialogueLine, SheetMusicReward } from '../content/types';
 import type { RunState } from '../game/runState';
 import { showLetterModal, showSheetMusicModal } from './letterModal';
@@ -71,7 +72,8 @@ function collectedLetters(state: RunState): LetterEntry[] {
     }
 
     // The reward message IS the letter as first read; non-score keepsakes retain
-    // the description fallback so older content can never open an empty reader.
+    // the description fallback only when they have no authored message at all.
+    // An empty authored body remains empty until its writer fills it in.
     const lines: readonly DialogueLine[] =
       location.rewardMessage && location.rewardMessage.length > 0
         ? location.rewardMessage
@@ -85,6 +87,23 @@ function collectedLetters(state: RunState): LetterEntry[] {
         lines,
       },
     ];
+  });
+}
+
+/** The friend-letter entries earned in this run, for the ending and PC archive. */
+export function getCollectedFriendLetters(state: RunState): readonly Letter[] {
+  return collectedLetters(state).flatMap((entry): Letter[] => {
+    if (entry.kind !== 'letter') {
+      return [];
+    }
+    const from =
+      entry.lines.find((line) => line.speaker?.trim())?.speaker ??
+      entry.label.replace(/[’']s Letter$/, '');
+    const text = entry.lines
+      .map((line) => line.text.trim())
+      .filter(Boolean)
+      .join('\n\n');
+    return [{ from, text }];
   });
 }
 

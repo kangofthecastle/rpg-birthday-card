@@ -29,6 +29,29 @@ describe('collision-zone save payload validation', () => {
     ).toBe(true);
   });
 
+  it('accepts separate back and front depth lines for a layered bed', () => {
+    expect(
+      isValidZoneSavePayload({
+        locationId: 'recipient-house',
+        zones: [],
+        propDepthOverrides: {
+          'bed:back': {
+            kind: 'line',
+            start: [194, 622],
+            end: [334, 602],
+            frontSide: [264, 680],
+          },
+          'bed:front': {
+            kind: 'line',
+            start: [214, 818],
+            end: [382, 839],
+            frontSide: [300, 892],
+          },
+        },
+      }),
+    ).toBe(true);
+  });
+
   it('rejects malformed depth-line overrides', () => {
     expect(
       isValidZoneSavePayload({

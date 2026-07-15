@@ -17,6 +17,14 @@ import {
   isRotatedPropDepthLine,
   type PropDepthOverride,
 } from '../content/collisionZones';
+import {
+  BED_DEPTH_LAYER_SPECS,
+  bedDepthOverrideKey,
+  getBedDepthMask,
+  getBedDepthOverride,
+  type BedDepthLayerSpec,
+  type BedDepthMask,
+} from '../content/bedDepth';
 
 export type { PropColliderRect } from '../content/roomDressing';
 
@@ -67,11 +75,18 @@ export interface FloorMapRect {
   readonly y1: number;
 }
 
-/** A placed prop paired with its billboard Image, so a dev tool (the dressEdit
- * editor) can re-position/re-scale the exact image the renderer created. */
+/** One independently depth-sorted image belonging to a placed prop. */
+export interface PropDepthPartHandle {
+  readonly depthKey: string;
+  readonly image: Phaser.GameObjects.Image;
+}
+
+/** A placed prop paired with its billboard images, so a dev tool (the dressEdit
+ * editor) can re-position/re-scale every image the renderer created. */
 export interface PropHandle {
   readonly placement: PropPlacement;
   readonly image: Phaser.GameObjects.Image;
+  readonly depthParts: readonly PropDepthPartHandle[];
 }
 
 export interface RoomRenderResult {
@@ -141,7 +156,9 @@ export function renderRoomDressing(
   objects.push(...renderFloorSkirt(scene, left, bottom, right));
   objects.push(renderFloor(scene, dressing, [top, right, bottom, left]));
   const propHandles = renderProps(scene, dressing, origin, propDepthOverrides);
-  const propImages = propHandles.map((handle) => handle.image);
+  const propImages = propHandles.flatMap((handle) =>
+    handle.depthParts.map((part) => part.image),
+  );
   objects.push(...propImages);
 
   // Content bounds: floor diamond + wall tops (negative Y) + skirt bottom, then
@@ -959,14 +976,23 @@ function renderProps(
 ): PropHandle[] {
   const handles: PropHandle[] = [];
   for (const placement of dressing.props) {
-    const image = renderProp(scene, dressing, placement, origin, propDepthOverrides[placement.frame]);
+    const rendered = renderProp(scene, dressing, placement, origin, propDepthOverrides);
     // A singles-only prop whose standalone art is absent renders nothing (and so
     // never enters propHandles / the dressEdit list).
-    if (image) {
-      handles.push({ placement, image });
+    if (rendered) {
+      handles.push({
+        placement,
+        image: rendered.image,
+        depthParts: rendered.depthParts,
+      });
     }
   }
   return handles;
+}
+
+interface RenderedProp {
+  readonly image: Phaser.GameObjects.Image;
+  readonly depthParts: readonly PropDepthPartHandle[];
 }
 
 function renderProp(
@@ -974,8 +1000,8 @@ function renderProp(
   dressing: RoomDressing,
   placement: PropPlacement,
   origin: IsoOrigin,
-  depthOverride?: PropDepthOverride,
-): Phaser.GameObjects.Image | undefined {
+  propDepthOverrides: Readonly<Record<string, PropDepthOverride>>,
+): RenderedProp | undefined {
   const overrideKey = propOverrideTextureKey(dressing.locationId, placement.frame);
   const hasOverride = scene.textures.exists(overrideKey);
   const hasSheetCrop = dressing.frames[placement.frame] !== undefined;
@@ -983,6 +1009,18 @@ function renderProp(
   // Singles-only prop with no drop-in file: nothing to draw.
   if (!hasSheetCrop && !hasOverride) {
     return undefined;
+  }
+
+  if (placement.frame === 'bed') {
+    return renderLayeredBed(
+      scene,
+      dressing,
+      placement,
+      origin,
+      propDepthOverrides,
+      overrideKey,
+      hasOverride,
+    );
   }
 
   // Origin/flip are placement-fixed; position, scale, texture and depth are
@@ -999,9 +1037,128 @@ function renderProp(
     .setOrigin(placement.originX ?? 0.5, placement.originY ?? 1)
     .setFlipX(placement.flipX ?? false);
 
-  positionPropImage(scene, dressing, placement, image, origin, depthOverride);
+  positionPropImage(
+    scene,
+    dressing,
+    placement,
+    image,
+    origin,
+    propDepthOverrides[placement.frame],
+  );
 
-  return image;
+  return {
+    image,
+    depthParts: [{ depthKey: placement.frame, image }],
+  };
+}
+
+function renderLayeredBed(
+  scene: Phaser.Scene,
+  dressing: RoomDressing,
+  placement: PropPlacement,
+  origin: IsoOrigin,
+  propDepthOverrides: Readonly<Record<string, PropDepthOverride>>,
+  overrideKey: string,
+  hasOverride: boolean,
+): RenderedProp {
+  const sourceFrame = hasOverride ? undefined : placement.frame;
+  const depthMask = getBedDepthMask(dressing.locationId);
+  const depthParts = BED_DEPTH_LAYER_SPECS.map((layer) => {
+    const depthKey = bedDepthOverrideKey(placement.frame, layer.id);
+    const layerTextureKey = buildBedLayerTexture(
+      scene,
+      hasOverride ? overrideKey : dressing.propsTextureKey,
+      sourceFrame,
+      layer,
+      depthMask,
+    );
+    const image = scene.add
+      .image(0, 0, layerTextureKey)
+      .setOrigin(placement.originX ?? 0.5, placement.originY ?? 1)
+      .setFlipX(placement.flipX ?? false);
+    positionPropImage(
+      scene,
+      dressing,
+      placement,
+      image,
+      origin,
+      getBedDepthOverride(propDepthOverrides, placement.frame, layer.id),
+    );
+    return { depthKey, image };
+  });
+
+  return {
+    // Keep the back layer as the primary image for existing dress-editor and
+    // interaction callers; both layers share identical bounds and transforms.
+    image: depthParts[0].image,
+    depthParts,
+  };
+}
+
+function buildBedLayerTexture(
+  scene: Phaser.Scene,
+  sourceKey: string,
+  sourceFrame: string | undefined,
+  layer: BedDepthLayerSpec,
+  depthMask: BedDepthMask,
+): string {
+  const frame = scene.textures.getFrame(sourceKey, sourceFrame);
+  const key = `bed-depth:${sourceKey}:${sourceFrame ?? 'full'}:${layer.id}:${depthMask.id}`;
+  if (scene.textures.exists(key)) {
+    return key;
+  }
+
+  const source = frame.source.image as CanvasImageSource;
+  const canvasTexture = scene.textures.createCanvas(key, frame.width, frame.height);
+  if (!canvasTexture) {
+    return sourceKey;
+  }
+
+  const ctx = canvasTexture.getContext();
+  const frontPolygon = depthMask.frontPolygon.map(([x, y]) => [
+    x * frame.width,
+    y * frame.height,
+  ] as const);
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(frontPolygon[0][0], frontPolygon[0][1]);
+  for (const [x, y] of frontPolygon.slice(1)) {
+    ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+
+  if (layer.id === 'back') {
+    ctx.drawImage(
+      source,
+      frame.cutX,
+      frame.cutY,
+      frame.width,
+      frame.height,
+      0,
+      0,
+      frame.width,
+      frame.height,
+    );
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.fill();
+  } else {
+    ctx.clip();
+    ctx.drawImage(
+      source,
+      frame.cutX,
+      frame.cutY,
+      frame.width,
+      frame.height,
+      0,
+      0,
+      frame.width,
+      frame.height,
+    );
+  }
+  ctx.restore();
+  canvasTexture.refresh();
+  return key;
 }
 
 /**
@@ -1070,6 +1227,27 @@ export function positionPropImage(
         origin,
       ).y;
   image.setDepth(placement.fixedDepth ?? depthY);
+}
+
+/** Re-applies one placement transform to every independently depth-sorted part. */
+export function positionPropImages(
+  scene: Phaser.Scene,
+  dressing: RoomDressing,
+  placement: PropPlacement,
+  depthParts: readonly PropDepthPartHandle[],
+  origin: IsoOrigin,
+  propDepthOverrides: Readonly<Record<string, PropDepthOverride>>,
+): void {
+  for (const part of depthParts) {
+    positionPropImage(
+      scene,
+      dressing,
+      placement,
+      part.image,
+      origin,
+      propDepthOverrides[part.depthKey] ?? propDepthOverrides[placement.frame],
+    );
+  }
 }
 
 /**

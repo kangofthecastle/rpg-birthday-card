@@ -29,7 +29,11 @@
 import Phaser from 'phaser';
 import type { Projection } from './projection';
 import type { IsoOrigin } from './isometricProjection';
-import { positionPropImage, type PropHandle } from './roomRenderer';
+import {
+  positionPropImages,
+  type PropDepthPartHandle,
+  type PropHandle,
+} from './roomRenderer';
 import { getObjectLayer, type TiledMapJson } from './mapHelpers';
 import type { TmjRectPatch } from './tmjRectPatch';
 import {
@@ -162,6 +166,8 @@ interface PropEntry {
   /** Room prop placement, or an outdoor placement in outdoor mode. */
   placement: EditablePlacement | EditableOutdoorPlacement;
   readonly image: Phaser.GameObjects.Image;
+  /** All images that share this placement, including layered beds. */
+  readonly depthParts?: readonly PropDepthPartHandle[];
   /** Outdoor mode: the live handle (its `placement` IS this entry's placement),
    *  so reposition mutates the same object the editor edits. */
   readonly outdoor?: OutdoorEditHandle;
@@ -328,6 +334,7 @@ class DressEditor {
     } else {
       this.entries = options.propHandles.map((handle) => ({
         image: handle.image,
+        depthParts: handle.depthParts,
         placement: {
           ...handle.placement,
           ...(handle.placement.footprint ? { footprint: { ...handle.placement.footprint } } : {}),
@@ -665,13 +672,13 @@ class DressEditor {
       return;
     }
     const placement = entry.placement as EditablePlacement;
-    positionPropImage(
+    positionPropImages(
       this.scene,
       this.options.dressing!,
       placement,
-      entry.image,
+      entry.depthParts ?? [{ depthKey: placement.frame, image: entry.image }],
       this.options.origin!,
-      this.options.propDepthOverrides[placement.frame],
+      this.options.propDepthOverrides,
     );
   }
 

@@ -440,5 +440,232 @@
         ]
       ]
     }
-  ]
+  ],
+  "propDepthOverrides": {
+    "fence-h#0": {
+      "kind": "line",
+      "start": [
+        226,
+        273
+      ],
+      "end": [
+        386,
+        273
+      ],
+      "frontSide": [
+        306,
+        301
+      ]
+    },
+    "fence-h#1": {
+      "kind": "line",
+      "start": [
+        581,
+        271
+      ],
+      "end": [
+        741,
+        271
+      ],
+      "frontSide": [
+        661,
+        299
+      ]
+    },
+    "tree-1#1": {
+      "kind": "line",
+      "start": [
+        34,
+        275
+      ],
+      "end": [
+        194,
+        275
+      ],
+      "frontSide": [
+        114,
+        303
+      ]
+    },
+    "bush-1#3": {
+      "kind": "line",
+      "start": [
+        51,
+        516
+      ],
+      "end": [
+        211,
+        516
+      ],
+      "frontSide": [
+        131,
+        544
+      ]
+    },
+    "lamp-post#0": {
+      "kind": "line",
+      "start": [
+        -11,
+        469
+      ],
+      "end": [
+        149,
+        469
+      ],
+      "frontSide": [
+        69,
+        497
+      ]
+    },
+    "bench#0": {
+      "kind": "line",
+      "start": [
+        176,
+        532
+      ],
+      "end": [
+        336,
+        532
+      ],
+      "frontSide": [
+        256,
+        560
+      ]
+    },
+    "bush-1#1": {
+      "kind": "line",
+      "start": [
+        307,
+        515
+      ],
+      "end": [
+        467,
+        515
+      ],
+      "frontSide": [
+        387,
+        543
+      ]
+    },
+    "bush-1#2": {
+      "kind": "line",
+      "start": [
+        417,
+        501
+      ],
+      "end": [
+        575,
+        481
+      ],
+      "frontSide": [
+        500,
+        519
+      ]
+    },
+    "bush-1#0": {
+      "kind": "line",
+      "start": [
+        611,
+        419
+      ],
+      "end": [
+        771,
+        419
+      ],
+      "frontSide": [
+        691,
+        447
+      ]
+    },
+    "exterior-friendone-house#0": {
+      "kind": "line",
+      "start": [
+        394,
+        186
+      ],
+      "end": [
+        554,
+        186
+      ],
+      "frontSide": [
+        474,
+        214
+      ]
+    },
+    "mailbox#0": {
+      "kind": "line",
+      "start": [
+        273,
+        203
+      ],
+      "end": [
+        433,
+        203
+      ],
+      "frontSide": [
+        353,
+        231
+      ]
+    },
+    "tree-1#0": {
+      "kind": "line",
+      "start": [
+        804,
+        424
+      ],
+      "end": [
+        964,
+        424
+      ],
+      "frontSide": [
+        884,
+        452
+      ]
+    },
+    "rock-1#0": {
+      "kind": "line",
+      "start": [
+        717,
+        394
+      ],
+      "end": [
+        877,
+        394
+      ],
+      "frontSide": [
+        797,
+        422
+      ]
+    },
+    "tree-2#0": {
+      "kind": "line",
+      "start": [
+        849,
+        549
+      ],
+      "end": [
+        1009,
+        549
+      ],
+      "frontSide": [
+        929,
+        577
+      ]
+    },
+    "rock-1#1": {
+      "kind": "line",
+      "start": [
+        903,
+        521
+      ],
+      "end": [
+        1063,
+        521
+      ],
+      "frontSide": [
+        983,
+        549
+      ]
+    }
+  }
 }

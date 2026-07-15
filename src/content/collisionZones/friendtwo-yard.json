@@ -454,16 +454,16 @@
     "fence-h#0": {
       "kind": "line",
       "start": [
-        218,
-        272
+        217,
+        270
       ],
       "end": [
-        378,
-        272
+        377,
+        270
       ],
       "frontSide": [
-        298,
-        300
+        297,
+        298
       ]
     },
     "fence-h#1": {
@@ -494,6 +494,81 @@
       "frontSide": [
         873,
         293
+      ]
+    },
+    "exterior-friendtwo-house#0": {
+      "kind": "line",
+      "start": [
+        400,
+        185
+      ],
+      "end": [
+        560,
+        185
+      ],
+      "frontSide": [
+        480,
+        213
+      ]
+    },
+    "mailbox#0": {
+      "kind": "line",
+      "start": [
+        521,
+        213
+      ],
+      "end": [
+        681,
+        213
+      ],
+      "frontSide": [
+        601,
+        241
+      ]
+    },
+    "bench#0": {
+      "kind": "line",
+      "start": [
+        659,
+        571
+      ],
+      "end": [
+        819,
+        571
+      ],
+      "frontSide": [
+        739,
+        599
+      ]
+    },
+    "rock-1#0": {
+      "kind": "line",
+      "start": [
+        -63,
+        550
+      ],
+      "end": [
+        97,
+        550
+      ],
+      "frontSide": [
+        17,
+        578
+      ]
+    },
+    "bush-1#0": {
+      "kind": "line",
+      "start": [
+        -34,
+        134
+      ],
+      "end": [
+        126,
+        134
+      ],
+      "frontSide": [
+        46,
+        162
       ]
     }
   }

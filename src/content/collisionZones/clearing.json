@@ -169,5 +169,97 @@
         ]
       ]
     }
-  ]
+  ],
+  "propDepthOverrides": {
+    "clearing-lantern-post#1": {
+      "kind": "line",
+      "start": [
+        227,
+        462
+      ],
+      "end": [
+        387,
+        462
+      ],
+      "frontSide": [
+        307,
+        490
+      ]
+    },
+    "clearing-lantern-post#0": {
+      "kind": "line",
+      "start": [
+        628,
+        461
+      ],
+      "end": [
+        788,
+        461
+      ],
+      "frontSide": [
+        708,
+        489
+      ]
+    },
+    "clearing-pine-1#0": {
+      "kind": "line",
+      "start": [
+        -50,
+        400
+      ],
+      "end": [
+        110,
+        400
+      ],
+      "frontSide": [
+        30,
+        428
+      ]
+    },
+    "clearing-pine-2#5": {
+      "kind": "line",
+      "start": [
+        48,
+        452
+      ],
+      "end": [
+        208,
+        452
+      ],
+      "frontSide": [
+        128,
+        480
+      ]
+    },
+    "clearing-pine-1#3": {
+      "kind": "line",
+      "start": [
+        763,
+        440
+      ],
+      "end": [
+        923,
+        440
+      ],
+      "frontSide": [
+        843,
+        468
+      ]
+    },
+    "clearing-pine-2#3": {
+      "kind": "line",
+      "start": [
+        851,
+        394
+      ],
+      "end": [
+        1011,
+        394
+      ],
+      "frontSide": [
+        931,
+        422
+      ]
+    }
+  }
 }

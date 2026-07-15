@@ -38,7 +38,15 @@ interface ZoneEditorOptions {
   readonly projection: Projection;
   readonly playerVisual: Phaser.GameObjects.Sprite;
   readonly dressing?: RoomDressing;
+  /** Standing outdoor billboards, keyed per placed instance (tree-1#0, etc.). */
+  readonly outdoorDepthTargets?: readonly OutdoorDepthTarget[];
   readonly initial?: CollisionZonesFile;
+}
+
+export interface OutdoorDepthTarget {
+  readonly id: string;
+  readonly mapX: number;
+  readonly mapY: number;
 }
 
 interface MutableZone {
@@ -60,8 +68,11 @@ interface DepthDrag {
 }
 
 interface DepthControl {
-  readonly prop: PropPlacement;
   readonly depthKey: string;
+  readonly mapX: number;
+  readonly mapY: number;
+  /** Room props use their frame as the legacy numeric/fallback override key. */
+  readonly roomProp?: PropPlacement;
 }
 
 /**
@@ -351,32 +362,56 @@ class ZoneEditor {
         );
         if (hasLayeredOverride) {
           for (const { id } of BED_DEPTH_LAYER_SPECS) {
-            controls.push({ prop, depthKey: bedDepthOverrideKey(prop.frame, id) });
+            controls.push({
+              depthKey: bedDepthOverrideKey(prop.frame, id),
+              mapX: prop.mapX,
+              mapY: prop.mapY,
+              roomProp: prop,
+            });
           }
           continue;
         }
       }
-      controls.push({ prop, depthKey: prop.frame });
+      controls.push({
+        depthKey: prop.frame,
+        mapX: prop.mapX,
+        mapY: prop.mapY,
+        roomProp: prop,
+      });
+    }
+    for (const target of this.options.outdoorDepthTargets ?? []) {
+      controls.push({
+        depthKey: target.id,
+        mapX: target.mapX,
+        mapY: target.mapY,
+      });
     }
     return controls;
   }
 
   private effectiveDepthMapY(control: DepthControl): number {
+    if (!control.roomProp) {
+      const override = this.depthOverrides[control.depthKey];
+      return typeof override === 'number' ? override : control.mapY;
+    }
+    const prop = control.roomProp;
     const override = getBedDepthOverride(
       this.depthOverrides,
-      control.prop.frame,
+      prop.frame,
       control.depthKey.endsWith(':front') ? 'front' : 'back',
     );
     const resolvedOverride =
-      control.depthKey === control.prop.frame ? this.depthOverrides[control.depthKey] : override;
+      control.depthKey === prop.frame ? this.depthOverrides[control.depthKey] : override;
     return typeof resolvedOverride === 'number'
       ? resolvedOverride
-      : (control.prop.depthMapY ?? control.prop.mapY);
+      : (prop.depthMapY ?? prop.mapY);
   }
 
   private screenDepthLine(control: DepthControl): ScreenDepthLine {
+    const fallbackKey = control.roomProp?.frame;
     const override =
-      this.depthOverrides[control.depthKey] ?? this.depthOverrides[control.prop.frame];
+      this.depthOverrides[control.depthKey] ??
+      (fallbackKey ? this.depthOverrides[fallbackKey] : undefined);
     if (isRotatedPropDepthLine(override)) {
       return {
         start: this.projection.project(override.start[0], override.start[1]),
@@ -385,7 +420,7 @@ class ZoneEditor {
       };
     }
     const center = this.projection.project(
-      control.prop.mapX,
+      control.mapX,
       this.effectiveDepthMapY(control),
     );
     return {
@@ -518,7 +553,8 @@ class ZoneEditor {
       const center = depthLineCenter(line);
       const overridden =
         this.depthOverrides[control.depthKey] !== undefined ||
-        this.depthOverrides[control.prop.frame] !== undefined;
+        (control.roomProp !== undefined &&
+          this.depthOverrides[control.roomProp.frame] !== undefined);
       g.lineStyle(3, overridden ? 0xf472b6 : 0x22d3ee, 0.9);
       g.lineBetween(line.start.x, line.start.y, line.end.x, line.end.y);
 

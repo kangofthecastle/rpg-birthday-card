@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
-  combineOutdoorColliders,
   pointInPolygon,
   polygonBounds,
   rasterizePolygonsToRects,
+  resolveOutdoorColliders,
   type Polygon,
   type Rect,
 } from '../../src/game/collisionGeometry';
@@ -105,69 +105,63 @@ describe('rasterizePolygonsToRects', () => {
   });
 });
 
-describe('combineOutdoorColliders (additive outdoor semantics)', () => {
+describe('resolveOutdoorColliders (room-style replacement semantics)', () => {
   // Synthetic scenery rects, unrelated to any authored content.
   const SCENERY: Rect[] = [
     { x: 300, y: 300, width: 40, height: 40 },
     { x: 500, y: 100, width: 24, height: 24 },
   ];
 
-  it('returns scenery unchanged (in order) when there are no zone polygons', () => {
-    expect(combineOutdoorColliders(SCENERY, [], 8)).toEqual(SCENERY);
+  it('uses scenery as the fallback before a zones file exists', () => {
+    expect(resolveOutdoorColliders(SCENERY, undefined, 8)).toEqual(SCENERY);
   });
 
-  it('ignores degenerate zone polygons, leaving scenery intact', () => {
+  it('lets an authored empty file clear every generated collider', () => {
+    expect(resolveOutdoorColliders(SCENERY, [], 8)).toEqual([]);
+  });
+
+  it('does not revive scenery when the authored polygons are degenerate', () => {
     const degenerate: Polygon[] = [[[0, 0], [1, 1]]];
-    expect(combineOutdoorColliders(SCENERY, degenerate, 8)).toEqual(SCENERY);
+    expect(resolveOutdoorColliders(SCENERY, degenerate, 8)).toEqual([]);
   });
 
-  it('APPENDS zone rects to scenery — scenery is preserved, zone area is added', () => {
-    const combined = combineOutdoorColliders(SCENERY, [SQUARE], 8);
-    // Every scenery rect survives (additive, not replace).
-    for (const rect of SCENERY) {
-      expect(combined).toContainEqual(rect);
-    }
-    // The zone polygon's interior is now covered by an added rect.
-    expect(covers(combined, 40, 40)).toBe(true);
-    // Scenery rects come first, then the zone rects.
-    expect(combined.slice(0, SCENERY.length)).toEqual(SCENERY);
-    expect(combined.length).toBeGreaterThan(SCENERY.length);
+  it('replaces scenery with rasterised authored zones', () => {
+    const resolved = resolveOutdoorColliders(SCENERY, [SQUARE], 8);
+    expect(covers(resolved, 40, 40)).toBe(true);
+    expect(resolved).not.toContainEqual(SCENERY[0]);
+    expect(resolved).not.toContainEqual(SCENERY[1]);
   });
 
-  it('keeps scenery even when a zone polygon overlaps it (no replacement)', () => {
-    // A zone drawn right on top of the first scenery rect.
+  it('keeps only the authored result when a zone overlaps old scenery', () => {
     const overlap: Polygon = [
       [300, 300],
       [340, 300],
       [340, 340],
       [300, 340],
     ];
-    const combined = combineOutdoorColliders(SCENERY, [overlap], 8);
-    // The overlapped scenery rect is still present.
-    expect(combined).toContainEqual(SCENERY[0]);
-    // And the zone contributed at least one extra rect on top.
-    expect(combined.length).toBeGreaterThan(SCENERY.length);
+    const resolved = resolveOutdoorColliders(SCENERY, [overlap], 8);
+    expect(covers(resolved, 320, 320)).toBe(true);
+    expect(resolved).not.toContainEqual(SCENERY[1]);
   });
 
   it('does not mutate the input scenery array', () => {
     const scenery: Rect[] = [{ x: 0, y: 0, width: 8, height: 8 }];
     const before = [...scenery];
-    combineOutdoorColliders(scenery, [SQUARE], 8);
+    resolveOutdoorColliders(scenery, [SQUARE], 8);
     expect(scenery).toEqual(before);
   });
 
-  it('unions multiple zone polygons on top of scenery', () => {
+  it('unions multiple authored polygons without retaining scenery', () => {
     const other: Polygon = [
       [200, 200],
       [232, 200],
       [232, 232],
       [200, 232],
     ];
-    const combined = combineOutdoorColliders(SCENERY, [SQUARE, other], 8);
-    expect(covers(combined, 40, 40)).toBe(true);
-    expect(covers(combined, 216, 216)).toBe(true);
-    for (const rect of SCENERY) {
-      expect(combined).toContainEqual(rect);
-    }
+    const resolved = resolveOutdoorColliders(SCENERY, [SQUARE, other], 8);
+    expect(covers(resolved, 40, 40)).toBe(true);
+    expect(covers(resolved, 216, 216)).toBe(true);
+    expect(resolved).not.toContainEqual(SCENERY[0]);
+    expect(resolved).not.toContainEqual(SCENERY[1]);
   });
 });

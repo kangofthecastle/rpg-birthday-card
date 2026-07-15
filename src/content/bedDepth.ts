@@ -2,6 +2,10 @@ import type {
   PropDepthOverride,
   RotatedPropDepthLine,
 } from './collisionZones';
+import {
+  isPlayerInFrontOfDepthLine,
+  isRotatedPropDepthLine,
+} from './collisionZones';
 import type { PropPlacement } from './roomDressing';
 
 export type BedDepthLayerId = 'back' | 'front';
@@ -88,9 +92,45 @@ export function getBedDepthOverride(
 }
 
 /**
+ * Returns the authored segments that together form the bed's viewer-facing
+ * boundary. Layered keys take precedence; a single legacy frame line remains
+ * valid for older room data.
+ */
+export function getBedDepthLines(
+  overrides: Readonly<Record<string, PropDepthOverride>>,
+  frame: string,
+): readonly RotatedPropDepthLine[] {
+  const layered = BED_DEPTH_LAYER_SPECS
+    .map(({ id }) => overrides[bedDepthOverrideKey(frame, id)])
+    .filter(isRotatedPropDepthLine);
+  if (layered.length > 0) {
+    return layered;
+  }
+
+  const legacy = overrides[frame];
+  return isRotatedPropDepthLine(legacy) ? [legacy] : [];
+}
+
+/**
+ * A bed's two segments describe one L-shaped boundary, not two contradictory
+ * image-layer decisions. Crossing either the long side or the foot edge puts
+ * ____ in front of the complete bed.
+ */
+export function isPlayerInFrontOfBedDepthLines(
+  lines: readonly RotatedPropDepthLine[],
+  playerMapX: number,
+  playerMapY: number,
+): boolean {
+  return lines.some((line) =>
+    isPlayerInFrontOfDepthLine(line, playerMapX, playerMapY),
+  );
+}
+
+/**
  * Supplies two sensible boundaries when a room has not authored explicit bed
- * lines yet. They follow the back and front edges of the solid footprint, with
- * increasing map-y marking the side where ____ is visually in front.
+ * lines yet. The first segment follows the long viewer-facing side and the
+ * second follows the foot edge. Their front half-planes are combined as OR,
+ * producing the L-shaped boundary an isometric bed needs.
  */
 export function getDefaultBedDepthOverrides(
   placement: Pick<PropPlacement, 'frame' | 'mapX' | 'mapY' | 'footprint'>,
@@ -102,13 +142,14 @@ export function getDefaultBedDepthOverrides(
   const frontY = placement.mapY;
   const frontSideOffset = Math.max(32, Math.min(64, footprint.d * 0.45));
   const centerX = placement.mapX;
+  const centerY = (backY + frontY) / 2;
 
   return {
     [bedDepthOverrideKey(placement.frame, 'back')]: {
       kind: 'line',
-      start: [left, backY],
-      end: [right, backY],
-      frontSide: [centerX, backY + frontSideOffset],
+      start: [right, backY],
+      end: [right, frontY],
+      frontSide: [right + frontSideOffset, centerY],
     },
     [bedDepthOverrideKey(placement.frame, 'front')]: {
       kind: 'line',

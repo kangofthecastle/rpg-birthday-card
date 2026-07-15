@@ -75,13 +75,22 @@ import {
   type CollisionZonesFile,
   type PropDepthOverride,
 } from '../content/collisionZones';
-import { getDefaultBedDepthOverrides } from '../content/bedDepth';
 import {
-  combineOutdoorColliders,
+  getBedDepthLines,
+  getDefaultBedDepthOverrides,
+  isPlayerInFrontOfBedDepthLines,
+} from '../content/bedDepth';
+import {
   rasterizePolygonsToRects,
+  resolveOutdoorColliders,
   type Polygon,
 } from '../game/collisionGeometry';
-import { resolvePropDepthRelativeToPlayer } from '../game/propDepth';
+import {
+  clampDepthBehindLayers,
+  getPlayerDepthSortingPoint,
+  PLAYER_VISUAL_DEPTH_BIAS,
+  resolvePropDepthRelativeToPlayer,
+} from '../game/propDepth';
 import type {
   DialogueLine,
   LocationDefinition,
@@ -402,6 +411,15 @@ interface DriftingCrane {
   scale: number;
 }
 
+/** A standing outdoor billboard that can cross ____ at an authored depth line. */
+interface OutdoorDepthHandle {
+  readonly id: string;
+  readonly mapX: number;
+  readonly mapY: number;
+  readonly image: Phaser.GameObjects.Image;
+  readonly label?: Phaser.GameObjects.Text;
+}
+
 interface ClearingKoiDisplay {
   readonly kind: 'koi';
   model: ClearingCurrentItem;
@@ -584,6 +602,10 @@ export class LocationScene extends Phaser.Scene {
   // props + signpost render; the signpost handle also carries its label + linked
   // interaction id (for the gold-rect pairing hint).
   private outdoorPropHandles: OutdoorEditHandle[] = [];
+  // Per-instance standing outdoor billboards for ?editZones=1 depth authoring
+  // and runtime player/prop sorting. Flat ground scatter and overhead art are
+  // intentionally excluded.
+  private outdoorDepthHandles: OutdoorDepthHandle[] = [];
   // The room's home host NPC (____/____) as a dressEdit handle, so ?dressEdit=1
   // can drag it. Set when createHomeHostNpc places the sprite; undefined in rooms
   // (or outdoor areas) with no resident.
@@ -602,11 +624,6 @@ export class LocationScene extends Phaser.Scene {
   private dressEditFrozen = false;
   private propColliders: PropColliderRect[] = [];
   private propColliderBodies: Phaser.GameObjects.Rectangle[] = [];
-  // Base (non-zone) colliders captured at createMap so the dev zone editor can
-  // recombine them with freshly-authored zones on a live rebuild. Outdoors this
-  // holds the scenery footprints (zones are additive); interiors leave it empty
-  // (a zones file REPLACES footprints).
-  private sceneryColliders: PropColliderRect[] = [];
   // Debug outlines (purple authored polygons / red effective rects) tracked so a
   // live zone rebuild can tear them down and redraw.
   private colliderDebugGraphics: Phaser.GameObjects.Graphics[] = [];
@@ -691,7 +708,10 @@ export class LocationScene extends Phaser.Scene {
     // always sees current collision truth while editing.
     this.showColliderDebug =
       params.has('dressDebug') || (import.meta.env.DEV && params.has('editZones'));
-    this.debugMarkers = this.showColliderDebug;
+    // Interaction/exit action rectangles are a separate concern. Keep them
+    // hidden during collision/depth authoring; only the explicit dressing debug
+    // mode should reveal them.
+    this.debugMarkers = params.has('dressDebug');
     // Mirror the current location onto the DOM so the on-screen location label
     // change is observable to smoke tests (Phaser canvas text is not queryable).
     document.body.dataset.locationId = this.location.id;
@@ -808,6 +828,11 @@ export class LocationScene extends Phaser.Scene {
         projection,
         playerVisual,
         dressing: this.dressing,
+        outdoorDepthTargets: this.outdoorDepthHandles.map(({ id, mapX, mapY }) => ({
+          id,
+          mapX,
+          mapY,
+        })),
         initial: initialZonesFile,
       });
     });
@@ -1154,9 +1179,9 @@ export class LocationScene extends Phaser.Scene {
 
     this.propColliders = [];
     this.propColliderBodies = [];
-    this.sceneryColliders = [];
     this.colliderDebugGraphics = [];
     this.outdoorPropHandles = [];
+    this.outdoorDepthHandles = [];
     let contentBounds: ScreenBounds | undefined;
 
     if (this.dressing) {
@@ -1193,10 +1218,9 @@ export class LocationScene extends Phaser.Scene {
         ...this.renderOutdoorProps(tilemap),
         ...this.renderSignposts(tilemap),
       ];
-      // Hand-drawn polygon zones ADD to the scenery colliders outdoors (unlike
-      // interiors, where they replace footprint colliders).
-      this.sceneryColliders = scenery;
-      this.propColliders = this.addOutdoorZoneColliders(scenery);
+      // Authored zones replace generated scenery colliders; before a zones file
+      // exists, the scenery footprints remain the fallback.
+      this.propColliders = this.resolveOutdoorZoneColliders(scenery);
     } else {
       const palette = getOutdoorPalette(this.location.id);
       this.cameras.main.setBackgroundColor(
@@ -1204,8 +1228,7 @@ export class LocationScene extends Phaser.Scene {
       );
       this.createDevBackdrop(tilemap, palette);
       const scenery = this.renderOutdoorExteriors();
-      this.sceneryColliders = scenery;
-      this.propColliders = this.addOutdoorZoneColliders(scenery);
+      this.propColliders = this.resolveOutdoorZoneColliders(scenery);
     }
 
     const ground = tilemap.createLayer('Ground', [floorTileset, wallTileset], 0, 0);
@@ -1335,17 +1358,19 @@ export class LocationScene extends Phaser.Scene {
     }
   }
 
-  // Outdoor collider assembly: appends any hand-drawn zone rects to the
-  // scenery-derived colliders (additive), leaving scenery untouched when there
-  // is no zones file. Interiors use rasterizeZones directly (replace semantics).
-  private addOutdoorZoneColliders(sceneryRects: PropColliderRect[]): PropColliderRect[] {
-    if (!this.zonesFile) {
-      return sceneryRects;
-    }
-    const polygons: Polygon[] = this.zonesFile.zones
+  // Outdoor collider assembly: generated scenery is the no-file fallback;
+  // authored polygons replace it as soon as the editor saves a zones file.
+  private resolveOutdoorZoneColliders(
+    sceneryRects: PropColliderRect[],
+  ): PropColliderRect[] {
+    const polygons = this.zonesFile?.zones
       .filter((zone) => zone.points.length >= 3)
       .map((zone) => zone.points);
-    return combineOutdoorColliders(sceneryRects, polygons, LocationScene.ZONE_CELL_SIZE);
+    return resolveOutdoorColliders(
+      sceneryRects,
+      polygons,
+      LocationScene.ZONE_CELL_SIZE,
+    );
   }
 
   // Rasterises polygon collision zones into map-space strip rectangles.
@@ -1414,9 +1439,9 @@ export class LocationScene extends Phaser.Scene {
   // Dev-only hook (used ONLY by the ?editZones=1 zone editor). Rebuilds the
   // zone-derived collision in place from the editor's current in-memory polygons
   // so saved zones take effect immediately without a page reload. Mirrors
-  // createMap's semantics EXACTLY — interiors REPLACE footprint colliders,
-  // outdoor areas ADD zone rects to the (unchanged) scenery colliders — so a live
-  // rebuild is identical to a save-then-reload cold load. Also refreshes the
+  // createMap's semantics EXACTLY — authored polygons replace generated
+  // footprints in both rooms and outdoor areas — so a live rebuild is identical
+  // to a save-then-reload cold load. Also refreshes the
   // purple-authored / red-effective debug overlay in the same pass.
   //
   // Numeric propDepthOverrides are still applied only at room render time.
@@ -1441,12 +1466,9 @@ export class LocationScene extends Phaser.Scene {
     }
     this.colliderDebugGraphics = [];
 
-    // Recompute colliders using the SAME branching createMap uses: dressed
-    // interiors replace footprints with the rasterised zones; everything else
-    // (outdoor) adds the zones to the captured scenery colliders.
-    this.propColliders = this.dressing
-      ? this.rasterizeZones(zonesFile)
-      : this.addOutdoorZoneColliders(this.sceneryColliders);
+    // Saving means an authored file now exists, so its polygons replace every
+    // generated footprint regardless of whether the area is indoors or out.
+    this.propColliders = this.rasterizeZones(zonesFile);
 
     this.createPropColliderBodies();
 
@@ -3368,16 +3390,19 @@ export class LocationScene extends Phaser.Scene {
   }
 
   private createWorldMarkers(): void {
-    // Dressed rooms show art props instead of the debug interact rects. Pass
-    // ?dressDebug=1 (or ?editZones=1) to overlay the rects again for alignment.
-    // The galaxy final-spot is likewise "dressed": ____'s sprite IS the marker.
-    if ((this.dressing || this.location.id === 'final-spot') && !this.showColliderDebug) {
+    // Finished rooms and outdoor areas communicate actions through their art and
+    // proximity prompt. Action rectangles are authoring diagnostics only and
+    // must not appear in normal play or in the collision/depth editor.
+    if (
+      (this.dressing || this.isOutdoor() || this.location.id === 'final-spot') &&
+      !this.debugMarkers
+    ) {
       return;
     }
 
     // Outdoor door exits are shown as a glowing doormat (createOutdoorDoorMarkers)
-    // instead of a debug rect, unless the collider debug overlay is on.
-    if (!this.isOutdoor() || this.showColliderDebug) {
+    // instead of a debug rect, unless explicit marker debugging is on.
+    if (!this.isOutdoor() || this.debugMarkers) {
       for (const exit of this.exits) {
         this.createWorldMarker(exit, 0x74c7ec, this.getObjectLabel(exit));
       }
@@ -3388,7 +3413,7 @@ export class LocationScene extends Phaser.Scene {
     // rect (unless the collider-debug overlay is on).
     const signpostIds = new Set(getSignposts(this.location.id).map((s) => s.interactionId));
     for (const interaction of this.interactions) {
-      if (signpostIds.has(interaction.id) && !this.showColliderDebug) {
+      if (signpostIds.has(interaction.id) && !this.debugMarkers) {
         continue;
       }
       this.createWorldMarker(interaction, 0xf1d79a, this.getObjectLabel(interaction));
@@ -3405,8 +3430,8 @@ export class LocationScene extends Phaser.Scene {
   private renderOutdoorExteriors(): PropColliderRect[] {
     const colliders: PropColliderRect[] = [];
 
-    for (const exterior of getExteriors(this.location.id)) {
-      this.renderExterior(exterior);
+    for (const [index, exterior] of getExteriors(this.location.id).entries()) {
+      this.renderExterior(exterior, index);
       colliders.push({
         x: exterior.mapX - exterior.footprint.w / 2,
         y: exterior.mapY - exterior.footprint.d,
@@ -3418,18 +3443,24 @@ export class LocationScene extends Phaser.Scene {
     return colliders;
   }
 
-  private renderExterior(exterior: ExteriorPlacement): void {
+  private renderExterior(exterior: ExteriorPlacement, index: number): void {
     const key = exteriorTextureKey(exterior.asset);
     const anchor = this.getProjection().project(exterior.mapX, exterior.mapY);
     const texture = this.textures.get(key);
     const sourceHeight = texture.getSourceImage().height || 360;
     const scale = (PLAYER_VISUAL_HEIGHT_PX * exterior.heightRatio) / sourceHeight;
 
-    this.add
+    const image = this.add
       .image(anchor.x, anchor.y, key)
       .setOrigin(0.5, 1)
       .setScale(scale)
       .setDepth(anchor.y);
+    this.outdoorDepthHandles.push({
+      id: `exterior-${exterior.asset}#${index}`,
+      mapX: exterior.mapX,
+      mapY: exterior.mapY,
+      image,
+    });
   }
 
   // Renders the decoration prop pack for an outdoor area: painted cutouts placed
@@ -3580,6 +3611,14 @@ export class LocationScene extends Phaser.Scene {
 
     // Handle for the dressEdit editor (drag/resize/delete this exact billboard).
     this.outdoorPropHandles.push({ image, placement, kind });
+    if (!kind.flat && !kind.overhead && placement.id) {
+      this.outdoorDepthHandles.push({
+        id: placement.id,
+        mapX: placement.mapX,
+        mapY: placement.mapY,
+        image,
+      });
+    }
 
     if (kind.collider && !kind.flat && !kind.overhead) {
       // The collider footprint scales with the visual so a shrunk prop blocks
@@ -3695,20 +3734,30 @@ export class LocationScene extends Phaser.Scene {
       // Handle for the dressEdit editor: dragging moves the board + its caption
       // together; the linked dialogue hotspot is shown as a faint gold outline
       // while selected and is edited separately in M-mode.
+      const signPlacement = {
+        id: sign.id,
+        name: SIGNPOST_PROP_NAME,
+        mapX: sign.mapX,
+        mapY: sign.mapY,
+        flip: sign.flip,
+        scale: sign.scale,
+      };
       this.outdoorPropHandles.push({
         image,
         label: caption,
-        placement: {
-          id: sign.id,
-          name: SIGNPOST_PROP_NAME,
-          mapX: sign.mapX,
-          mapY: sign.mapY,
-          flip: sign.flip,
-          scale: sign.scale,
-        },
+        placement: signPlacement,
         kind,
         signpostInteractionId: sign.interactionId,
       });
+      if (sign.id) {
+        this.outdoorDepthHandles.push({
+          id: sign.id,
+          mapX: sign.mapX,
+          mapY: sign.mapY,
+          image,
+          label: caption,
+        });
+      }
 
       if (!kind.collider) {
         continue;
@@ -4394,7 +4443,7 @@ export class LocationScene extends Phaser.Scene {
   // A soft pulsing glow doormat, laid flat in the floor plane at each door exit
   // rect, so doorways on the (undressed) outdoor maps are findable.
   private createOutdoorDoorMarkers(): void {
-    if (!this.isOutdoor()) {
+    if (!this.isOutdoor() || !this.debugMarkers) {
       return;
     }
 
@@ -4523,7 +4572,7 @@ export class LocationScene extends Phaser.Scene {
     const position = this.getProjection().project(this.player.x, this.player.y);
     const idleOffset = this.getIdleOffset();
     this.playerVisual.setPosition(position.x, position.y + idleOffset);
-    this.playerVisual.setDepth(position.y + 10);
+    this.playerVisual.setDepth(position.y + PLAYER_VISUAL_DEPTH_BIAS);
     this.syncRotatedPropDepths();
     this.maybeSpawnWalkDust(position);
     this.updatePlayerVisualAnimation();
@@ -4532,36 +4581,60 @@ export class LocationScene extends Phaser.Scene {
   private syncRotatedPropDepths(): void {
     const overrides = this.getEffectivePropDepthOverrides();
     const playerVisual = this.playerVisual;
-    if (!overrides || !playerVisual || this.propHandles.length === 0) {
+    if (
+      !playerVisual ||
+      (this.propHandles.length === 0 && this.outdoorDepthHandles.length === 0)
+    ) {
       return;
     }
 
-    // Depth lines are authored in map space against ____'s feet. Use the
-    // controller position directly: the sprite's screen depth includes a
-    // deliberate visual `+10` bias, and unprojecting that biased value shifts
-    // ____ across short/diagonal boundaries before the side test runs.
+    // Depth lines are authored in map space but judged against the billboard's
+    // rendered depth. ____ deliberately sorts 10 screen px below her physics
+    // feet, so convert that same biased depth back to map space before testing
+    // a line. Otherwise the collider can stop her while the line still reports
+    // "behind", even after her rendered feet have visibly crossed it.
     const projection = this.getProjection();
-    const sortingPoint = { x: this.player.x, y: this.player.y };
+    const sortingPoint = getPlayerDepthSortingPoint(
+      projection,
+      this.player.x,
+      this.player.y,
+    );
     for (const { placement, depthParts } of this.propHandles) {
       if (placement.fixedDepth !== undefined) {
         continue;
       }
+      const bedLines = placement.frame === 'bed'
+        ? getBedDepthLines(overrides, placement.frame)
+        : [];
+      const recipientInFrontOfBed = bedLines.length > 0
+        ? isPlayerInFrontOfBedDepthLines(
+            bedLines,
+            sortingPoint.x,
+            sortingPoint.y,
+          )
+        : undefined;
+      const bedNaturalDepth = bedLines.length > 0
+        ? Math.max(...bedLines.map((line) => projection.project(
+            (line.start[0] + line.end[0]) / 2,
+            (line.start[1] + line.end[1]) / 2,
+          ).y))
+        : undefined;
       for (const part of depthParts) {
         const line = overrides[part.depthKey] ?? overrides[placement.frame];
         if (!isRotatedPropDepthLine(line)) {
           continue;
         }
-        const recipientInFront = isPlayerInFrontOfDepthLine(
+        const recipientInFront = recipientInFrontOfBed ?? isPlayerInFrontOfDepthLine(
           line,
           sortingPoint.x,
           sortingPoint.y,
         );
-        // Keep each part's own line midpoint as its natural depth. The old
-        // player +/- epsilon assignment made every rotated prop tie at ____'s
-        // depth, so display-list order could put the bedside table over the bed
-        // in one position and under it in another. Only move the part across
-        // ____ when its natural depth is on the wrong side.
-        const naturalDepth = projection.project(
+        // Normal props keep their line midpoint as their natural depth. A bed
+        // uses the front-most midpoint of its compound boundary for both image
+        // parts, so the side and foot segments cannot split the artwork across
+        // ____. Only move the prop across ____ when that natural depth is on
+        // the wrong side.
+        const naturalDepth = bedNaturalDepth ?? projection.project(
           (line.start[0] + line.end[0]) / 2,
           (line.start[1] + line.end[1]) / 2,
         ).y;
@@ -4569,6 +4642,55 @@ export class LocationScene extends Phaser.Scene {
           resolvePropDepthRelativeToPlayer(naturalDepth, playerVisual.depth, recipientInFront),
         );
       }
+    }
+
+    // ____'s bedside table physically overlaps the bed art, so their relative
+    // furniture stack is invariant even while each prop independently crosses
+    // ____. Keep the table behind the rearmost bed layer; otherwise approaching
+    // the violin can clamp the two props to opposite sides of ____ and let the
+    // table jump over the duvet/headboard.
+    const bedHandle = this.propHandles.find(({ placement }) => placement.frame === 'bed');
+    const bedsideTableHandle = this.propHandles.find(
+      ({ placement }) => placement.frame === 'bedside-table',
+    );
+    if (bedHandle && bedsideTableHandle) {
+      const bedDepths = bedHandle.depthParts.map(({ image }) => image.depth);
+      for (const { image } of bedsideTableHandle.depthParts) {
+        image.setDepth(clampDepthBehindLayers(image.depth, bedDepths));
+      }
+    }
+
+    // Outdoor targets use stable per-instance ids because a location can contain
+    // several placements of the same prop kind. Apply the same authored-line
+    // crossing rule to the billboard (and a signpost's separate caption) without
+    // coupling one tree/bush/sign to its siblings.
+    for (const handle of this.outdoorDepthHandles) {
+      const line = overrides[handle.id];
+      if (typeof line === 'number') {
+        const depth = projection.project(handle.mapX, line).y;
+        handle.image.setDepth(depth);
+        handle.label?.setDepth(depth + 0.1);
+        continue;
+      }
+      if (!isRotatedPropDepthLine(line)) {
+        continue;
+      }
+      const recipientInFront = isPlayerInFrontOfDepthLine(
+        line,
+        sortingPoint.x,
+        sortingPoint.y,
+      );
+      const naturalDepth = projection.project(
+        (line.start[0] + line.end[0]) / 2,
+        (line.start[1] + line.end[1]) / 2,
+      ).y;
+      const depth = resolvePropDepthRelativeToPlayer(
+        naturalDepth,
+        playerVisual.depth,
+        recipientInFront,
+      );
+      handle.image.setDepth(depth);
+      handle.label?.setDepth(depth + 0.1);
     }
   }
 

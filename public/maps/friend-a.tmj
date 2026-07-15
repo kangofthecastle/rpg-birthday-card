@@ -808,10 +808,10 @@
           "id": 3,
           "name": "friendone-host",
           "type": "dialogue",
-          "x": 726,
-          "y": 496,
-          "width": 85,
-          "height": 97
+          "x": 724,
+          "y": 488,
+          "width": 101,
+          "height": 130
         },
         {
           "id": 4,

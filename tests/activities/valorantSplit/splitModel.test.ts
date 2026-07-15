@@ -437,9 +437,9 @@ describe('spray bloom (first-shot accuracy + ramp)', () => {
   const { spreadStillRad, spreadMovingRad, sprayBloomMaxRad, sprayFullShots } =
     SPLIT_CONFIG.player;
 
-  it('is ~99% accurate on the first rested shot (near-zero cone)', () => {
-    expect(playerShotSpreadRad(0, false)).toBe(spreadStillRad);
-    expect(playerShotSpreadRad(0, false)).toBeLessThan(0.02);
+  it('puts the first planted bullet exactly on the crosshair', () => {
+    expect(playerShotSpreadRad(0, false)).toBe(0);
+    expect(playerShotSpreadRad(1, false)).toBeGreaterThan(spreadStillRad);
   });
 
   it('grows monotonically with spray depth and caps at a sane max', () => {
@@ -495,9 +495,7 @@ describe('spray recovery and cursor-move independence', () => {
     // A pause longer than sprayResetMs snaps the spray back to rested.
     state = tickSplit(state, IDLE_INPUT, SPLIT_CONFIG.player.sprayResetMs + 50);
     expect(state.player.sprayShots).toBe(0);
-    expect(playerShotSpreadRad(state.player.sprayShots, false)).toBe(
-      SPLIT_CONFIG.player.spreadStillRad,
-    );
+    expect(playerShotSpreadRad(state.player.sprayShots, false)).toBe(0);
   });
 
   it('does not reset the spray during the shot-clock gap of sustained fire', () => {

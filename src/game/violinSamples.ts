@@ -2,7 +2,10 @@ export type ViolinArticulation = 'arco' | 'spiccato';
 
 export interface ViolinSampleAnchor {
   readonly id: string;
+  /** Written pitch used to choose the closest anchor. */
   readonly rootFrequency: number;
+  /** Measured median fundamental of the recording, used to tune playback. */
+  readonly recordedFrequency: number;
   readonly arcoUrl: string;
   readonly spiccatoUrl: string;
 }
@@ -11,6 +14,7 @@ export interface SelectedViolinSample {
   readonly anchorId: string;
   readonly articulation: ViolinArticulation;
   readonly rootFrequency: number;
+  readonly recordedFrequency: number;
   readonly playbackRate: number;
   readonly url: string;
 }
@@ -21,36 +25,42 @@ export const VIOLIN_SAMPLE_ANCHORS: readonly ViolinSampleAnchor[] = [
   {
     id: 'a3',
     rootFrequency: 220,
+    recordedFrequency: 220.5,
     arcoUrl: `${SAMPLE_BASE_URL}/arco-a3.ogg`,
     spiccatoUrl: `${SAMPLE_BASE_URL}/spiccato-a3.ogg`,
   },
   {
     id: 'c4',
     rootFrequency: 261.63,
+    recordedFrequency: 265.663,
     arcoUrl: `${SAMPLE_BASE_URL}/arco-c4.ogg`,
     spiccatoUrl: `${SAMPLE_BASE_URL}/spiccato-c4.ogg`,
   },
   {
     id: 'e4',
     rootFrequency: 329.63,
+    recordedFrequency: 331.579,
     arcoUrl: `${SAMPLE_BASE_URL}/arco-e4.ogg`,
     spiccatoUrl: `${SAMPLE_BASE_URL}/spiccato-e4.ogg`,
   },
   {
     id: 'g4',
     rootFrequency: 392,
+    recordedFrequency: 390.265,
     arcoUrl: `${SAMPLE_BASE_URL}/arco-g4.ogg`,
     spiccatoUrl: `${SAMPLE_BASE_URL}/spiccato-g4.ogg`,
   },
   {
     id: 'a4',
     rootFrequency: 440,
+    recordedFrequency: 441,
     arcoUrl: `${SAMPLE_BASE_URL}/arco-a4.ogg`,
     spiccatoUrl: `${SAMPLE_BASE_URL}/spiccato-a4.ogg`,
   },
   {
     id: 'c5',
     rootFrequency: 523.25,
+    recordedFrequency: 525,
     arcoUrl: `${SAMPLE_BASE_URL}/arco-c5.ogg`,
     spiccatoUrl: `${SAMPLE_BASE_URL}/spiccato-c5.ogg`,
   },
@@ -79,7 +89,8 @@ export function selectViolinSample(
     anchorId: anchor.id,
     articulation,
     rootFrequency: anchor.rootFrequency,
-    playbackRate: safeFrequency / anchor.rootFrequency,
+    recordedFrequency: anchor.recordedFrequency,
+    playbackRate: safeFrequency / anchor.recordedFrequency,
     url: anchor.arcoUrl,
   };
 }

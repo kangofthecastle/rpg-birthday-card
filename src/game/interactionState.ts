@@ -14,13 +14,18 @@ export function isInteractionAvailable(
     readonly requiresBeatId?: string;
     readonly requiresActivityId?: string;
     readonly hiddenAfterActivityId?: string;
+    readonly replayAfterEnding?: boolean;
     readonly hiddenAfterBeatId?: string;
     readonly requiresEndingCompleted?: boolean;
     readonly lockedUntilActivityId?: string;
   },
   state: RunState,
 ): boolean {
-  const replayableActivity = isCardMode(state) && interaction.kind === 'activity';
+  // Cards mode makes every activity replayable. The story epilogue only revives
+  // activities explicitly authored for post-ending replay (currently RETAKE).
+  const replayableActivity =
+    interaction.kind === 'activity' &&
+    (isCardMode(state) || (state.endingCompleted && interaction.replayAfterEnding));
 
   if (
     interaction.requiresBeatId &&
@@ -61,10 +66,14 @@ export function isInteractionLocked(
     readonly requiresAllFriendKeepsakes?: boolean;
     readonly requiresAllKeepsakes?: boolean;
     readonly lockedUntilActivityId?: string;
+    readonly replayAfterEnding?: boolean;
   },
   state: RunState,
 ): boolean {
-  if (isCardMode(state) && interaction.kind === 'activity') {
+  if (
+    interaction.kind === 'activity' &&
+    (isCardMode(state) || (state.endingCompleted && interaction.replayAfterEnding))
+  ) {
     return false;
   }
 

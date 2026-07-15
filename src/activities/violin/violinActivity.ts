@@ -2,6 +2,7 @@ import type { ActivityModule } from '../activityTypes';
 import { addKeyboardActivation } from '../activityDom';
 import { createActivityCloseButton } from '../activityShell';
 import type { ViolinSceneCallbacks } from './ViolinScene';
+import { prepareViolinSamples } from '../../game/audio';
 import { VIOLIN_KEY_HINT } from './melody';
 import { createViolinModes, type ViolinModes } from './violinModes';
 import './violin.css';
@@ -61,6 +62,7 @@ export function createViolinActivity(
     id: 'recipient-violin-piece',
     title: 'the piece on the stand',
     async start({ mount, onCancel, onComplete }) {
+      await prepareViolinSamples();
       const testMode = isTestMode();
 
       mount.innerHTML = `

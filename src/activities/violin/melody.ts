@@ -88,13 +88,14 @@ export interface ViolinPhrase {
 // opening quarter rests are pre-song silence rather than an input turn.
 export const VIOLIN_RHYTHM_MS = {
   dottedEighth: 450,
+  eighth: 300,
   sixteenth: 150,
   quarter: 600,
   tripletEighth: 200,
   dottedHalf: 1800,
 } as const;
 
-const { dottedEighth, dottedHalf, sixteenth, quarter, tripletEighth } =
+const { dottedEighth, dottedHalf, eighth, sixteenth, quarter, tripletEighth } =
   VIOLIN_RHYTHM_MS;
 
 export const VIOLIN_FINALE_PHRASES: readonly ViolinPhrase[] = [
@@ -220,25 +221,31 @@ export const VIOLIN_FINALE_PHRASES: readonly ViolinPhrase[] = [
       { pitchId: 'bb4', durationMs: dottedEighth },
       { pitchId: 'e4', durationMs: sixteenth },
       { pitchId: 'f4', durationMs: dottedHalf },
-      { pitchId: 'e4', durationMs: dottedEighth },
-      { pitchId: 'e4', durationMs: sixteenth },
     ],
   },
 ] as const;
 
 const FULL_NOTE_STREAM = VIOLIN_FINALE_PHRASES.flatMap((phrase) => phrase.notes);
 
-/** Measures 1–5, regrouped for the listen-and-echo game. These pages are views
- * into the canonical full stream, so shortening the game cannot alter or
- * duplicate the finale's notes. Measure 5 ends at exclusive index 33. */
+/** Measures 1–5, regrouped for the listen-and-echo game. The interactive
+ * passage stops on the first G of its final displayed measure (physical K),
+ * then hands off to the complete finale replay. */
 export const VIOLIN_PHRASES: readonly ViolinPhrase[] = [
   { id: 'game-page-1-opening', notes: FULL_NOTE_STREAM.slice(0, 4) },
   { id: 'game-page-2-rise', notes: FULL_NOTE_STREAM.slice(4, 9) },
   { id: 'game-page-3-fall-and-answer', notes: FULL_NOTE_STREAM.slice(9, 14) },
   { id: 'game-page-4-low-turn', notes: FULL_NOTE_STREAM.slice(14, 19) },
-  { id: 'game-page-5-chromatic-climb', notes: FULL_NOTE_STREAM.slice(19, 24) },
-  { id: 'game-page-6-answer', notes: FULL_NOTE_STREAM.slice(24, 29) },
-  { id: 'game-page-7-final-lift', notes: FULL_NOTE_STREAM.slice(29, 33) },
+  {
+    id: 'game-page-5-chromatic-climb',
+    notes: FULL_NOTE_STREAM.slice(19, 23).map((note, index) => (
+      index === 0 ? { ...note, durationMs: eighth } : note
+    )),
+  },
+  { id: 'game-page-6-answer', notes: FULL_NOTE_STREAM.slice(23, 27) },
+  {
+    id: 'game-page-7-final-lift',
+    notes: FULL_NOTE_STREAM.slice(27, 31),
+  },
 ] as const;
 
 /** The score's first four sounded notes, shared by all autonomous cues. */

@@ -1,5 +1,48 @@
 import { expect, test } from '@playwright/test';
 
+async function openRetakeFromFriendTwoPc(page: import('@playwright/test').Page): Promise<void> {
+  const canvas = page.locator('canvas').first();
+  await expect(canvas).toBeVisible();
+  await expect(page.locator('.collection-panel')).toContainText('Letters');
+  await canvas.click();
+  await page.keyboard.down('E');
+  await page.waitForTimeout(120);
+  await page.keyboard.up('E');
+  await expect(page.getByRole('dialog', { name: 'RETAKE.EXE' })).toBeVisible();
+}
+
+async function completeRetakeReplay(page: import('@playwright/test').Page): Promise<void> {
+  for (let i = 0; i < 3; i += 1) {
+    await page.getByRole('button', { name: 'Continue' }).click();
+  }
+  await page.getByRole('button', { name: 'Defuse the spike' }).click();
+
+  await expect(page.getByRole('dialog', { name: 'RETAKE.EXE' })).toHaveCount(0);
+  await expect(page.getByText(/Sorry I had to bail before the round ended/)).toHaveCount(0);
+  await expect(page.getByText('____?')).toHaveCount(0);
+  await expect(page.locator('body')).toHaveAttribute('data-location-id', 'friend-b');
+}
+
+test('RETAKE.EXE remains replayable from ____’s PC in the epilogue', async ({ page }) => {
+  await page.goto(
+    '/?testMode=1&locationId=friend-b&spawnId=near-friendtwo-pc&seedKeepsakes=all&seedBeats=friendtwo-house-entered&seedEnding=1',
+  );
+
+  await expect(page.locator('body')).toHaveAttribute('data-run-mode', 'story');
+  await openRetakeFromFriendTwoPc(page);
+  await completeRetakeReplay(page);
+});
+
+test('RETAKE.EXE launches from ____’s PC in password cards mode', async ({ page }) => {
+  await page.goto(
+    '/?testMode=1&cardMode=1&locationId=friend-b&spawnId=near-friendtwo-pc',
+  );
+
+  await expect(page.locator('body')).toHaveAttribute('data-run-mode', 'cards');
+  await openRetakeFromFriendTwoPc(page);
+  await completeRetakeReplay(page);
+});
+
 test('completes RETAKE.EXE at ____ house through test mode', async ({ page }) => {
   await page.goto(
     '/?testMode=1&locationId=friend-b&spawnId=near-friendtwo-pc&seedKeepsakes=glowing-koi-scale',

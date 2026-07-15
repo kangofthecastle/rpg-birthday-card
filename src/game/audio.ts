@@ -106,6 +106,7 @@ const SFX_BUS_LEVEL_DB = -3;
 const DEFAULT_MUSIC_FADE_MS = 1200;
 const MUTE_FADE_MS = 150;
 const SFX_CLEANUP_SLACK_MS = 60;
+const VIOLIN_VOICE_CROSSFADE_MS = 35;
 /** Skip the recorded bow-on-string transient when a note continues a phrase. */
 const CONNECTED_VIOLIN_SAMPLE_OFFSET_SECONDS = 0.11;
 
@@ -152,6 +153,8 @@ const state: AudioManagerState = {
  * Promise cache above prevents duplicate fetches; this resolved-only map keeps
  * a note from arriving late if its download is still in flight. */
 const violinSampleBuffers = new Map<string, AudioBuffer>();
+let violinSamplesReadyPromise: Promise<void> | null = null;
+let activeViolinVoiceGain: GainNode | null = null;
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -193,7 +196,7 @@ export function initAudio(): void {
     state.sfxGain = sfxGain;
 
     void ctx.resume?.();
-    preloadViolinSamples();
+    void preloadViolinSamples();
   } catch (error) {
     debugLog(`AudioContext init failed: ${String(error)}`);
     state.ctx = null;
@@ -423,9 +426,17 @@ export function playViolinNote(
     return;
   }
 
+  if (activeViolinVoiceGain) {
+    const fadeEnd = ctx.currentTime + VIOLIN_VOICE_CROSSFADE_MS / 1000;
+    activeViolinVoiceGain.gain.cancelScheduledValues(ctx.currentTime);
+    activeViolinVoiceGain.gain.setValueAtTime(activeViolinVoiceGain.gain.value, ctx.currentTime);
+    activeViolinVoiceGain.gain.linearRampToValueAtTime(0.0001, fadeEnd);
+  }
+
   const voiceGain = ctx.createGain();
   voiceGain.gain.value = clamp01(options.volume ?? 1);
   voiceGain.connect(sfxGain);
+  activeViolinVoiceGain = voiceGain;
 
   const selected = selectViolinSample(frequency, durationMs);
   const buffer = violinSampleBuffers.get(selected.url);
@@ -440,6 +451,9 @@ export function playViolinNote(
       )
     : playViolinTone(ctx, voiceGain, { frequency, durationMs });
   setTimeout(() => {
+    if (activeViolinVoiceGain === voiceGain) {
+      activeViolinVoiceGain = null;
+    }
     try {
       voiceGain.disconnect();
     } catch {
@@ -563,14 +577,27 @@ function resolveAudioFile(url: string): Promise<AudioBuffer | null> {
   return promise;
 }
 
-function preloadViolinSamples(): void {
-  for (const url of VIOLIN_SAMPLE_URLS) {
-    void resolveAudioFile(url).then((buffer) => {
+function preloadViolinSamples(): Promise<void> {
+  if (violinSamplesReadyPromise) {
+    return violinSamplesReadyPromise;
+  }
+  violinSamplesReadyPromise = Promise.all(
+    VIOLIN_SAMPLE_URLS.map((url) => resolveAudioFile(url).then((buffer) => {
       if (buffer) {
         violinSampleBuffers.set(url, buffer);
       }
-    });
+    })),
+  ).then(() => undefined);
+  return violinSamplesReadyPromise;
+}
+
+/** Ensures the local violin recordings are decoded before the music game starts,
+ * preventing its temporary synthesized fallback from appearing mid-phrase. */
+export function prepareViolinSamples(): Promise<void> {
+  if (!state.ctx) {
+    return Promise.resolve();
   }
+  return preloadViolinSamples();
 }
 
 async function resolveAudioFileUncached(url: string): Promise<AudioBuffer | null> {

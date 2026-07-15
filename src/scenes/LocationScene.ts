@@ -4946,6 +4946,7 @@ export class LocationScene extends Phaser.Scene {
   }
 
   private async startActivity(activityId: string): Promise<void> {
+    const replayingAfterEnding = this.state.endingCompleted;
     this.canMove = false;
     // Activities are full-screen modals running in their OWN Phaser game. Put
     // this heavy room scene to sleep (no update, no render) while one is mounted,
@@ -5051,7 +5052,7 @@ export class LocationScene extends Phaser.Scene {
           wakeScene();
           resumeLocationMusic();
         }
-        if (this.location.keepsake) {
+        if (this.location.keepsake && !replayingAfterEnding) {
           playSfx('sfx-keepsake');
         }
         this.state = completeLocation(this.state, recordedCompletion);
@@ -5083,17 +5084,24 @@ export class LocationScene extends Phaser.Scene {
           this.playViolinMotif(AWAKENING_FRAGMENT, 0.36);
         }
 
-        if (this.location.rewardSheetMusic) {
-          await showSheetMusicModal(this.location.rewardSheetMusic);
-        } else if (this.location.rewardMessage && this.location.rewardPresentation === 'letter') {
-          await showLetterModal(this.location.rewardMessage);
-        } else if (this.location.rewardMessage) {
-          await this.pauseForDialogue(this.location.rewardMessage);
-        }
+        // Epilogue/card-mode launches are clean replays: return to the room on
+        // completion without re-awarding keepsakes or replaying story dialogue.
+        if (!replayingAfterEnding) {
+          if (this.location.rewardSheetMusic) {
+            await showSheetMusicModal(this.location.rewardSheetMusic);
+          } else if (
+            this.location.rewardMessage &&
+            this.location.rewardPresentation === 'letter'
+          ) {
+            await showLetterModal(this.location.rewardMessage);
+          } else if (this.location.rewardMessage) {
+            await this.pauseForDialogue(this.location.rewardMessage);
+          }
 
-        const completionStory = getActivityCompletionStory(completedActivityId);
-        if (completionStory?.worldDialogue.length) {
-          await this.pauseForDialogue(completionStory.worldDialogue);
+          const completionStory = getActivityCompletionStory(completedActivityId);
+          if (completionStory?.worldDialogue.length) {
+            await this.pauseForDialogue(completionStory.worldDialogue);
+          }
         }
 
         // Some activities deliver the player elsewhere on completion (the origami

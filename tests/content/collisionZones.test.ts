@@ -24,6 +24,19 @@ describe('getCollisionZones', () => {
     expect(file.propDepthOverrides?.desk).toBeTypeOf('number');
   });
 
+  it('keeps the desk render-depth threshold at its south-side collision edge', () => {
+    const file = getCollisionZones('recipient-house')!;
+    const desk = file.zones.find((zone) => zone.id === 'desk')!;
+    const deskSouthEdge = Math.max(...desk.points.map(([, y]) => y));
+    const deskDepthMapY = file.propDepthOverrides?.desk!;
+
+    // ____'s visual depth is projected from her feet plus a 10px billboard
+    // bias. With the room's 0.5 vertical scale, that bias is equivalent to 40
+    // map px, so the player should switch in front at (depthMapY - 40), no
+    // farther south than the desk's blocking edge plus her 16px body half-size.
+    expect(deskDepthMapY - 40).toBeLessThanOrEqual(deskSouthEdge + 16);
+  });
+
   it('returns undefined for locations without a zones file', () => {
     expect(getCollisionZones('main-outside')).toBeUndefined();
     expect(getCollisionZones('nope')).toBeUndefined();

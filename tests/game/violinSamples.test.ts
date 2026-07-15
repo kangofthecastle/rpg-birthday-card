@@ -6,11 +6,12 @@ import {
 } from '../../src/game/violinSamples';
 
 describe('violin sample selection', () => {
-  it('keeps exact anchor pitches at their natural playback rate', () => {
+  it('corrects exact anchor pitches for the measured tuning of each recording', () => {
     const sample = selectViolinSample(220, 450);
     expect(sample.anchorId).toBe('a3');
     expect(sample.articulation).toBe('arco');
-    expect(sample.playbackRate).toBeCloseTo(1, 6);
+    expect(sample.recordedFrequency * sample.playbackRate).toBeCloseTo(220, 5);
+    expect(sample.playbackRate).toBeCloseTo(220 / 220.5, 6);
     expect(sample.url).toBe('/assets/audio/violin/arco-a3.ogg');
   });
 
@@ -22,6 +23,8 @@ describe('violin sample selection', () => {
     expect(fs4.anchorId).toBe('g4');
     expect(Math.abs(12 * Math.log2(bb3.playbackRate))).toBeLessThanOrEqual(2.01);
     expect(Math.abs(12 * Math.log2(fs4.playbackRate))).toBeLessThanOrEqual(2.01);
+    expect(bb3.recordedFrequency * bb3.playbackRate).toBeCloseTo(233.08, 5);
+    expect(fs4.recordedFrequency * fs4.playbackRate).toBeCloseTo(369.99, 5);
   });
 
   it('uses smooth arco for short scored notes as well as longer notes', () => {

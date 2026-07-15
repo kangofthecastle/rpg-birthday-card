@@ -99,6 +99,8 @@ interface BaseLocationInteraction {
   readonly lockedUntilActivityId?: string;
   /** Remove the interaction once its one-time activity has completed. */
   readonly hiddenAfterActivityId?: string;
+  /** Let a completed activity's hotspot return in the persistent epilogue. */
+  readonly replayAfterEnding?: boolean;
   /** Remove a one-time interaction after its named narrative beat. */
   readonly hiddenAfterBeatId?: string;
   /** Show only in the persistent post-ending world. */

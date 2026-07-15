@@ -9,6 +9,7 @@ import {
   createCardModeRunState,
   createInitialRunState,
   markBeatSeen,
+  markEndingCompleted,
   FRIEND_KEEPSAKE_IDS,
   REQUIRED_FINAL_KEEPSAKE_IDS,
   type RunState,
@@ -67,7 +68,7 @@ describe('isInteractionLocked', () => {
     expect(isInteractionLocked(violin, afterRetake)).toBe(false);
   });
 
-  it('bypasses activity locks only in cards mode', () => {
+  it('bypasses activity locks in cards mode', () => {
     const violin = {
       kind: 'activity',
       lockedUntilActivityId: 'valorant-split',
@@ -75,6 +76,17 @@ describe('isInteractionLocked', () => {
 
     expect(isInteractionLocked(violin, createCardModeRunState())).toBe(false);
     expect(isInteractionLocked(violin, createInitialRunState('recipient-house'))).toBe(true);
+  });
+
+  it('bypasses completed story gates for activity replays in the epilogue', () => {
+    const retake = {
+      kind: 'activity',
+      lockedUntilActivityId: 'friendone-pc-fishing',
+      replayAfterEnding: true,
+    } as const;
+    const epilogue = markEndingCompleted(createInitialRunState('friend-b'));
+
+    expect(isInteractionLocked(retake, epilogue)).toBe(false);
   });
 });
 
@@ -103,6 +115,22 @@ describe('isInteractionAvailable', () => {
       activityId: 'valorant-split',
     });
     expect(isInteractionAvailable(retake, completedCards)).toBe(true);
+  });
+
+  it('keeps a completed activity available for replay in the epilogue', () => {
+    const retake = {
+      kind: 'activity',
+      hiddenAfterActivityId: 'valorant-split',
+      replayAfterEnding: true,
+    } as const;
+    const completed = completeLocation(createInitialRunState('friend-b'), {
+      locationId: 'friend-b',
+      activityId: 'valorant-split',
+    });
+    const epilogue = markEndingCompleted(completed);
+
+    expect(isInteractionAvailable(retake, completed)).toBe(false);
+    expect(isInteractionAvailable(retake, epilogue)).toBe(true);
   });
 
   it('makes every authored game interaction immediately playable in cards mode', () => {

@@ -133,6 +133,19 @@ describe('isInteractionAvailable', () => {
     expect(isInteractionAvailable(retake, epilogue)).toBe(true);
   });
 
+  it('keeps an authored inspect available in the epilogue and cards mode', () => {
+    const inspect = {
+      kind: 'easterEgg',
+      requiresActivityId: 'friendone-pc-fishing',
+      availableAfterEnding: true,
+    } as const;
+    const story = createInitialRunState('friend-b');
+
+    expect(isInteractionAvailable(inspect, story)).toBe(false);
+    expect(isInteractionAvailable(inspect, markEndingCompleted(story))).toBe(true);
+    expect(isInteractionAvailable(inspect, createCardModeRunState())).toBe(true);
+  });
+
   it('makes every authored game interaction immediately playable in cards mode', () => {
     const state = createCardModeRunState();
     const games = LOCATIONS.flatMap((location) =>

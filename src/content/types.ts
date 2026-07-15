@@ -101,6 +101,8 @@ interface BaseLocationInteraction {
   readonly hiddenAfterActivityId?: string;
   /** Let a completed activity's hotspot return in the persistent epilogue. */
   readonly replayAfterEnding?: boolean;
+  /** Keep this authored interaction available in the epilogue, including card mode. */
+  readonly availableAfterEnding?: boolean;
   /** Remove a one-time interaction after its named narrative beat. */
   readonly hiddenAfterBeatId?: string;
   /** Show only in the persistent post-ending world. */

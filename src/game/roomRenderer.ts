@@ -13,6 +13,10 @@ import {
   type PropPlacement,
   type RoomDressing,
 } from '../content/roomDressing';
+import {
+  isRotatedPropDepthLine,
+  type PropDepthOverride,
+} from '../content/collisionZones';
 
 export type { PropColliderRect } from '../content/roomDressing';
 
@@ -115,7 +119,7 @@ export function renderRoomDressing(
   dressing: RoomDressing,
   tilemap: Phaser.Tilemaps.Tilemap,
   origin: IsoOrigin,
-  propDepthOverrides: Readonly<Record<string, number>> = {},
+  propDepthOverrides: Readonly<Record<string, PropDepthOverride>> = {},
 ): RoomRenderResult {
   registerPropFrames(scene, dressing);
 
@@ -951,7 +955,7 @@ function renderProps(
   scene: Phaser.Scene,
   dressing: RoomDressing,
   origin: IsoOrigin,
-  propDepthOverrides: Readonly<Record<string, number>>,
+  propDepthOverrides: Readonly<Record<string, PropDepthOverride>>,
 ): PropHandle[] {
   const handles: PropHandle[] = [];
   for (const placement of dressing.props) {
@@ -970,7 +974,7 @@ function renderProp(
   dressing: RoomDressing,
   placement: PropPlacement,
   origin: IsoOrigin,
-  depthOverride?: number,
+  depthOverride?: PropDepthOverride,
 ): Phaser.GameObjects.Image | undefined {
   const overrideKey = propOverrideTextureKey(dressing.locationId, placement.frame);
   const hasOverride = scene.textures.exists(overrideKey);
@@ -1013,7 +1017,7 @@ export function positionPropImage(
   placement: PropPlacement,
   image: Phaser.GameObjects.Image,
   origin: IsoOrigin,
-  depthOverride?: number,
+  depthOverride?: PropDepthOverride,
 ): void {
   const point = projectToIso(placement.mapX, placement.mapY, origin);
 
@@ -1051,11 +1055,20 @@ export function positionPropImage(
   image.setPosition(point.x, screenY);
   image.setScale(scale);
 
-  // Depth-sort by the prop's floor-contact line. A depthMapY override (from the
-  // zones JSON or the placement) moves that line off the anchor so the player
-  // can pass behind visually tall props.
-  const depthMapY = depthOverride ?? placement.depthMapY ?? placement.mapY;
-  const depthY = projectToIso(placement.mapX, depthMapY, origin).y;
+  // Numeric overrides preserve the legacy map-y threshold. Rotated boundaries
+  // get a stable initial midpoint depth; LocationScene then places that prop
+  // immediately above/below ____ each frame according to the authored side.
+  const depthY = isRotatedPropDepthLine(depthOverride)
+    ? projectToIso(
+        (depthOverride.start[0] + depthOverride.end[0]) / 2,
+        (depthOverride.start[1] + depthOverride.end[1]) / 2,
+        origin,
+      ).y
+    : projectToIso(
+        placement.mapX,
+        depthOverride ?? placement.depthMapY ?? placement.mapY,
+        origin,
+      ).y;
   image.setDepth(placement.fixedDepth ?? depthY);
 }
 

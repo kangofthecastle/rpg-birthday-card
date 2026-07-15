@@ -301,6 +301,10 @@ describe('ammo, reload, and dry fire', () => {
     );
   });
 
+  it('uses a 2.5-second Phantom reload lockout', () => {
+    expect(SPLIT_CONFIG.player.reloadMs).toBe(2500);
+  });
+
   it('spends one round per shot', () => {
     let state = setPlayerPos(withState({ enemies: [] }), { x: 200, y: 400 });
     const before = state.player.ammoInMag;

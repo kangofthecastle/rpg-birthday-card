@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createCollectionPanel } from '../../src/ui/collectionPanel';
+import {
+  createCollectionPanel,
+  getCollectedFriendLetters,
+} from '../../src/ui/collectionPanel';
 import type { RunState } from '../../src/game/runState';
 
 vi.mock('../../src/content/locations', () => ({
@@ -15,15 +18,25 @@ vi.mock('../../src/content/locations', () => ({
         iconAssetId: 'keepsake-glowing-koi-scale',
       },
       rewardPresentation: 'letter',
-      rewardMessage: [{ speaker: '____', text: 'Even inside a tiny game.' }],
+      rewardMessage: [{ speaker: '____', text: '' }],
     },
     {
       id: 'friend-b',
       keepsake: {
         id: 'friend-b-keepsake',
-        label: 'friend-b label',
-        description: 'friend-b description.',
+        label: '____’s Letter',
+        description: '____ fallback description.',
         iconAssetId: 'keepsake-friend-b',
+      },
+      rewardMessage: [{ speaker: '____', text: '____’s existing reward copy.' }],
+    },
+    {
+      id: 'friend-c',
+      keepsake: {
+        id: 'friend-c-keepsake',
+        label: 'friend-c label',
+        description: 'friend-c description.',
+        iconAssetId: 'keepsake-friend-c',
       },
     },
     {
@@ -117,19 +130,30 @@ describe('createCollectionPanel', () => {
 
     expect(onOpenLetter).toHaveBeenCalledOnce();
     expect(onOpenLetter).toHaveBeenCalledWith([
-      { speaker: '____', text: 'Even inside a tiny game.' },
+      { speaker: '____', text: 'The koi scale description.' },
     ]);
   });
 
   it('falls back to the keepsake description when there is no reward message', () => {
     const onOpenLetter = vi.fn().mockResolvedValue(undefined);
-    const { element } = createCollectionPanel(stateWith(['friend-b-keepsake']), {
+    const { element } = createCollectionPanel(stateWith(['friend-c-keepsake']), {
       onOpenLetter,
     });
 
     element.querySelector<HTMLButtonElement>('.letter-stack__item')?.click();
 
-    expect(onOpenLetter).toHaveBeenCalledWith([{ text: 'friend-b description.' }]);
+    expect(onOpenLetter).toHaveBeenCalledWith([{ text: 'friend-c description.' }]);
+  });
+
+  it('exports only the earned friend letters for the ending archive', () => {
+    expect(
+      getCollectedFriendLetters(
+        stateWith(['glowing-koi-scale', 'friend-b-keepsake', 'recipient-sheet-music']),
+      ),
+    ).toEqual([
+      { from: '____', text: 'The koi scale description.' },
+      { from: '____', text: '____’s existing reward copy.' },
+    ]);
   });
 
   it('reopens ____’s illustrated score instead of showing the keepsake description', () => {

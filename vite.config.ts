@@ -6,42 +6,13 @@ import {
   isValidTmjSavePayload,
   serializeTmj,
 } from './src/game/tmjRectPatch';
+import { isValidZoneSavePayload } from './src/game/zoneSaveValidation';
 
 const SAVE_ROUTE = '/__dev/save-collision-zones';
 const SAVE_LAYOUT_ROUTE = '/__dev/save-room-layout';
 const SAVE_OUTDOOR_LAYOUT_ROUTE = '/__dev/save-outdoor-layout';
 const SAVE_MAP_OBJECTS_ROUTE = '/__dev/save-map-objects';
 const LOCATION_ID = /^[a-z0-9-]+$/;
-
-interface ZonePayload {
-  locationId: string;
-  zones: Array<{ id: string; points: Array<[number, number]> }>;
-  propDepthOverrides?: Record<string, number>;
-}
-
-function isValidPayload(value: unknown): value is ZonePayload {
-  if (typeof value !== 'object' || value === null) return false;
-  const file = value as Record<string, unknown>;
-  if (typeof file.locationId !== 'string' || !LOCATION_ID.test(file.locationId)) return false;
-  if (!Array.isArray(file.zones)) return false;
-  for (const zone of file.zones) {
-    if (typeof zone !== 'object' || zone === null) return false;
-    const z = zone as Record<string, unknown>;
-    if (typeof z.id !== 'string' || !Array.isArray(z.points)) return false;
-    for (const pt of z.points) {
-      if (!Array.isArray(pt) || pt.length !== 2 || typeof pt[0] !== 'number' || typeof pt[1] !== 'number') {
-        return false;
-      }
-    }
-  }
-  if (file.propDepthOverrides !== undefined) {
-    if (typeof file.propDepthOverrides !== 'object' || file.propDepthOverrides === null) return false;
-    for (const v of Object.values(file.propDepthOverrides as Record<string, unknown>)) {
-      if (typeof v !== 'number') return false;
-    }
-  }
-  return true;
-}
 
 // Dev-only endpoint used by the in-game zone editor (?editZones=1) to persist
 // authored polygons to src/content/collisionZones/<locationId>.json.
@@ -62,7 +33,7 @@ function collisionZoneSaverPlugin(): Plugin {
         req.on('end', () => {
           try {
             const parsed = JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
-            if (!isValidPayload(parsed)) {
+            if (!isValidZoneSavePayload(parsed)) {
               res.statusCode = 400;
               res.end('Invalid payload');
               return;

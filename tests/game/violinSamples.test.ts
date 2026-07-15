@@ -6,24 +6,23 @@ import {
 } from '../../src/game/violinSamples';
 
 describe('violin sample selection', () => {
-  it('corrects exact anchor pitches for the measured tuning of each recording', () => {
-    const sample = selectViolinSample(220, 450);
-    expect(sample.anchorId).toBe('a3');
-    expect(sample.articulation).toBe('arco');
-    expect(sample.recordedFrequency * sample.playbackRate).toBeCloseTo(220, 5);
-    expect(sample.playbackRate).toBeCloseTo(220 / 220.5, 6);
-    expect(sample.url).toBe('/assets/audio/violin/arco-a3.ogg');
+  it('uses the native low-register recording for the Bb3-A3 turn', () => {
+    const a3 = selectViolinSample(220, 450);
+    const bb3 = selectViolinSample(233.08, 450);
+
+    expect(a3.anchorId).toBe('a3');
+    expect(bb3.anchorId).toBe('a3');
+    expect(a3.articulation).toBe('arco');
+    expect(a3.recordedFrequency * a3.playbackRate).toBeCloseTo(220, 5);
+    expect(bb3.recordedFrequency * bb3.playbackRate).toBeCloseTo(233.08, 5);
+    expect(a3.url).toBe('/assets/audio/violin/arco-a3.ogg');
   });
 
-  it('chooses the nearest anchor while limiting transposition to two semitones', () => {
-    const bb3 = selectViolinSample(233.08, 450);
+  it('chooses and tunes the nearest anchor outside the low-register override', () => {
     const fs4 = selectViolinSample(369.99, 450);
 
-    expect(bb3.anchorId).toBe('a3');
     expect(fs4.anchorId).toBe('g4');
-    expect(Math.abs(12 * Math.log2(bb3.playbackRate))).toBeLessThanOrEqual(2.01);
     expect(Math.abs(12 * Math.log2(fs4.playbackRate))).toBeLessThanOrEqual(2.01);
-    expect(bb3.recordedFrequency * bb3.playbackRate).toBeCloseTo(233.08, 5);
     expect(fs4.recordedFrequency * fs4.playbackRate).toBeCloseTo(369.99, 5);
   });
 

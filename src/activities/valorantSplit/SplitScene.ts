@@ -188,12 +188,14 @@ const VALORANT_AUDIO = {
   kills: [1, 2, 3, 4, 5].map((number) => valorantAudioUrl(`kill ${number}.mp3`)),
 } as const;
 
-// These two source recordings are mastered substantially louder than the gun,
-// reload and synthesized RETAKE cues. Pulling them down by roughly 9 dB keeps
-// their authored character without making the plant/defuse dominate the mix.
+// These source recordings need individual mix levels: the Phantom shot is
+// comparatively quiet and gets the full per-voice gain, while the plant,
+// defuse, and kill-callout moments stay tucked into the combat mix.
 const VALORANT_AUDIO_VOLUME = {
-  plant: 0.28,
-  defuseTap: 0.32,
+  shot: 1,
+  plant: 0.2,
+  defuseTap: 0.24,
+  kills: 0.64,
 } as const;
 
 interface Tracer {
@@ -689,7 +691,7 @@ export class SplitScene extends Phaser.Scene {
             this.tracers.push({ from: muzzle, to: event.to, color: 0x8affc1, bornAt: now });
             this.addMuzzle(muzzle, MUZZLE_COLOR.player, now);
           }
-          playAudioFile(VALORANT_AUDIO.shot, { volume: 0.82 });
+          playAudioFile(VALORANT_AUDIO.shot, { volume: VALORANT_AUDIO_VOLUME.shot });
           if (event.hitEnemyId !== null) {
             this.enemyFlashUntil.set(event.hitEnemyId, now + HIT_FLASH_MS);
           }
@@ -739,7 +741,8 @@ export class SplitScene extends Phaser.Scene {
           this.playSfx('dryfire');
           break;
         case 'defuse-wave':
-          this.showWarn('CONTESTED — 2 INBOUND');
+          // The ambush remains part of the gameplay, but its arrival is now
+          // communicated by the enemies themselves rather than a popup.
           break;
         case 'first-blood':
           break;
@@ -747,7 +750,7 @@ export class SplitScene extends Phaser.Scene {
           this.spawnSkull(event.enemyId);
           playAudioFile(
             VALORANT_AUDIO.kills[Math.min(this.killSoundIndex, VALORANT_AUDIO.kills.length - 1)],
-            { volume: 0.92 },
+            { volume: VALORANT_AUDIO_VOLUME.kills },
           );
           this.killSoundIndex += 1;
           break;

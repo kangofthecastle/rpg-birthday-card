@@ -68,7 +68,12 @@ import {
 // Type-only: erased at runtime, so the dressEditor module stays lazily imported
 // (its startDressEditor is loaded via dynamic import only under ?dressEdit=1).
 import type { NpcEditHandle, OutdoorEditHandle } from '../game/dressEditor';
-import { getCollisionZones, type CollisionZonesFile } from '../content/collisionZones';
+import {
+  getCollisionZones,
+  isPlayerInFrontOfDepthLine,
+  isRotatedPropDepthLine,
+  type CollisionZonesFile,
+} from '../content/collisionZones';
 import {
   combineOutdoorColliders,
   rasterizePolygonsToRects,
@@ -812,7 +817,13 @@ export class LocationScene extends Phaser.Scene {
     const dressing = this.dressing!;
     const origin = this.roomOrigin!;
     const propHandles = this.propHandles;
-    const propDepthOverrides = this.zonesFile?.propDepthOverrides ?? {};
+    // dressEdit only consumes the legacy numeric map-y adjustment. Rotated
+    // boundaries belong to editZones and remain untouched by this editor.
+    const propDepthOverrides = Object.fromEntries(
+      Object.entries(this.zonesFile?.propDepthOverrides ?? {}).filter(
+        (entry): entry is [string, number] => typeof entry[1] === 'number',
+      ),
+    );
     void import('../game/dressEditor').then(({ startDressEditor }) => {
       startDressEditor(this, {
         locationId: this.location.id,
@@ -1385,9 +1396,9 @@ export class LocationScene extends Phaser.Scene {
   // rebuild is identical to a save-then-reload cold load. Also refreshes the
   // purple-authored / red-effective debug overlay in the same pass.
   //
-  // propDepthOverrides are NOT re-applied live: props are depth-sorted once at
-  // render time, so re-applying would mean re-rendering the dressing (invasive).
-  // Depth-override edits still persist to disk and take effect on the next reload.
+  // Numeric propDepthOverrides are still applied only at room render time.
+  // Rotated lines are read by syncRotatedPropDepths every frame, so line edits
+  // take effect immediately after this hook replaces zonesFile.
   rebuildZoneColliders(zonesFile: CollisionZonesFile): void {
     if (!import.meta.env.DEV) {
       return;
@@ -4490,8 +4501,35 @@ export class LocationScene extends Phaser.Scene {
     const idleOffset = this.getIdleOffset();
     this.playerVisual.setPosition(position.x, position.y + idleOffset);
     this.playerVisual.setDepth(position.y + 10);
+    this.syncRotatedPropDepths();
     this.maybeSpawnWalkDust(position);
     this.updatePlayerVisualAnimation();
+  }
+
+  private syncRotatedPropDepths(): void {
+    const overrides = this.zonesFile?.propDepthOverrides;
+    const playerVisual = this.playerVisual;
+    if (!overrides || !playerVisual || this.propHandles.length === 0) {
+      return;
+    }
+
+    // Use the same biased screen-depth point as ____'s billboard (`+10`) and
+    // unproject it to map space. This preserves the old numeric threshold feel
+    // while allowing an arbitrarily rotated authored boundary.
+    const projection = this.getProjection();
+    const sortingPoint = projection.unproject(playerVisual.x, playerVisual.depth);
+    for (const { placement, image } of this.propHandles) {
+      const line = overrides[placement.frame];
+      if (placement.fixedDepth !== undefined || !isRotatedPropDepthLine(line)) {
+        continue;
+      }
+      const recipientInFront = isPlayerInFrontOfDepthLine(
+        line,
+        sortingPoint.x,
+        sortingPoint.y,
+      );
+      image.setDepth(playerVisual.depth + (recipientInFront ? -0.01 : 0.01));
+    }
   }
 
   private createRecipientAnimations(): void {

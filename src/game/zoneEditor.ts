@@ -12,13 +12,20 @@
 //   drag handle      move a vertex
 //   Backspace/Delete remove selected vertex (or the whole zone if none)
 //   Tab              toggle depth-line mode
-//   drag depth line  set that prop's depthMapY override
+//   drag depth line/center translate that prop's depth boundary
+//   drag gold end handle rotate it; green marker shows ____-in-front side
 //   middle/space-drag pan camera   wheel zoom (0.5-2)   F re-follow player
 //   S                save          (toolbar also has Save / Copy JSON)
 
 import Phaser from 'phaser';
 import type { Projection } from './projection';
-import type { CollisionZone, CollisionZonesFile } from '../content/collisionZones';
+import {
+  isRotatedPropDepthLine,
+  type CollisionZone,
+  type CollisionZonesFile,
+  type PropDepthOverride,
+  type RotatedPropDepthLine,
+} from '../content/collisionZones';
 import type { PropPlacement, RoomDressing } from '../content/roomDressing';
 
 interface ZoneEditorOptions {
@@ -34,6 +41,19 @@ interface MutableZone {
   points: [number, number][];
 }
 
+interface ScreenDepthLine {
+  readonly start: { readonly x: number; readonly y: number };
+  readonly end: { readonly x: number; readonly y: number };
+  readonly frontSide: { readonly x: number; readonly y: number };
+}
+
+interface DepthDrag {
+  readonly frame: string;
+  readonly action: 'translate' | 'rotate';
+  readonly pointerStart: { readonly x: number; readonly y: number };
+  readonly initial: ScreenDepthLine;
+}
+
 /**
  * Structural view of the host LocationScene's dev-only live-rebuild hook. Kept as
  * a local structural type (rather than importing LocationScene) so the lazily
@@ -47,6 +67,8 @@ interface ZoneColliderRebuildScene {
 const HANDLE_RADIUS = 7;
 const CLOSE_SNAP_PX = 14;
 const OVERLAY_DEPTH = 1_000_000;
+const DEPTH_LINE_HALF_LENGTH = 80;
+const FRONT_SIDE_MARKER_DISTANCE = 28;
 
 export function startZoneEditor(scene: Phaser.Scene, options: ZoneEditorOptions): void {
   new ZoneEditor(scene, options);
@@ -59,12 +81,12 @@ class ZoneEditor {
   private readonly graphics: Phaser.GameObjects.Graphics;
 
   private zones: MutableZone[];
-  private depthOverrides: Record<string, number>;
+  private depthOverrides: Record<string, PropDepthOverride>;
   private inProgress: [number, number][] | null = null;
   private selectedZone = -1;
   private selectedVertex = -1;
   private draggingVertex = false;
-  private draggingDepthFrame: string | null = null;
+  private draggingDepth: DepthDrag | null = null;
   private panning = false;
   private spaceDown = false;
   private mode: 'zones' | 'depth' = 'zones';
@@ -129,7 +151,11 @@ class ZoneEditor {
       case 'Tab':
         event.preventDefault();
         this.mode = this.mode === 'zones' ? 'depth' : 'zones';
-        this.setStatus(`Mode: ${this.mode}`);
+        this.setStatus(
+          this.mode === 'depth'
+            ? 'Depth: drag line/center to move; drag gold end to rotate; green = ____ in front.'
+            : 'Zones: click art to place vertices. Enter to close.',
+        );
         break;
       case 'KeyF':
         this.scene.cameras.main.startFollow(this.options.playerVisual, true, 0.12, 0.12);
@@ -161,7 +187,14 @@ class ZoneEditor {
     }
 
     if (this.mode === 'depth') {
-      this.draggingDepthFrame = this.hitDepthLine(pointer.worldX, pointer.worldY);
+      this.draggingDepth = this.hitDepthControl(pointer.worldX, pointer.worldY);
+      if (this.draggingDepth) {
+        this.setStatus(
+          this.draggingDepth.action === 'rotate'
+            ? 'Rotating depth line. Green marker is ____-in-front side.'
+            : 'Moving depth line. Drag the gold end handle to rotate.',
+        );
+      }
       return;
     }
 
@@ -206,15 +239,15 @@ class ZoneEditor {
       return;
     }
 
-    if (this.draggingDepthFrame) {
-      this.setDepthFromScreenY(this.draggingDepthFrame, pointer.worldY);
+    if (this.draggingDepth) {
+      this.updateDepthDrag(pointer.worldX, pointer.worldY);
     }
   }
 
   private onPointerUp(): void {
     this.panning = false;
     this.draggingVertex = false;
-    this.draggingDepthFrame = null;
+    this.draggingDepth = null;
   }
 
   private onWheel(
@@ -303,27 +336,95 @@ class ZoneEditor {
   }
 
   private effectiveDepthMapY(prop: PropPlacement): number {
-    return this.depthOverrides[prop.frame] ?? prop.depthMapY ?? prop.mapY;
+    const override = this.depthOverrides[prop.frame];
+    return typeof override === 'number' ? override : (prop.depthMapY ?? prop.mapY);
   }
 
-  private hitDepthLine(worldX: number, worldY: number): string | null {
+  private screenDepthLine(prop: PropPlacement): ScreenDepthLine {
+    const override = this.depthOverrides[prop.frame];
+    if (isRotatedPropDepthLine(override)) {
+      return {
+        start: this.projection.project(override.start[0], override.start[1]),
+        end: this.projection.project(override.end[0], override.end[1]),
+        frontSide: this.projection.project(override.frontSide[0], override.frontSide[1]),
+      };
+    }
+    const center = this.projection.project(prop.mapX, this.effectiveDepthMapY(prop));
+    return {
+      start: { x: center.x - DEPTH_LINE_HALF_LENGTH, y: center.y },
+      end: { x: center.x + DEPTH_LINE_HALF_LENGTH, y: center.y },
+      frontSide: { x: center.x, y: center.y + FRONT_SIDE_MARKER_DISTANCE },
+    };
+  }
+
+  private hitDepthControl(worldX: number, worldY: number): DepthDrag | null {
     for (const prop of this.floorProps()) {
-      const p = this.projection.project(prop.mapX, this.effectiveDepthMapY(prop));
-      if (Math.abs(worldY - p.y) <= 8 && Math.abs(worldX - p.x) <= 90) {
-        return prop.frame;
+      const line = this.screenDepthLine(prop);
+      const pointerStart = { x: worldX, y: worldY };
+      if (
+        Phaser.Math.Distance.Between(worldX, worldY, line.end.x, line.end.y) <=
+        HANDLE_RADIUS + 5
+      ) {
+        return { frame: prop.frame, action: 'rotate', pointerStart, initial: line };
+      }
+      if (distanceToSegment(worldX, worldY, line.start, line.end) <= 9) {
+        return { frame: prop.frame, action: 'translate', pointerStart, initial: line };
       }
     }
     return null;
   }
 
-  private setDepthFromScreenY(frame: string, worldY: number): void {
-    const prop = this.floorProps().find((p) => p.frame === frame);
-    if (!prop) {
+  private updateDepthDrag(worldX: number, worldY: number): void {
+    const drag = this.draggingDepth;
+    if (!drag) {
       return;
     }
-    // The mapY (at this prop's mapX) whose projection lands at the dragged Y.
-    const mapY = this.projection.mapYFromScreenY(prop.mapX, worldY);
-    this.depthOverrides[frame] = Math.round(mapY);
+
+    let next: ScreenDepthLine;
+    if (drag.action === 'translate') {
+      const dx = worldX - drag.pointerStart.x;
+      const dy = worldY - drag.pointerStart.y;
+      next = {
+        start: { x: drag.initial.start.x + dx, y: drag.initial.start.y + dy },
+        end: { x: drag.initial.end.x + dx, y: drag.initial.end.y + dy },
+        frontSide: {
+          x: drag.initial.frontSide.x + dx,
+          y: drag.initial.frontSide.y + dy,
+        },
+      };
+    } else {
+      const center = depthLineCenter(drag.initial);
+      const halfLength = Math.max(
+        24,
+        Phaser.Math.Distance.Between(
+          drag.initial.start.x,
+          drag.initial.start.y,
+          drag.initial.end.x,
+          drag.initial.end.y,
+        ) / 2,
+      );
+      const angle = Math.atan2(worldY - center.y, worldX - center.x);
+      const dx = Math.cos(angle);
+      const dy = Math.sin(angle);
+      const frontSign = screenLineSide(drag.initial, drag.initial.frontSide) >= 0 ? 1 : -1;
+      next = {
+        start: { x: center.x - dx * halfLength, y: center.y - dy * halfLength },
+        end: { x: center.x + dx * halfLength, y: center.y + dy * halfLength },
+        frontSide: {
+          x: center.x - dy * FRONT_SIDE_MARKER_DISTANCE * frontSign,
+          y: center.y + dx * FRONT_SIDE_MARKER_DISTANCE * frontSign,
+        },
+      };
+    }
+
+    this.depthOverrides[drag.frame] = this.toMapDepthLine(next);
+  }
+
+  private toMapDepthLine(line: ScreenDepthLine): RotatedPropDepthLine {
+    const start = this.toMap(line.start.x, line.start.y);
+    const end = this.toMap(line.end.x, line.end.y);
+    const frontSide = this.toMap(line.frontSide.x, line.frontSide.y);
+    return { kind: 'line', start, end, frontSide };
   }
 
   // --- rendering -----------------------------------------------------------
@@ -375,12 +476,24 @@ class ZoneEditor {
 
   private drawDepthLines(g: Phaser.GameObjects.Graphics): void {
     for (const prop of this.floorProps()) {
-      const p = this.projection.project(prop.mapX, this.effectiveDepthMapY(prop));
+      const line = this.screenDepthLine(prop);
+      const center = depthLineCenter(line);
       const overridden = this.depthOverrides[prop.frame] !== undefined;
       g.lineStyle(3, overridden ? 0xf472b6 : 0x22d3ee, 0.9);
-      g.lineBetween(p.x - 80, p.y, p.x + 80, p.y);
+      g.lineBetween(line.start.x, line.start.y, line.end.x, line.end.y);
+
+      // White center/line = translate. Gold end = rotate. The green spoke and
+      // marker explicitly identify the side where ____ renders in front.
+      g.lineStyle(2, 0x34d399, 0.8);
+      g.lineBetween(center.x, center.y, line.frontSide.x, line.frontSide.y);
+      g.fillStyle(0x34d399, 1);
+      g.fillCircle(line.frontSide.x, line.frontSide.y, 6);
+      g.fillStyle(0xffffff, 1);
+      g.fillCircle(center.x, center.y, 6);
+      g.fillStyle(0xfbbf24, 1);
+      g.fillCircle(line.end.x, line.end.y, HANDLE_RADIUS + 1);
       g.fillStyle(overridden ? 0xf472b6 : 0x22d3ee, 1);
-      g.fillCircle(p.x, p.y, 5);
+      g.fillCircle(line.start.x, line.start.y, 4);
     }
   }
 
@@ -413,7 +526,11 @@ class ZoneEditor {
     });
     const modeBtn = button('Depth (Tab)', () => {
       this.mode = this.mode === 'zones' ? 'depth' : 'zones';
-      this.setStatus(`Mode: ${this.mode}`);
+      this.setStatus(
+        this.mode === 'depth'
+          ? 'Depth: drag line/center to move; drag gold end to rotate; green = ____ in front.'
+          : 'Zones: click art to place vertices. Enter to close.',
+      );
     });
     const saveBtn = button('Save (S)', () => void this.save());
     const copyBtn = button('Copy JSON', () => void this.copyJson());
@@ -506,6 +623,43 @@ class ZoneEditor {
 
 function cloneZone(zone: CollisionZone): MutableZone {
   return { id: zone.id, points: zone.points.map((p) => [p[0], p[1]]) };
+}
+
+function depthLineCenter(line: ScreenDepthLine): { x: number; y: number } {
+  return {
+    x: (line.start.x + line.end.x) / 2,
+    y: (line.start.y + line.end.y) / 2,
+  };
+}
+
+function screenLineSide(
+  line: Pick<ScreenDepthLine, 'start' | 'end'>,
+  point: { readonly x: number; readonly y: number },
+): number {
+  return (
+    (line.end.x - line.start.x) * (point.y - line.start.y) -
+    (line.end.y - line.start.y) * (point.x - line.start.x)
+  );
+}
+
+function distanceToSegment(
+  px: number,
+  py: number,
+  start: { readonly x: number; readonly y: number },
+  end: { readonly x: number; readonly y: number },
+): number {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const lengthSquared = dx * dx + dy * dy;
+  if (lengthSquared === 0) {
+    return Math.hypot(px - start.x, py - start.y);
+  }
+  const t = Phaser.Math.Clamp(
+    ((px - start.x) * dx + (py - start.y) * dy) / lengthSquared,
+    0,
+    1,
+  );
+  return Math.hypot(px - (start.x + t * dx), py - (start.y + t * dy));
 }
 
 function button(label: string, onClick: () => void): HTMLButtonElement {

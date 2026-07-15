@@ -171,6 +171,7 @@
     }
   ],
   "propDepthOverrides": {
-    "desk": 648
+    "desk": 560,
+    "bed": 870
   }
 }

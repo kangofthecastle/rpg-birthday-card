@@ -11,15 +11,80 @@ export interface CollisionZone {
   readonly points: ReadonlyArray<readonly [number, number]>;
 }
 
+/**
+ * An authorable map-space depth boundary for one prop. `frontSide` is a sample
+ * point on the side where ____ must render in front of the prop, making the
+ * serialized front/behind intent explicit regardless of line rotation.
+ */
+export interface RotatedPropDepthLine {
+  readonly kind: 'line';
+  readonly start: readonly [number, number];
+  readonly end: readonly [number, number];
+  readonly frontSide: readonly [number, number];
+}
+
+export type PropDepthOverride = number | RotatedPropDepthLine;
+
 export interface CollisionZonesFile {
   readonly locationId: string;
   readonly zones: readonly CollisionZone[];
   /**
-   * Per-prop depth-line overrides, keyed by prop frame name. The prop depth-
-   * sorts as if its floor-contact point were at map-y = override (with the
-   * prop's own map-x), letting the player pass behind visually tall props.
+   * Per-prop depth-line overrides, keyed by prop frame name. Existing numeric
+   * values retain the horizontal map-y threshold. A line object supports a
+   * rotated boundary and explicitly identifies the side where ____ is in front.
    */
-  readonly propDepthOverrides?: Readonly<Record<string, number>>;
+  readonly propDepthOverrides?: Readonly<Record<string, PropDepthOverride>>;
+}
+
+function isFinitePoint(value: unknown): value is readonly [number, number] {
+  return (
+    Array.isArray(value) &&
+    value.length === 2 &&
+    typeof value[0] === 'number' &&
+    Number.isFinite(value[0]) &&
+    typeof value[1] === 'number' &&
+    Number.isFinite(value[1])
+  );
+}
+
+function lineSide(
+  line: Pick<RotatedPropDepthLine, 'start' | 'end'>,
+  point: readonly [number, number],
+): number {
+  const dx = line.end[0] - line.start[0];
+  const dy = line.end[1] - line.start[1];
+  return dx * (point[1] - line.start[1]) - dy * (point[0] - line.start[0]);
+}
+
+export function isRotatedPropDepthLine(value: unknown): value is RotatedPropDepthLine {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const line = value as Record<string, unknown>;
+  if (
+    line.kind !== 'line' ||
+    !isFinitePoint(line.start) ||
+    !isFinitePoint(line.end) ||
+    !isFinitePoint(line.frontSide)
+  ) {
+    return false;
+  }
+  const typedLine = line as unknown as RotatedPropDepthLine;
+  const lengthSquared =
+    (typedLine.end[0] - typedLine.start[0]) ** 2 +
+    (typedLine.end[1] - typedLine.start[1]) ** 2;
+  return lengthSquared > 0 && Math.abs(lineSide(typedLine, typedLine.frontSide)) > 1e-6;
+}
+
+/** Returns whether ____'s map-space feet are on the authored front side. */
+export function isPlayerInFrontOfDepthLine(
+  line: RotatedPropDepthLine,
+  playerMapX: number,
+  playerMapY: number,
+): boolean {
+  const frontSide = lineSide(line, line.frontSide);
+  const playerSide = lineSide(line, [playerMapX, playerMapY]);
+  return frontSide * playerSide >= 0;
 }
 
 // Eagerly glob every zones file so lookups are synchronous and the set is known
@@ -86,7 +151,7 @@ export function isValidZonesFile(value: unknown): value is CollisionZonesFile {
       return false;
     }
     for (const v of Object.values(file.propDepthOverrides as Record<string, unknown>)) {
-      if (typeof v !== 'number') {
+      if (!(typeof v === 'number' && Number.isFinite(v)) && !isRotatedPropDepthLine(v)) {
         return false;
       }
     }

@@ -21,11 +21,13 @@ OUTPUT_DIR = ROOT / "public/assets/audio/violin"
 RAW_BASE = "https://raw.githubusercontent.com/sgossner/VSCO-2-CE/master/Strings/Solo%20Violin"
 
 ANCHORS = ("A3", "C4", "E4", "G4", "A4", "C5")
+ARCO_DYNAMICS = {"A3": "f"}
 
 
 def source_name(articulation: str, pitch: str) -> str:
     if articulation == "arco":
-        return f"Arco Vib/LLVln_ArcoVib_{pitch}_p.wav"
+        dynamic = ARCO_DYNAMICS.get(pitch, "p")
+        return f"Arco Vib/LLVln_ArcoVib_{pitch}_{dynamic}.wav"
     return f"spic/LLVln_spic_{pitch}_v1_rr1.wav"
 
 

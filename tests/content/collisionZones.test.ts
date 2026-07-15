@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { getCollisionZones, isValidZonesFile } from '../../src/content/collisionZones';
+import {
+  getCollisionZones,
+  isPlayerInFrontOfDepthLine,
+  isValidZonesFile,
+  type RotatedPropDepthLine,
+} from '../../src/content/collisionZones';
 
 describe('getCollisionZones', () => {
   it('loads the recipient-house zones file with polygon zones', () => {
@@ -29,6 +34,10 @@ describe('getCollisionZones', () => {
     const desk = file.zones.find((zone) => zone.id === 'desk')!;
     const deskSouthEdge = Math.max(...desk.points.map(([, y]) => y));
     const deskDepthMapY = file.propDepthOverrides?.desk!;
+    expect(deskDepthMapY).toBeTypeOf('number');
+    if (typeof deskDepthMapY !== 'number') {
+      throw new Error('Expected the legacy desk override to remain numeric');
+    }
 
     // ____'s visual depth is projected from her feet plus a 10px billboard
     // bias. With the room's 0.5 vertical scale, that bias is equivalent to 40
@@ -54,6 +63,24 @@ describe('isValidZonesFile', () => {
     ).toBe(true);
   });
 
+  it('accepts a rotated prop depth line while preserving numeric overrides', () => {
+    expect(
+      isValidZonesFile({
+        locationId: 'recipient-house',
+        zones: [],
+        propDepthOverrides: {
+          desk: 800,
+          bed: {
+            kind: 'line',
+            start: [180, 620],
+            end: [380, 820],
+            frontSide: [420, 700],
+          },
+        },
+      }),
+    ).toBe(true);
+  });
+
   it('rejects malformed payloads', () => {
     expect(isValidZonesFile(null)).toBe(false);
     expect(isValidZonesFile({ locationId: 5, zones: [] })).toBe(false);
@@ -62,5 +89,37 @@ describe('isValidZonesFile', () => {
     expect(
       isValidZonesFile({ locationId: 'x', zones: [], propDepthOverrides: { a: 'no' } }),
     ).toBe(false);
+    expect(
+      isValidZonesFile({
+        locationId: 'x',
+        zones: [],
+        propDepthOverrides: {
+          a: { kind: 'line', start: [0, 0], end: [0, 0], frontSide: [1, 0] },
+        },
+      }),
+    ).toBe(false);
+    expect(
+      isValidZonesFile({
+        locationId: 'x',
+        zones: [],
+        propDepthOverrides: {
+          a: { kind: 'line', start: [0, 0], end: [10, 0], frontSide: [5, 0] },
+        },
+      }),
+    ).toBe(false);
+  });
+});
+
+describe('isPlayerInFrontOfDepthLine', () => {
+  it('uses the authored front-side point when ____ crosses a rotated line', () => {
+    const line: RotatedPropDepthLine = {
+      kind: 'line',
+      start: [0, 0],
+      end: [10, 10],
+      frontSide: [10, 0],
+    };
+
+    expect(isPlayerInFrontOfDepthLine(line, 8, 2)).toBe(true);
+    expect(isPlayerInFrontOfDepthLine(line, 2, 8)).toBe(false);
   });
 });

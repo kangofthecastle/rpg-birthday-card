@@ -283,7 +283,7 @@ export class SplitScene extends Phaser.Scene {
   // generic .activity-panel CSS can't out-specify it).
   private healthNumberText!: Phaser.GameObjects.Text;
   private ammoMagText!: Phaser.GameObjects.Text;
-  private ammoTotalText!: Phaser.GameObjects.Text;
+  private ammoReserveText!: Phaser.GameObjects.Text;
   // Top scoreboard: ally/enemy portrait tiles + per-team alive counts.
   private allyTiles: Phaser.GameObjects.Image[] = [];
   private enemyTiles: Phaser.GameObjects.Image[] = [];
@@ -1296,7 +1296,7 @@ export class SplitScene extends Phaser.Scene {
       }
     }
 
-    // --- Bottom-right: ammo counter (mag | total remaining) + weapon label ---
+    // --- Bottom-right: ammo counter (mag | reserve) + weapon label ---
     this.add
       .text(ARENA.width - 24, barTop + 8, 'PHANTOM', {
         color: '#ffe6a0',
@@ -1307,8 +1307,8 @@ export class SplitScene extends Phaser.Scene {
       .setOrigin(1, 0)
       .setDepth(811)
       .setScrollFactor(0);
-    this.ammoTotalText = this.add
-      .text(ARENA.width - 24, midY + 6, '90', {
+    this.ammoReserveText = this.add
+      .text(ARENA.width - 24, midY + 6, '60', {
         color: '#c7b06a',
         fontFamily: 'Consolas, "Courier New", monospace',
         fontSize: '20px',
@@ -1518,7 +1518,7 @@ export class SplitScene extends Phaser.Scene {
     this.ammoMagText.setText(reloading ? '· ·' : String(player.ammoInMag));
     const magEmpty = player.ammoInMag <= 0 && !reloading;
     this.ammoMagText.setColor(magEmpty ? '#ff5470' : reloading ? '#ffd15c' : '#fff4d6');
-    this.ammoTotalText.setText(`| ${player.ammoInMag + player.reserveRounds}`);
+    this.ammoReserveText.setText(`| ${player.reserveRounds}`);
 
     // Segmented magazine bar (fills left→right) above the numbers.
     const barW = 150;

@@ -16,6 +16,17 @@ test('walks off the west edge of main-outside into ____’s block', async ({ pag
 
   await canvas.click();
 
+  // The straight-west lane at door height (y≈300) is hedged off by the authored
+  // collision zones (zone-3 spans x 412-654 at y 273-295), so drop south into
+  // the open mid-map corridor (~y 420-570, inside the centred five-tile west
+  // portal at y 256-576) before walking west.
+  for (let step = 0; step < 5; step += 1) {
+    await page.keyboard.down('ArrowDown');
+    await page.waitForTimeout(110);
+    await page.keyboard.up('ArrowDown');
+    await page.waitForTimeout(40);
+  }
+
   // Flat outdoor movement maps directly to world axes. Keep y fixed inside the
   // centred five-tile portal while walking straight west.
   let arrived = false;

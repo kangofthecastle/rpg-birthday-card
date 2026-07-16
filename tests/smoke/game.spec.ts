@@ -9,32 +9,33 @@ test('boots the game and shows the canvas', async ({ page }) => {
   await expect(page.locator('.collection-panel')).toContainText('Backpack');
 });
 
-test('shows an interaction prompt when the player reaches the signpost', async ({
+// The Guildford fingerposts are decoration-only now (locations.ts strips the
+// main-signpost interaction), so the old "read the signpost" smoke can never
+// fire. Cover the outdoor E-interaction path with the door that still works:
+// walking up to ____'s front door and entering.
+test('enters ____’s house from the path with E at the front door', async ({
   page,
 }) => {
-  await page.goto('/?testMode=1&locationId=main-outside&spawnId=start');
+  await page.goto('/?testMode=1&locationId=main-outside&spawnId=from-recipient-house');
   const canvas = page.locator('canvas');
   await expect(canvas).toBeVisible();
-  await expect(page.locator('.collection-panel')).toContainText('Backpack');
+  await expect(page.locator('body')).toHaveAttribute('data-location-id', 'main-outside');
 
   await canvas.click();
 
-  // The signpost dialogue rect sits due north of the spawn on the central path
-  // (main-outside is FLAT projection: ArrowUp is straight world-north, x steady).
-  // The old Up+Right+Right pattern predates the flat switch — Rights now drift
-  // east, and it only connected because the pre-fingerpost signs south of the
-  // road happened to funnel the walk. Walk straight north; press E each step
-  // until the junction signpost dialogue fires.
-  const signpost = page.getByText('Arrows point every way');
-  let shown = false;
-  for (let step = 0; step < 24 && !shown; step += 1) {
+  // The from-recipient-house spawn sits just south of the front-door exit rect
+  // (672,148 128x88; main-outside is FLAT projection, so ArrowUp is straight
+  // world-north). Walk north pressing E each step until the door fires.
+  let inside = false;
+  for (let step = 0; step < 12 && !inside; step += 1) {
     await page.keyboard.down('ArrowUp');
     await page.waitForTimeout(110);
     await page.keyboard.up('ArrowUp');
     await page.keyboard.press('E', { delay: 30 });
     await page.waitForTimeout(80);
-    shown = await signpost.isVisible().catch(() => false);
+    inside =
+      (await page.locator('body').getAttribute('data-location-id')) === 'recipient-house';
   }
 
-  await expect(signpost).toBeVisible();
+  expect(inside).toBe(true);
 });

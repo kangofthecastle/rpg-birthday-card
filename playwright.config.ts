@@ -10,6 +10,13 @@ export default defineConfig({
     baseURL: 'http://127.0.0.1:5173',
     trace: 'retain-on-failure',
     viewport: { width: 1280, height: 720 },
+    // On Windows, headless Chromium falls back to SwiftShader software WebGL,
+    // which starves Phaser's frame rate and breaks the movement smokes; these
+    // flags restore the real GPU (D3D11) in headless mode.
+    launchOptions:
+      process.platform === 'win32'
+        ? { args: ['--enable-gpu', '--use-angle=d3d11'] }
+        : {},
   },
   webServer: {
     command: 'npm run dev -- --port 5173',

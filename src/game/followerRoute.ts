@@ -125,3 +125,35 @@ function facingFor(dx: number, dy: number, fallback: FollowerFacing): FollowerFa
   if (Math.abs(dx) >= Math.abs(dy)) return dx < 0 ? 'left' : 'right';
   return dy < 0 ? 'up' : 'down';
 }
+
+/**
+ * Screen-space facing with hysteresis. Like {@link facingForScreenDelta}, but
+ * sticky: the returned facing only moves away from `current` when the winning
+ * axis' magnitude beats the other axis by at least `bias`. This stops flappy
+ * flips on diagonals (a perfect 45° keeps `current`) while still turning
+ * corners within a frame or two once one axis clearly dominates.
+ */
+export function facingForScreenDeltaWithHysteresis(
+  from: RoutePoint,
+  to: RoutePoint,
+  current: FollowerFacing,
+  bias = 1.3,
+): FollowerFacing {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const ax = Math.abs(dx);
+  const ay = Math.abs(dy);
+
+  // Dead zone: barely any movement, keep whatever we were showing.
+  if (ax < 0.5 && ay < 0.5) return current;
+
+  const candidate = facingFor(dx, dy, current);
+  if (candidate === current) return current;
+
+  // Only switch if the winning axis dominates the other by the bias factor.
+  // Ties or near-ties (e.g. a 45° diagonal) leave `current` untouched.
+  const winner = ax >= ay ? ax : ay;
+  const loser = ax >= ay ? ay : ax;
+  if (winner >= loser * bias) return candidate;
+  return current;
+}

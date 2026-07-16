@@ -159,12 +159,13 @@ import {
 import {
   advanceFollowerTrail,
   createFollowerTrail,
+  type FollowerFacing,
   type FollowerTrailState,
 } from '../game/followerTrail';
 import {
   advanceFollowerRoute,
   createFriendTwoRoomFriendOneRoute,
-  facingForScreenDelta,
+  facingForScreenDeltaWithHysteresis,
   type FollowerRouteState,
 } from '../game/followerRoute';
 import {
@@ -621,6 +622,9 @@ export class LocationScene extends Phaser.Scene {
   private friendoneFollower?: Phaser.GameObjects.Sprite;
   private friendoneFollowerTrail?: FollowerTrailState;
   private friendoneFollowerRoute?: FollowerRouteState;
+  // Last facing actually displayed on the follower sprite; feeds the
+  // hysteresis so facing stays sticky across frames instead of flapping.
+  private friendoneFollowerFacing: FollowerFacing = 'down';
   private friendonePcReadyCue: Phaser.GameObjects.GameObject[] = [];
   private violinCueTimers: Phaser.Time.TimerEvent[] = [];
   private finaleActor?: Phaser.GameObjects.Image | Phaser.GameObjects.Sprite;
@@ -2414,7 +2418,9 @@ export class LocationScene extends Phaser.Scene {
       this.friendoneFollowerRoute = createFriendTwoRoomFriendOneRoute({ x: this.player.x, y: this.player.y });
     } else {
       // Nearly match ____'s 250px/s walk without letting ____ overtake her.
-      this.friendoneFollowerTrail = createFollowerTrail(start, { speed: 246 });
+      // Trail 104px back so her ~100px-tall sprite trails behind ____ instead
+      // of visually standing on her when following vertically.
+      this.friendoneFollowerTrail = createFollowerTrail(start, { speed: 246, trailDistance: 104 });
     }
     const projected = this.getProjection().project(start.x, start.y);
     this.friendoneFollower = this.add
@@ -2422,6 +2428,8 @@ export class LocationScene extends Phaser.Scene {
       .setOrigin(FRIEND_ONE_SPRITE.origin.x, FRIEND_ONE_SPRITE.origin.y)
       .setScale(FRIEND_ONE_SPRITE.scale)
       .setDepth(projected.y);
+    this.friendoneFollowerFacing = 'down';
+    this.friendoneFollower.setFlipX(false);
     this.friendoneFollower.play('friendone-follower-idle-down');
     document.body.dataset.friendoneMode = walkingToPc
       ? hasSeenBeat(this.state, 'friendtwo-house-entered')
@@ -2435,27 +2443,40 @@ export class LocationScene extends Phaser.Scene {
     facings.forEach((facing, index) => {
       const idleKey = `friendone-follower-idle-${facing}`;
       const walkKey = `friendone-follower-walk-${facing}`;
+      // The sprite sheet's right-facing rows (2 idle / 6 walk) are defective —
+      // they contain left-facing art, so playing them makes ____ moonwalk when
+      // moving east. Instead we source the right-facing keys from the LEFT rows
+      // (idle row 1, walk row 5) and mirror at draw time via setFlipX, so the
+      // rows keyed as `-right` never get displayed.
+      const idleRow = facing === 'right' ? 1 : index;
+      const walkRow = facing === 'right' ? 5 : index + 4;
       if (!this.anims.exists(idleKey)) {
         this.anims.create({
           key: idleKey,
           // Side idles stay planted. Cycling tiny generated differences reads
           // as toe/hair jitter, while ____'s side silhouette is effectively still.
+          // Right mirrors this single planted frame from the left row.
           frames: facing === 'left' || facing === 'right'
-            ? [{ key: FRIEND_ONE_SPRITE.key, frame: index * 6 }]
+            ? [{ key: FRIEND_ONE_SPRITE.key, frame: idleRow * 6 }]
             : this.anims.generateFrameNumbers(FRIEND_ONE_SPRITE.key, {
-                start: index * 6,
-                end: index * 6 + 5,
+                start: idleRow * 6,
+                end: idleRow * 6 + 5,
               }),
           frameRate: FRIEND_ONE_SPRITE.idleFrameRate,
           repeat: -1,
         });
       }
       if (!this.anims.exists(walkKey)) {
+        // Side walk rows open with two standing/neutral frames (0-1) before four
+        // stride frames (2-5); including the standing frames causes a hitch each
+        // cycle, so left/right use only the stride window. Down/up rows are
+        // uniform and use all six frames.
+        const sideWalk = facing === 'left' || facing === 'right';
         this.anims.create({
           key: walkKey,
           frames: this.anims.generateFrameNumbers(FRIEND_ONE_SPRITE.key, {
-            start: (index + 4) * 6,
-            end: (index + 4) * 6 + 5,
+            start: walkRow * 6 + (sideWalk ? 2 : 0),
+            end: walkRow * 6 + 5,
           }),
           frameRate: FRIEND_ONE_SPRITE.walkFrameRate,
           repeat: -1,
@@ -2474,6 +2495,8 @@ export class LocationScene extends Phaser.Scene {
       if (!route) return;
       if (!hasSeenBeat(this.state, 'friendtwo-house-entered')) {
         document.body.dataset.friendoneMode = 'waiting';
+        this.friendoneFollowerFacing = 'down';
+        sprite.setFlipX(false);
         if (sprite.anims.currentAnim?.key !== 'friendone-follower-idle-down') {
           sprite.play('friendone-follower-idle-down');
         }
@@ -2486,8 +2509,10 @@ export class LocationScene extends Phaser.Scene {
       const projected = projection.project(next.position.x, next.position.y);
       sprite.setPosition(projected.x, projected.y).setDepth(projected.y);
       const facing = next.moving
-        ? facingForScreenDelta(previousProjected, projected, next.facing)
-        : next.facing;
+        ? facingForScreenDeltaWithHysteresis(previousProjected, projected, this.friendoneFollowerFacing)
+        : this.friendoneFollowerFacing;
+      this.friendoneFollowerFacing = facing;
+      sprite.setFlipX(facing === 'right');
       const animation = `friendone-follower-${next.moving ? 'walk' : 'idle'}-${facing}`;
       if (sprite.anims.currentAnim?.key !== animation) sprite.play(animation);
       document.body.dataset.friendoneMode = next.arrived ? 'parked' : 'arriving';
@@ -2498,11 +2523,21 @@ export class LocationScene extends Phaser.Scene {
     }
     const trail = this.friendoneFollowerTrail;
     if (!trail) return;
+    const projection = this.getProjection();
+    const previousProjected = projection.project(trail.position.x, trail.position.y);
     const next = advanceFollowerTrail(trail, { x: this.player.x, y: this.player.y }, deltaMs);
     this.friendoneFollowerTrail = next;
-    const projected = this.getProjection().project(next.position.x, next.position.y);
+    const projected = projection.project(next.position.x, next.position.y);
     sprite.setPosition(projected.x, projected.y).setDepth(projected.y);
-    const animation = `friendone-follower-${next.moving ? 'walk' : 'idle'}-${next.facing}`;
+    // Derive facing from screen-space movement (matches the isometric room's
+    // projection) with hysteresis so it stays steady on diagonals; the trail's
+    // own map-space facing is only a fallback when idle.
+    const facing = next.moving
+      ? facingForScreenDeltaWithHysteresis(previousProjected, projected, this.friendoneFollowerFacing)
+      : this.friendoneFollowerFacing;
+    this.friendoneFollowerFacing = facing;
+    sprite.setFlipX(facing === 'right');
+    const animation = `friendone-follower-${next.moving ? 'walk' : 'idle'}-${facing}`;
     if (sprite.anims.currentAnim?.key !== animation) {
       sprite.play(animation);
     }

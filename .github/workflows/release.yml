@@ -1,0 +1,63 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Package
+        run: npm run package
+        env:
+          # electron-builder only auto-publishes when a GH token is present in
+          # the build environment; we deliberately do NOT set GH_TOKEN here so
+          # softprops/action-gh-release is the sole uploader (no double publish).
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: |
+            dist-electron/A-Game.exe
+            dist-electron/*.exe
+
+  mac:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Package
+        run: npm run package
+        env:
+          # Disable code signing so an unsigned build does not fail on the
+          # runner; and, as on Windows, GH_TOKEN is intentionally unset so
+          # electron-builder never auto-publishes.
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: |
+            dist-electron/A-Game.dmg
+            dist-electron/*.dmg

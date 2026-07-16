@@ -1,0 +1,16 @@
+appId: com.friendtwo.a-game
+productName: A-Game
+directories:
+  output: dist-electron
+files:
+  - dist/**
+  - electron/**
+  - package.json
+win:
+  target: portable
+  icon: electron/icon.png
+  artifactName: A-Game.exe
+mac:
+  target: dmg
+  icon: electron/icon.png
+  artifactName: A-Game.dmg

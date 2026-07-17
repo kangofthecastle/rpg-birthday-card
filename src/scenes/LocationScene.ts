@@ -2467,15 +2467,10 @@ export class LocationScene extends Phaser.Scene {
         });
       }
       if (!this.anims.exists(walkKey)) {
-        // Side walk rows open with two standing/neutral frames (0-1) before four
-        // stride frames (2-5); including the standing frames causes a hitch each
-        // cycle, so left/right use only the stride window. Down/up rows are
-        // uniform and use all six frames.
-        const sideWalk = facing === 'left' || facing === 'right';
         this.anims.create({
           key: walkKey,
           frames: this.anims.generateFrameNumbers(FRIEND_ONE_SPRITE.key, {
-            start: walkRow * 6 + (sideWalk ? 2 : 0),
+            start: walkRow * 6,
             end: walkRow * 6 + 5,
           }),
           frameRate: FRIEND_ONE_SPRITE.walkFrameRate,

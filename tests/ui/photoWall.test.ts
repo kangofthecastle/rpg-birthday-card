@@ -73,7 +73,6 @@ describe('showPhotoWall', () => {
     expect(hero).not.toBeNull();
     expect(hero?.tagName).toBe('IMG');
     expect(destination?.tagName).toBe('IMG');
-    expect(document.querySelector('[data-photo-intro-scrim]')).not.toBeNull();
     expect(transition).toHaveBeenCalledWith({
       hero,
       destination,
@@ -88,7 +87,6 @@ describe('showPhotoWall', () => {
     finish();
     await flush();
     expect(document.querySelector('[data-photo-hero]')).toBeNull();
-    expect(document.querySelector('[data-photo-intro-scrim]')).toBeNull();
     expect(document.querySelector('[data-photo-wall]')?.getAttribute('data-photo-intro')).toBe(
       'complete',
     );

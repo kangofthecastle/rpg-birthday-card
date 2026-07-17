@@ -19,7 +19,7 @@ const PLACEHOLDER_COUNT = 8;
 export const BOAT_PHOTO_SRC =
   '/assets/photos/recipient-boat-wall-photo.png';
 // The one frame left empty on the wall, "labelled in careful handwriting" — kept
-// waiting for the next good day. Once ____ is home it glows, drawing the eye.
+// waiting for the next good day.
 const EMPTY_FRAME_CAPTION = 'for the next good day';
 const PLACEHOLDER_CAPTIONS = [
   'a photo goes here',
@@ -219,7 +219,7 @@ export function showPhotoWall(options: PhotoWallOptions = {}): Promise<void> {
     header.className = 'photo-wall__header';
     const heading = document.createElement('h2');
     heading.className = 'photo-wall__heading';
-    heading.textContent = 'the photo wall';
+    heading.textContent = 'photo wall';
     const closeButton = document.createElement('button');
     closeButton.type = 'button';
     closeButton.className = 'photo-wall__close';
@@ -229,6 +229,31 @@ export function showPhotoWall(options: PhotoWallOptions = {}): Promise<void> {
 
     const board = document.createElement('div');
     board.className = 'photo-wall__board';
+
+    // One horizontal row: the mouse wheel maps to sideways travel (scroll down
+    // → right, up → left), and the arrow keys page frame by frame.
+    board.addEventListener(
+      'wheel',
+      (event) => {
+        if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
+          event.preventDefault();
+          board.scrollLeft += event.deltaY;
+        }
+      },
+      { passive: false },
+    );
+
+    const scrollStep = (): number => {
+      const frame = board.querySelector<HTMLElement>('.photo-wall__frame');
+      return frame ? frame.offsetWidth + 24 : 260;
+    };
+    const scrollByStep = (direction: 1 | -1): void => {
+      if (typeof board.scrollBy === 'function') {
+        board.scrollBy({ left: direction * scrollStep(), behavior: 'smooth' });
+      } else {
+        board.scrollLeft += direction * scrollStep();
+      }
+    };
 
     overlay.append(header, board);
     host.append(overlay);
@@ -285,6 +310,12 @@ export function showPhotoWall(options: PhotoWallOptions = {}): Promise<void> {
       if (closed || !overlay.isConnected) {
         return;
       }
+      if ((event.key === 'ArrowRight' || event.key === 'ArrowLeft') && !lightbox) {
+        event.preventDefault();
+        event.stopPropagation();
+        scrollByStep(event.key === 'ArrowRight' ? 1 : -1);
+        return;
+      }
       if (event.key !== 'Escape') {
         return;
       }
@@ -333,15 +364,6 @@ export function showPhotoWall(options: PhotoWallOptions = {}): Promise<void> {
         tape.className = 'photo-wall__tape';
         tape.setAttribute('aria-hidden', 'true');
 
-        // A soft radiant halo emanating from the empty frame — pulsing warm light
-        // that spills beyond the frame's edges (CSS animation; behind the media).
-        if (isEmptyFrame) {
-          const glow = document.createElement('span');
-          glow.className = 'photo-wall__glow';
-          glow.setAttribute('aria-hidden', 'true');
-          frame.append(glow);
-        }
-
         const media = buildMedia(item, false);
         if (item.storyPhoto) {
           storyImage = media;
@@ -361,11 +383,6 @@ export function showPhotoWall(options: PhotoWallOptions = {}): Promise<void> {
         return;
       }
 
-      const introScrim = document.createElement('div');
-      introScrim.className = 'photo-wall__intro-scrim';
-      introScrim.dataset.photoIntroScrim = '';
-      introScrim.setAttribute('aria-hidden', 'true');
-
       const hero = document.createElement('img');
       hero.className = 'photo-wall__hero';
       hero.dataset.photoHero = '';
@@ -373,7 +390,7 @@ export function showPhotoWall(options: PhotoWallOptions = {}): Promise<void> {
       hero.src = BOAT_PHOTO_SRC;
       hero.alt = '';
       hero.decoding = 'async';
-      overlay.append(introScrim, hero);
+      overlay.append(hero);
 
       if (reducedMotion) {
         overlay.classList.add('photo-wall--reduced-motion');
@@ -392,7 +409,6 @@ export function showPhotoWall(options: PhotoWallOptions = {}): Promise<void> {
         overlay.classList.add('photo-wall--ready');
         overlay.dataset.photoIntro = 'complete';
         hero.remove();
-        introScrim.remove();
         options.onIntroComplete?.();
         overlay.focus({ preventScroll: true });
       });

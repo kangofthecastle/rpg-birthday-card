@@ -88,7 +88,7 @@ export interface FoldComponent {
 export const BOATIGAMI_OPENING_LINE =
   'Three keepsakes, carried a long way. Give them to the water.';
 export const BOATIGAMI_COMPLETE_LINE =
-  'The boat opens out, dimensional and whole. Its lantern catches.';
+  'The last fold pulls open, and it’s a boat. Its lantern catches.';
 
 /**
  * ____'s letter, folded into the hull in THREE continuous folds. Each fold's

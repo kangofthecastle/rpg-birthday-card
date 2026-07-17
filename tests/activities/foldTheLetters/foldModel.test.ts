@@ -103,7 +103,7 @@ describe('keepsake ritual model — components & verbs', () => {
       'The music curls into a lantern, and the light comes up through the notes.',
     );
     expect(BOATIGAMI_COMPLETE_LINE).toBe(
-      'The boat opens out, dimensional and whole. Its lantern catches.',
+      'The last fold pulls open, and it’s a boat. Its lantern catches.',
     );
   });
 

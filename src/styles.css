@@ -20,6 +20,9 @@ body,
 
 body {
   overflow: hidden;
+  /* It's a game: nothing on screen (dialogue, HUD, photo captions, letters)
+     should highlight as selectable document text. */
+  user-select: none;
 }
 
 #app {
@@ -1860,12 +1863,19 @@ body.ending-transition-active .collection-panel {
       rgba(2, 5, 21, 0.36) 100%
     ),
     url('/assets/ui/photo-wall-night-v1.png') center / cover no-repeat #101634;
-  animation: photo-wall-in 420ms ease both;
-  transition: background 360ms ease;
 }
 
-.photo-wall--introducing {
-  background: rgba(8, 10, 18, 0.9);
+/* The wall is a dialog surface that takes programmatic focus for Esc handling;
+   never paint a focus ring around the whole overlay. */
+.photo-wall:focus,
+.photo-wall:focus-visible {
+  outline: none;
+}
+
+/* During the hero settle the in-frame copy of the boat stays hidden, so the
+   flying hero is the only boat on screen until it lands. */
+.photo-wall--introducing .photo-wall__media--story {
+  visibility: hidden;
 }
 
 .photo-wall__header,
@@ -1875,15 +1885,6 @@ body.ending-transition-active .collection-panel {
 
 .photo-wall--introducing:not(.photo-wall--reduced-motion) .photo-wall__header,
 .photo-wall--introducing:not(.photo-wall--reduced-motion) .photo-wall__board {
-  pointer-events: none;
-}
-
-.photo-wall__intro-scrim {
-  position: absolute;
-  inset: 0;
-  z-index: 5;
-  background: #080a12;
-  animation: photo-wall-intro-scrim-out 900ms cubic-bezier(0.22, 0.72, 0.24, 1) both;
   pointer-events: none;
 }
 
@@ -1909,15 +1910,6 @@ body.ending-transition-active .collection-panel {
   }
   to {
     opacity: 1;
-  }
-}
-
-@keyframes photo-wall-intro-scrim-out {
-  from {
-    opacity: 1;
-  }
-  to {
-    opacity: 0;
   }
 }
 
@@ -1965,19 +1957,32 @@ body.ending-transition-active .collection-panel {
   outline-offset: 2px;
 }
 
+/* One horizontal row of photos. The wheel is remapped to sideways travel and
+   the arrow keys page frame by frame (see photoWall.ts); the scrollbar itself
+   stays hidden since those are the intended controls. */
 .photo-wall__board {
   flex: 1 1 auto;
-  overflow-y: auto;
-  padding: clamp(10px, 2vw, 30px) clamp(16px, 4vw, 60px) clamp(28px, 5vw, 64px);
-  column-width: clamp(150px, 20vw, 230px);
-  column-gap: clamp(14px, 2.5vw, 30px);
+  display: flex;
+  align-items: center;
+  gap: clamp(18px, 3vw, 40px);
+  overflow-x: auto;
+  overflow-y: hidden;
+  /* Heavier bottom padding lifts the row above the geometric middle: the
+     header already weighs down the top, and the frames' caption aprons make
+     dead-center read as sitting low. */
+  padding: clamp(10px, 2vw, 30px) clamp(16px, 4vw, 60px) clamp(70px, 12vh, 130px);
+  scrollbar-width: none;
+}
+
+.photo-wall__board::-webkit-scrollbar {
+  display: none;
 }
 
 .photo-wall__frame {
   position: relative;
   display: block;
-  width: 100%;
-  margin: 0 0 clamp(16px, 2.6vw, 32px);
+  flex: 0 0 clamp(180px, 24vw, 280px);
+  margin: 0;
   padding: 10px 10px 34px;
   border: 0;
   background: #fffdf6;
@@ -1985,7 +1990,6 @@ body.ending-transition-active .collection-panel {
     0 10px 22px rgba(60, 34, 14, 0.32),
     0 2px 4px rgba(60, 34, 14, 0.24);
   cursor: pointer;
-  break-inside: avoid;
   transform: rotate(var(--rot, 0deg));
   transition: transform 200ms ease, box-shadow 200ms ease;
 }
@@ -2048,71 +2052,11 @@ body.ending-transition-active .collection-panel {
   opacity: 0.55;
 }
 
-/* The empty frame ("for the next good day") radiates a soft, pulsing warm light
-   once ____ is home — the last beat, drawing the eye to the room left waiting. */
-.photo-wall__frame--empty {
-  box-shadow:
-    0 10px 22px rgba(60, 34, 14, 0.32),
-    0 2px 4px rgba(60, 34, 14, 0.24),
-    0 0 18px 4px rgba(255, 214, 130, 0.75),
-    0 0 42px 12px rgba(255, 198, 108, 0.45);
-  animation: photo-wall-frame-breathe 3400ms ease-in-out infinite;
-}
-
+/* The empty frame ("for the next good day") — quietly emphasized caption, no
+   glow: it reads as the one frame kept waiting without lighting up the wall. */
 .photo-wall__frame--empty .photo-wall__caption {
   opacity: 1;
   color: #a6702e;
-  text-shadow: 0 0 10px rgba(255, 214, 130, 0.85);
-}
-
-/* The radiant halo itself: a warm radial bloom that spills well beyond the frame
-   edges, pulsing in scale + brightness. Sits behind the media, above the matte. */
-.photo-wall__glow {
-  position: absolute;
-  inset: -34px;
-  z-index: 0;
-  border-radius: 46% 44% 48% 42%;
-  background: radial-gradient(
-    closest-side,
-    rgba(255, 236, 190, 0.95),
-    rgba(255, 210, 120, 0.6) 42%,
-    rgba(255, 194, 104, 0.22) 68%,
-    rgba(255, 194, 104, 0) 100%
-  );
-  filter: blur(12px);
-  pointer-events: none;
-  transform-origin: center;
-  animation: photo-wall-glow-pulse 3400ms ease-in-out infinite;
-}
-
-@keyframes photo-wall-glow-pulse {
-  0%,
-  100% {
-    opacity: 0.6;
-    transform: scale(0.9);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1.12);
-  }
-}
-
-@keyframes photo-wall-frame-breathe {
-  0%,
-  100% {
-    box-shadow:
-      0 10px 22px rgba(60, 34, 14, 0.32),
-      0 2px 4px rgba(60, 34, 14, 0.24),
-      0 0 16px 3px rgba(255, 214, 130, 0.6),
-      0 0 34px 9px rgba(255, 198, 108, 0.34);
-  }
-  50% {
-    box-shadow:
-      0 10px 22px rgba(60, 34, 14, 0.32),
-      0 2px 4px rgba(60, 34, 14, 0.24),
-      0 0 24px 6px rgba(255, 220, 150, 0.9),
-      0 0 52px 16px rgba(255, 200, 112, 0.55);
-  }
 }
 
 /* Lightbox: enlarge a single photo over a dim scrim. */

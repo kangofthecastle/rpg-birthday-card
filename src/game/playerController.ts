@@ -33,6 +33,60 @@ interface ScreenMovement {
   readonly y: number;
 }
 
+// --- held movement keys, tracked across scene restarts ----------------------
+// Phaser key state lives per scene, so an edge transition's scene.restart
+// forgets any arrow the player is physically holding. Whether walking resumed
+// then depended on OS key auto-repeat — which only repeats the most recently
+// pressed key — so crossing between areas sometimes kept moving and sometimes
+// stopped dead. This DOM-level tracker outlives scene restarts; the controller
+// consults it alongside Phaser's keys.
+
+const DIRECTION_CODES: Record<Direction, readonly string[]> = {
+  up: ['ArrowUp', 'KeyW'],
+  down: ['ArrowDown', 'KeyS'],
+  left: ['ArrowLeft', 'KeyA'],
+  right: ['ArrowRight', 'KeyD'],
+};
+
+const TRACKED_CODES = new Set(Object.values(DIRECTION_CODES).flat());
+const heldCodes = new Set<string>();
+let trackerInstalled = false;
+
+export function trackHeldMovementKeys(target: Window): void {
+  if (trackerInstalled) {
+    return;
+  }
+  trackerInstalled = true;
+  target.addEventListener(
+    'keydown',
+    (event) => {
+      if (TRACKED_CODES.has(event.code)) {
+        heldCodes.add(event.code);
+      }
+    },
+    true,
+  );
+  target.addEventListener(
+    'keyup',
+    (event) => {
+      heldCodes.delete(event.code);
+    },
+    true,
+  );
+  // Keyups are never delivered while the window is unfocused (alt-tab mid-walk
+  // would leave a key held forever), so a blur drops everything.
+  target.addEventListener('blur', () => heldCodes.clear());
+}
+
+export function isMovementKeyHeld(direction: Direction): boolean {
+  return DIRECTION_CODES[direction].some((code) => heldCodes.has(code));
+}
+
+/** Test-only reset: clears held state so cases can't leak into each other. */
+export function clearHeldMovementKeys(): void {
+  heldCodes.clear();
+}
+
 export function getPlayerFacingFromScreenMovement(
   movement: ScreenMovement,
   previousFacing: PlayerFacing = 'down',
@@ -70,6 +124,10 @@ export class PlayerController {
       left: Phaser.Input.Keyboard.KeyCodes.A,
       right: Phaser.Input.Keyboard.KeyCodes.D,
     }) as Record<Direction, Phaser.Input.Keyboard.Key>;
+
+    if (typeof window !== 'undefined') {
+      trackHeldMovementKeys(window);
+    }
   }
 
   update(canMove: boolean): void {
@@ -103,6 +161,10 @@ export class PlayerController {
   }
 
   private isDown(direction: Direction): boolean {
-    return Boolean(this.cursors[direction]?.isDown || this.wasd[direction].isDown);
+    return Boolean(
+      this.cursors[direction]?.isDown ||
+        this.wasd[direction].isDown ||
+        isMovementKeyHeld(direction),
+    );
   }
 }

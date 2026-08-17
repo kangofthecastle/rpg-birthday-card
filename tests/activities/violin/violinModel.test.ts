@@ -14,8 +14,10 @@ import {
   GOOD_WINDOW_MS,
   PERFECT_WINDOW_MS,
   RHYTHM_CHART,
+  RHYTHM_LANES,
   RHYTHM_LEAD_IN_MS,
   RHYTHM_OUTRO_MS,
+  RHYTHM_TIME_SCALE,
   VIOLIN_FINALE_CAPTION,
   advanceViolin,
   beginViolin,
@@ -25,6 +27,7 @@ import {
   getPieceProgress,
   isPieceComplete,
   pressViolinKey,
+  rhythmLaneIndexForPitch,
   rhythmChartEndMs,
   type ViolinState,
 } from '../../../src/activities/violin/violinModel';
@@ -34,9 +37,7 @@ function advanceToFirstNote(): ViolinState {
 }
 
 function keyForPitch(pitchId: string): string {
-  const pitch = getPitch(pitchId);
-  if (!pitch) throw new Error(`Unknown pitch ${pitchId}`);
-  return pitch.key;
+  return RHYTHM_LANES[rhythmLaneIndexForPitch(pitchId)].key;
 }
 
 describe('melody data', () => {
@@ -94,7 +95,9 @@ describe('violinModel — chart', () => {
       const current = chart[index];
       const source = VIOLIN_PHRASES[current.phraseIndex].notes[current.noteIndex];
       expect(current.timeMs).toBe(
-        previous.timeMs + previous.durationMs + (source.delayBeforeMs ?? 0),
+        previous.timeMs +
+          previous.durationMs +
+          Math.round((source.delayBeforeMs ?? 0) * RHYTHM_TIME_SCALE),
       );
     }
   });
@@ -103,9 +106,16 @@ describe('violinModel — chart', () => {
     for (const chartNote of RHYTHM_CHART) {
       const source = VIOLIN_PHRASES[chartNote.phraseIndex].notes[chartNote.noteIndex];
       expect(chartNote.pitchId).toBe(source.pitchId);
-      expect(chartNote.durationMs).toBe(source.durationMs);
+      expect(chartNote.durationMs).toBe(Math.round(source.durationMs * RHYTHM_TIME_SCALE));
       expect(chartNote.index).toBeGreaterThanOrEqual(0);
     }
+  });
+
+  it('uses four broad lanes and slows the original passage to 75 BPM', () => {
+    expect(RHYTHM_LANES.map((lane) => lane.key)).toEqual(['D', 'F', 'J', 'K']);
+    expect(RHYTHM_TIME_SCALE).toBeCloseTo(4 / 3);
+    expect(new Set(RHYTHM_CHART.map((note) => rhythmLaneIndexForPitch(note.pitchId))).size)
+      .toBeLessThanOrEqual(4);
   });
 });
 
@@ -153,7 +163,7 @@ describe('violinModel — timing and scoring', () => {
   it('spends the current note as a Miss for a wrong mapped lane in-window', () => {
     const ready = advanceToFirstNote();
     const expected = keyForPitch(RHYTHM_CHART[0].pitchId);
-    const wrong = VIOLIN_PITCHES.find((pitch) => pitch.key !== expected)!.key;
+    const wrong = RHYTHM_LANES.find((lane) => lane.key !== expected)!.key;
     const miss = pressViolinKey(ready, wrong);
     expect(miss.lastJudgement).toBe('miss');
     expect(miss.missCount).toBe(1);
@@ -186,7 +196,7 @@ describe('violinModel — timing and scoring', () => {
     expect(state.combo).toBe(2);
     state = advanceViolin(state, RHYTHM_CHART[2].timeMs - state.elapsedMs);
     const expected = keyForPitch(RHYTHM_CHART[2].pitchId);
-    const wrong = VIOLIN_PITCHES.find((pitch) => pitch.key !== expected)!.key;
+    const wrong = RHYTHM_LANES.find((lane) => lane.key !== expected)!.key;
     state = pressViolinKey(state, wrong);
     expect(state.combo).toBe(0);
     expect(state.maxCombo).toBe(2);
@@ -226,6 +236,6 @@ describe('violinModel — completion', () => {
 
   it('uses non-overlapping timing windows', () => {
     expect(PERFECT_WINDOW_MS).toBeLessThan(GOOD_WINDOW_MS);
-    expect(GOOD_WINDOW_MS).toBeLessThanOrEqual(200);
+    expect(GOOD_WINDOW_MS).toBeLessThanOrEqual(300);
   });
 });

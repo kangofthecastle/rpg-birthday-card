@@ -1,9 +1,11 @@
 import Phaser from 'phaser';
 import { playSfx, playViolinNote } from '../../game/audio';
-import { VIOLIN_PITCHES, getPitch } from './melody';
+import { getPitch } from './melody';
 import {
   GOOD_WINDOW_MS,
   RHYTHM_CHART,
+  RHYTHM_BEAT_MS,
+  RHYTHM_LANES,
   RHYTHM_LEAD_IN_MS,
   VIOLIN_FINALE_CAPTION,
   advanceViolin,
@@ -11,6 +13,7 @@ import {
   createViolinState,
   getPieceProgress,
   pressViolinKey,
+  rhythmLaneIndexForPitch,
   type ViolinJudgement,
   type ViolinState,
 } from './violinModel';
@@ -37,7 +40,7 @@ const RUNWAY_TOP = 48;
 const HIT_LINE_Y = 270;
 const KEY_CAP_Y = 286;
 const KEY_CAP_HEIGHT = 31;
-const NOTE_SPEED_PX_PER_MS = 0.155;
+const NOTE_SPEED_PX_PER_MS = 0.105;
 const NOTE_LOOKAHEAD_MS = (HIT_LINE_Y - RUNWAY_TOP) / NOTE_SPEED_PX_PER_MS;
 
 const CREAM = 0xffedd0;
@@ -47,15 +50,11 @@ const INK = 0x2c1c1b;
 const BURGUNDY = 0x5a2830;
 
 function laneWidth(): number {
-  return BOARD.width / VIOLIN_PITCHES.length;
+  return BOARD.width / RHYTHM_LANES.length;
 }
 
 function laneCentre(index: number): number {
   return BOARD.x + laneWidth() * (index + 0.5);
-}
-
-function pitchLane(pitchId: string): number {
-  return Math.max(0, VIOLIN_PITCHES.findIndex((pitch) => pitch.id === pitchId));
 }
 
 function judgementLabel(judgement: ViolinJudgement): string {
@@ -261,15 +260,15 @@ export class ViolinScene extends Phaser.Scene {
   }
 
   private createLaneLabels(): void {
-    VIOLIN_PITCHES.forEach((pitch, index) => {
+    RHYTHM_LANES.forEach((lane, index) => {
       const x = laneCentre(index);
       this.keyLabels.push(
         this.add
-          .text(x, KEY_CAP_Y + 7, pitch.key, {
+          .text(x, KEY_CAP_Y + 7, lane.key, {
             align: 'center',
             color: '#fff0d4',
             fontFamily: 'Georgia, serif',
-            fontSize: '14px',
+            fontSize: '18px',
             fontStyle: 'bold',
             resolution: RENDER_SCALE,
           })
@@ -278,11 +277,11 @@ export class ViolinScene extends Phaser.Scene {
       );
       this.noteLabels.push(
         this.add
-          .text(x, KEY_CAP_Y + 22, pitch.name, {
+          .text(x, KEY_CAP_Y + 22, lane.name, {
             align: 'center',
             color: '#c6a777',
             fontFamily: 'Georgia, serif',
-            fontSize: '8px',
+            fontSize: '10px',
             resolution: RENDER_SCALE,
           })
           .setOrigin(0.5)
@@ -294,12 +293,12 @@ export class ViolinScene extends Phaser.Scene {
   private createInput(): void {
     const keyboard = this.input.keyboard;
     if (keyboard) {
-      VIOLIN_PITCHES.forEach((pitch) => {
+      RHYTHM_LANES.forEach((lane) => {
         const keyCode =
           Phaser.Input.Keyboard.KeyCodes[
-            pitch.inputCode as keyof typeof Phaser.Input.Keyboard.KeyCodes
+            lane.inputCode as keyof typeof Phaser.Input.Keyboard.KeyCodes
           ];
-        this.noteKeys.set(pitch.key, keyboard.addKey(keyCode, false));
+        this.noteKeys.set(lane.key, keyboard.addKey(keyCode, false));
       });
       this.escapeKey = keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC, false);
       this.spaceKey = keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE, false);
@@ -322,9 +321,9 @@ export class ViolinScene extends Phaser.Scene {
       const lane = Phaser.Math.Clamp(
         Math.floor((pointer.x - BOARD.x) / laneWidth()),
         0,
-        VIOLIN_PITCHES.length - 1,
+        RHYTHM_LANES.length - 1,
       );
-      this.resolvePress(VIOLIN_PITCHES[lane].key);
+      this.resolvePress(RHYTHM_LANES[lane].key);
     });
   }
 
@@ -341,7 +340,7 @@ export class ViolinScene extends Phaser.Scene {
     for (const [keyName, key] of this.noteKeys) {
       if (Phaser.Input.Keyboard.JustDown(key)) {
         if (this.modelState.phase === 'ready') {
-          const lane = VIOLIN_PITCHES.findIndex((pitch) => pitch.key === keyName);
+          const lane = RHYTHM_LANES.findIndex((rhythmLane) => rhythmLane.key === keyName);
           if (lane >= 0) this.laneFlashes.set(lane, 1);
           this.startSong();
           return;
@@ -358,7 +357,7 @@ export class ViolinScene extends Phaser.Scene {
   }
 
   private resolvePress(keyName: string): void {
-    const lane = VIOLIN_PITCHES.findIndex((pitch) => pitch.key === keyName);
+    const lane = RHYTHM_LANES.findIndex((rhythmLane) => rhythmLane.key === keyName);
     if (lane >= 0) {
       this.laneFlashes.set(lane, 1);
     }
@@ -406,7 +405,7 @@ export class ViolinScene extends Phaser.Scene {
     g.strokeRoundedRect(BOARD.x - 5, BOARD.y - 4, BOARD.width + 10, BOARD.height + 8, 10);
 
     const width = laneWidth();
-    VIOLIN_PITCHES.forEach((_, index) => {
+    RHYTHM_LANES.forEach((_, index) => {
       const x = BOARD.x + index * width;
       const active = this.laneFlashes.get(index) ?? 0;
       g.fillStyle(index % 2 === 0 ? 0x2c1c25 : 0x221820, 0.68);
@@ -429,7 +428,7 @@ export class ViolinScene extends Phaser.Scene {
     g.lineStyle(1, CREAM, 0.9);
     g.lineBetween(BOARD.x, HIT_LINE_Y, BOARD.x + BOARD.width, HIT_LINE_Y);
 
-    VIOLIN_PITCHES.forEach((_, index) => {
+    RHYTHM_LANES.forEach((_, index) => {
       const active = this.laneFlashes.get(index) ?? 0;
       const x = BOARD.x + index * width + 2;
       g.fillStyle(active > 0 ? 0x9f622d : 0x3a2825, 1);
@@ -464,10 +463,10 @@ export class ViolinScene extends Phaser.Scene {
         continue;
       }
 
-      const lane = pitchLane(note.pitchId);
+      const lane = rhythmLaneIndexForPitch(note.pitchId);
       const cx = laneCentre(lane);
       const y = HIT_LINE_Y - untilHit * NOTE_SPEED_PX_PER_MS;
-      const width = laneWidth() - 10;
+      const width = Math.min(78, laneWidth() - 16);
       const sustain = Math.max(13, note.durationMs * NOTE_SPEED_PX_PER_MS);
       const tailHeight = Math.min(62, sustain);
 
@@ -493,7 +492,7 @@ export class ViolinScene extends Phaser.Scene {
       const judged = RHYTHM_CHART[this.modelState.lastJudgedNoteIndex];
       if (judged) {
         g.lineStyle(3, BRIGHT_GOLD, this.strikePulse * 0.8);
-        g.strokeCircle(laneCentre(pitchLane(judged.pitchId)), HIT_LINE_Y, radius);
+        g.strokeCircle(laneCentre(rhythmLaneIndexForPitch(judged.pitchId)), HIT_LINE_Y, radius);
       }
     }
 
@@ -526,7 +525,10 @@ export class ViolinScene extends Phaser.Scene {
       this.centreText.setText('Ready?').setAlpha(0.96);
       this.subText.setText('Press Space or tap to begin').setAlpha(0.9);
     } else if (state.phase === 'count-in') {
-      const beatsLeft = Math.max(1, Math.ceil((RHYTHM_LEAD_IN_MS - state.elapsedMs) / 600));
+      const beatsLeft = Math.max(
+        1,
+        Math.ceil((RHYTHM_LEAD_IN_MS - state.elapsedMs) / RHYTHM_BEAT_MS),
+      );
       this.centreText.setText(String(beatsLeft)).setAlpha(0.96);
       this.subText.setText('Meet the notes at the golden line').setAlpha(0.9);
     } else if (state.phase === 'finale' || state.phase === 'complete') {

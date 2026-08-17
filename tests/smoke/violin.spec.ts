@@ -165,9 +165,9 @@ test('hits the opening rhythm note on time and starts a combo', async ({ page })
     undefined,
     { timeout: 10000 },
   );
-  // Opening A4 is the L lane. Press immediately when the count-in opens; the
-  // 170ms Good window intentionally accommodates browser scheduling jitter.
-  await page.keyboard.press('KeyL');
+  // Opening A4 is grouped into the high J lane. Press when the count-in opens;
+  // the forgiving Good window intentionally accommodates scheduling jitter.
+  await page.keyboard.press('KeyJ');
   await expect(panel).toHaveAttribute('data-violin-max-combo', '1');
   expect(Number(await panel.getAttribute('data-violin-score'))).toBeGreaterThan(0);
 });

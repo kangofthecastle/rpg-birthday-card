@@ -134,17 +134,12 @@ test('plays the piece on the stand through test mode', async ({ page }) => {
   );
 });
 
-// Real-gameplay path: actually echo phrase 1 on the mapped keys. This guards the
-// input seam that was silently broken (the underlying room's global A/S/D
-// capture swallowed the echo before the violin's separate Phaser game saw it).
-// The scene mirrors its model state onto the panel dataset (data-violin-state /
-// -phrase / -echo) so the test waits deterministically under CPU contention
-// rather than screenshot-matching. Phrase 1 is the score's four-note opening
-// A G F G = keys L K H K; she plays every note herself (no takeover), then a short
-// handoff beat flips the phrase index as phrase 2 begins.
-test('echoes phrase 1 on the mapped keys, recovering from a wrong note', async ({
-  page,
-}) => {
+// Real-gameplay path: land the opening rhythm note on its timing line. This
+// guards the input seam that was silently broken in the old echo game (the
+// underlying room's global A/S/D capture swallowed activity input). Canvas
+// state is mirrored to data attributes so the smoke can verify timing and score
+// without screenshot matching.
+test('hits the opening rhythm note on time and starts a combo', async ({ page }) => {
   test.setTimeout(60_000);
   await page.goto(
     '/?testMode=1&locationId=recipient-house&spawnId=near-pc&seedKeepsakes=glowing-koi-scale,defused-spike-charm',
@@ -162,41 +157,17 @@ test('echoes phrase 1 on the mapped keys, recovering from a wrong note', async (
   const panel = page.locator('.activity-shell--violin');
   await expect(panel).toBeVisible();
 
-  // Press a note key with a real hold (a few frames) and retry until the target
-  // dataset attribute reaches the wanted value. This is robust to an occasional
-  // lost key event under CPU contention; a re-press only fires after a generous
-  // settle (a landed press registers within a couple frames), so a correct note
-  // can never double-register into a wrong one.
-  const pressUntil = async (code: string, attr: string, value: string): Promise<void> => {
-    for (let attempt = 0; attempt < 12; attempt += 1) {
-      if ((await panel.getAttribute(attr)) === value) return;
-      await page.keyboard.down(code);
-      await page.waitForTimeout(60);
-      await page.keyboard.up(code);
-      try {
-        await expect(panel).toHaveAttribute(attr, value, { timeout: 800 });
-        return;
-      } catch {
-        await page.waitForTimeout(150);
-      }
-    }
-    await expect(panel).toHaveAttribute(attr, value, { timeout: 3000 });
-  };
-
-  // Phrase 1 plays itself, then opens the echo ("now you").
-  await expect(panel).toHaveAttribute('data-violin-phrase', '0', { timeout: 20000 });
-  await expect(panel).toHaveAttribute('data-violin-state', 'echo', { timeout: 20000 });
-
-  // A wrong note gently wavers: the phrase resets and plays itself again from the
-  // top (no soft-lock), then re-opens the echo.
-  await pressUntil('KeyA', 'data-violin-state', 'playback');
-  await expect(panel).toHaveAttribute('data-violin-state', 'echo', { timeout: 20000 });
-  await expect(panel).toHaveAttribute('data-violin-phrase', '0');
-
-  // Echo the exact opening figure (A G F G = L K H K), one note at a time,
-  // waiting on the echo cursor between presses. The fourth note lands the page.
-  await pressUntil('KeyL', 'data-violin-echo', '1');
-  await pressUntil('KeyK', 'data-violin-echo', '2');
-  await pressUntil('KeyH', 'data-violin-echo', '3');
-  await pressUntil('KeyK', 'data-violin-phrase', '1');
+  await expect(panel).toHaveAttribute('data-violin-state', 'ready');
+  await page.keyboard.press('Space');
+  await expect(panel).toHaveAttribute('data-violin-state', 'count-in');
+  await page.waitForFunction(
+    () => document.querySelector<HTMLElement>('.activity-shell--violin')?.dataset.violinWindow === 'true',
+    undefined,
+    { timeout: 10000 },
+  );
+  // Opening A4 is the L lane. Press immediately when the count-in opens; the
+  // 170ms Good window intentionally accommodates browser scheduling jitter.
+  await page.keyboard.press('KeyL');
+  await expect(panel).toHaveAttribute('data-violin-max-combo', '1');
+  expect(Number(await panel.getAttribute('data-violin-score'))).toBeGreaterThan(0);
 });

@@ -1,83 +1,9 @@
-/* Panel accents for "The piece on the stand". The layout chrome (title,
- * standard 16:9 viewport, controls strip, X close) comes from the shared
- * .activity-shell in styles.css; only the violin's warm lamplit panel body and
- * its Phaser host live here. */
-
-/* A faintly warmer panel body than the shared dark, echoing the lamplight. */
+/* The shared activity shell supplies the layout. The rhythm conversion keeps
+ * the violin game's warm lamplit frame while the canvas owns the note highway. */
 .activity-shell.activity-shell--violin {
   background:
     radial-gradient(120% 90% at 18% 12%, rgba(94, 58, 40, 0.28), transparent 60%),
     rgba(27, 22, 26, 0.95);
-}
-
-/* Header row: the shell's top-left title, with the compact mode cluster sitting
- * immediately to its right. Replaces the title's own bottom margin so the shell
- * layout (viewport height budget) is unchanged; the 56px right padding keeps the
- * cluster clear of the top-right X close button. Violin-only — the other three
- * games keep the plain shell title untouched. */
-.violin-header {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  flex-wrap: wrap;
-  margin: 0 0 8px;
-  padding-right: 56px;
-}
-
-.violin-header .activity-shell__title {
-  margin: 0;
-  padding-right: 0;
-}
-
-.violin-modes {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-/* Small, elegant varnish-toned pills in the sheet's own Georgia italic voice. */
-.violin-mode-btn {
-  padding: 3px 11px;
-  border: 1px solid rgba(150, 98, 58, 0.55);
-  border-radius: 999px;
-  background: rgba(58, 42, 32, 0.5);
-  color: #e9cfa6;
-  font-family: Georgia, "Times New Roman", serif;
-  font-style: italic;
-  font-size: 12.5px;
-  letter-spacing: 0.03em;
-  line-height: 1.3;
-  cursor: pointer;
-  transition:
-    background 0.15s ease,
-    color 0.15s ease,
-    border-color 0.15s ease,
-    box-shadow 0.15s ease;
-}
-
-.violin-mode-btn:hover:not(:disabled) {
-  border-color: rgba(214, 164, 90, 0.85);
-  color: #ffe6b0;
-}
-
-.violin-mode-btn[aria-pressed='true'] {
-  background: linear-gradient(160deg, #7a4d24, #5a3720);
-  border-color: rgba(255, 214, 138, 0.85);
-  color: #fff3d6;
-  box-shadow:
-    0 0 10px rgba(207, 154, 68, 0.35),
-    inset 0 1px 0 rgba(255, 240, 198, 0.25);
-}
-
-.violin-mode-btn:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
-.violin-mode-btn:focus-visible {
-  outline: 2px solid #f1d79a;
-  outline-offset: 2px;
 }
 
 .violin-game__host {

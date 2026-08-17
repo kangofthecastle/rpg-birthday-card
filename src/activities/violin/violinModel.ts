@@ -1,407 +1,225 @@
-// The piece on the stand — pure, framework-free phrase state machine.
+// The piece on the stand — deterministic rhythm-game state.
 //
-// No Phaser, no DOM: the whole mechanic is a deterministic function of the
-// starting state, elapsed time, and key presses, so it unit-tests in isolation
-// and drives the scene reproducibly. This is a perfect-pitch echo, not falling
-// notes: each phrase PLAYS first (time-driven), then ____ ECHOES it back on
-// the mapped keys. There is no fail state — a wrong key gently wavers and
-// the phrase simply plays itself again, a little slower each time (floor 70%),
-// so it can never soft-lock. The song waits for her.
+// Phaser and the DOM deliberately stay out of this file. The chart, timing
+// windows, score, combo, and automatic misses can therefore be tested without a
+// renderer and remain stable when the browser drops frames.
 
-import {
-  VIOLIN_FINALE_PHRASES,
-  VIOLIN_PHRASES,
-  getPitch,
-  getPitchByKey,
-  type ViolinPhrase,
-} from './melody';
+import { VIOLIN_PHRASES, getPitchByKey } from './melody';
 
-// Phase machine, in order of a phrase's life:
-//   playback → the phrase plays itself (time-driven).
-//   echo     → ____ plays it back on the mapped keys (input-driven).
-//   handoff  → the instant she lands a phrase's LAST note: a short beat so that
-//              last ring is heard, then straight into the next phrase's playback.
-//              No dead air, no waiting state.
-//   finale   → she has echoed measures 1–5; now the complete measures 1–9
-//              passage pours through as one continuous line, a richer swell
-//              underneath, golden light filling the room.
-//   complete → done.
-// There is no takeover during the interactive passage: ____ plays every one of
-// its notes herself. The expanded finale is the reward, not an interruption.
-export type ViolinPhase = 'playback' | 'echo' | 'handoff' | 'finale' | 'complete';
-export type ViolinResult = 'none' | 'ring' | 'waver';
+export type ViolinPhase = 'ready' | 'count-in' | 'playing' | 'finale' | 'complete';
+export type ViolinJudgement = 'none' | 'perfect' | 'good' | 'miss';
 
-/** Miss slowdown floor: playback never stretches slower than 70% tempo. */
-export const MIN_TEMPO_SCALE = 0.7;
-/** Each miss multiplies the current phrase's tempo scale by this. */
-export const MISS_SLOWDOWN_FACTOR = 0.9;
-/** Quiet beat after a phrase finishes playing before the echo opens. */
-export const PLAYBACK_TAIL_MS = 460;
-/** Instant handoff: the beat after ____ lands a phrase's last note (so the ring
- * is heard) before the next phrase begins playing itself. Kept short so the
- * handoff feels immediate — well under the 700ms the playtest wants. */
-export const HANDOFF_MS = 500;
-/** Lead-in beat at the top of the finale before the whole-piece replay begins,
- * so her final note rings and the swell can bloom in first. */
-export const FINALE_LEAD_IN_MS = 640;
-/** Page boundaries are visual/input groupings only; the finale melody stays
- * continuous across them with no inserted silence. */
-export const FINALE_PHRASE_GAP_MS = 0;
-/** Hold after the finale's last note (swell ringing, golden light at full pour)
- * before the piece is marked complete. */
-export const FINALE_HOLD_MS = 2600;
-export interface ViolinState {
-  /** Index of the phrase currently in play (0..phrases.length - 1). */
+export interface RhythmChartNote {
+  readonly index: number;
   readonly phraseIndex: number;
-  readonly phase: ViolinPhase;
-  /** Ms elapsed within the current playback (phase 'playback') or within the
-   * final swell (phase 'finale'); unused while echoing. */
-  readonly elapsedMs: number;
-  /** How many notes of the current phrase ____ has correctly echoed. */
-  readonly echoIndex: number;
-  /** Playback speed for the current phrase; eases toward MIN_TEMPO_SCALE on
-   * each miss so timing only ever gets gentler. */
-  readonly tempoScale: number;
-  /** Outcome of the most recent key press, for scene feedback. */
-  readonly lastResult: ViolinResult;
-  /** True once the piece is finished. */
-  readonly finished: boolean;
-  /** "Mistakes allowed" state: true once ONE wrong key has been pressed on the
-   * CURRENT expected note and the song is now waiting for that same note to be
-   * played correctly to recover. A second wrong press while recovering is a
-   * normal miss. Always false when the "mistakes allowed" setting is off, since
-   * the first wrong press is then handled as a normal miss immediately. */
-  readonly recovering: boolean;
-}
-
-export function createViolinState(): ViolinState {
-  return {
-    phraseIndex: 0,
-    phase: 'playback',
-    elapsedMs: 0,
-    echoIndex: 0,
-    tempoScale: 1,
-    lastResult: 'none',
-    finished: false,
-    recovering: false,
-  };
-}
-
-export function getPhrase(state: ViolinState): ViolinPhrase | undefined {
-  const phrases = state.phase === 'finale' || state.phase === 'complete'
-    ? VIOLIN_FINALE_PHRASES
-    : VIOLIN_PHRASES;
-  return phrases[state.phraseIndex];
-}
-
-export function isFinalPhrase(state: ViolinState): boolean {
-  return state.phraseIndex === VIOLIN_PHRASES.length - 1;
-}
-
-/** One note of the whole-piece finale replay, timed from the finale's start. */
-export interface FinaleNote {
-  /** Which phrase this note belongs to (drives the staff paging). */
-  readonly phraseIndex: number;
-  /** Note position within its phrase. */
   readonly noteIndex: number;
   readonly pitchId: string;
+  readonly timeMs: number;
   readonly durationMs: number;
-  /** When it begins sounding, ms from the start of the finale. */
-  readonly startMs: number;
 }
 
-/** The finale plays the entire piece back as one continuous line: every phrase in
- * order, notes at their authored durations, with no gap at page boundaries. This
- * is the deterministic timeline both the swell scheduling and the staff lighting
- * read from. */
-export function finaleTimeline(): FinaleNote[] {
-  const out: FinaleNote[] = [];
-  let t = FINALE_LEAD_IN_MS;
-  VIOLIN_FINALE_PHRASES.forEach((phrase, phraseIndex) => {
+export interface ViolinState {
+  readonly phase: ViolinPhase;
+  /** Milliseconds on one continuous clock, beginning at activity start. */
+  readonly elapsedMs: number;
+  /** First chart note that has not yet been judged. */
+  readonly nextNoteIndex: number;
+  readonly score: number;
+  readonly combo: number;
+  readonly maxCombo: number;
+  readonly perfectCount: number;
+  readonly goodCount: number;
+  readonly missCount: number;
+  readonly lastJudgement: ViolinJudgement;
+  readonly lastJudgedNoteIndex: number;
+  readonly lastJudgementAtMs: number;
+  readonly finished: boolean;
+}
+
+/** Three beats at the piece's authored 100 BPM before the first target lands. */
+export const RHYTHM_LEAD_IN_MS = 1800;
+export const PERFECT_WINDOW_MS = 80;
+export const GOOD_WINDOW_MS = 170;
+/** A brief hold after the chart before the room opens into its golden finale. */
+export const RHYTHM_OUTRO_MS = 700;
+export const FINALE_HOLD_MS = 2600;
+export const VIOLIN_FINALE_CAPTION = 'Follow the light';
+
+/** Builds one continuous chart from the piece's seven interactive measures. */
+export function buildRhythmChart(): readonly RhythmChartNote[] {
+  const chart: RhythmChartNote[] = [];
+  let cursorMs = RHYTHM_LEAD_IN_MS;
+
+  VIOLIN_PHRASES.forEach((phrase, phraseIndex) => {
     phrase.notes.forEach((note, noteIndex) => {
-      t += note.delayBeforeMs ?? 0;
-      out.push({
+      cursorMs += note.delayBeforeMs ?? 0;
+      chart.push({
+        index: chart.length,
         phraseIndex,
         noteIndex,
         pitchId: note.pitchId,
+        timeMs: cursorMs,
         durationMs: note.durationMs,
-        startMs: t,
       });
-      t += note.durationMs;
+      cursorMs += note.durationMs;
     });
-    t += FINALE_PHRASE_GAP_MS;
   });
-  return out;
+
+  return chart;
 }
 
-/** Total finale length: the last note's start + its duration + the closing hold. */
-export function finaleTotalMs(): number {
-  const timeline = finaleTimeline();
-  const last = timeline[timeline.length - 1];
-  if (!last) {
-    return FINALE_LEAD_IN_MS + FINALE_HOLD_MS;
-  }
-  return last.startMs + last.durationMs + FINALE_HOLD_MS;
+export const RHYTHM_CHART = buildRhythmChart();
+
+export function createViolinState(): ViolinState {
+  return {
+    phase: 'ready',
+    elapsedMs: 0,
+    nextNoteIndex: 0,
+    score: 0,
+    combo: 0,
+    maxCombo: 0,
+    perfectCount: 0,
+    goodCount: 0,
+    missCount: 0,
+    lastJudgement: 'none',
+    lastJudgedNoteIndex: -1,
+    lastJudgementAtMs: -Infinity,
+    finished: false,
+  };
 }
 
-/** The phrase the finale is sounding at `elapsedMs` (the last note to have begun),
- * so the staff pages through the piece as it replays. */
-function finalePhraseAt(elapsedMs: number): number {
-  let phraseIndex = 0;
-  for (const note of finaleTimeline()) {
-    if (note.startMs <= elapsedMs) {
-      phraseIndex = note.phraseIndex;
-    } else {
-      break;
-    }
-  }
-  return phraseIndex;
-}
-
-/** Cumulative start time (ms) of note `index` within a phrase at a given tempo
- * scale. `index === notes.length` yields the time the last note starts ringing
- * plus its own duration (i.e. the end of the played melody). */
-export function noteStartMs(
-  phrase: ViolinPhrase,
-  index: number,
-  tempoScale: number,
-): number {
-  let total = 0;
-  for (let i = 0; i < index && i < phrase.notes.length; i += 1) {
-    total += ((phrase.notes[i].delayBeforeMs ?? 0) + phrase.notes[i].durationMs) / tempoScale;
-  }
-  if (index < phrase.notes.length) {
-    total += (phrase.notes[index].delayBeforeMs ?? 0) / tempoScale;
-  }
-  return total;
-}
-
-/** Total playback time for a phrase (all notes + the trailing quiet beat). */
-export function playbackDurationMs(
-  phrase: ViolinPhrase,
-  tempoScale: number,
-): number {
-  return noteStartMs(phrase, phrase.notes.length, tempoScale) + PLAYBACK_TAIL_MS;
-}
-
-/** How many notes have begun sounding by `elapsedMs` during playback. */
-export function playbackLitCount(
-  phrase: ViolinPhrase,
-  elapsedMs: number,
-  tempoScale: number,
-): number {
-  let count = 0;
-  for (let i = 0; i < phrase.notes.length; i += 1) {
-    if (noteStartMs(phrase, i, tempoScale) <= elapsedMs) {
-      count += 1;
-    } else {
-      break;
-    }
-  }
-  return count;
-}
-
-/** How many marks of the current phrase are lit right now, unified across
- * phases so the scene has a single source of truth. */
-export function litNoteCount(state: ViolinState): number {
-  const phrase = getPhrase(state);
-  if (!phrase) {
-    return 0;
-  }
-  switch (state.phase) {
-    case 'playback':
-      return playbackLitCount(phrase, state.elapsedMs, state.tempoScale);
-    case 'echo':
-      return state.echoIndex;
-    case 'handoff':
-      // The phrase she just finished stays fully lit and glowing for the beat.
-      return phrase.notes.length;
-    case 'finale': {
-      // The current phrase's notes ignite in sequence as the piece replays.
-      let count = 0;
-      for (const note of finaleTimeline()) {
-        if (note.phraseIndex === state.phraseIndex && note.startMs <= state.elapsedMs) {
-          count += 1;
-        }
-      }
-      return count;
-    }
-    case 'complete':
-      return phrase.notes.length;
-    default:
-      return 0;
-  }
-}
-
-/** The pitch id the echo is currently waiting for, or undefined when not in an
- * echo (e.g. during playback, the swell, or once complete). */
-export function expectedPitchId(state: ViolinState): string | undefined {
-  if (state.phase !== 'echo') {
-    return undefined;
-  }
-  const phrase = getPhrase(state);
-  return phrase?.notes[state.echoIndex]?.pitchId;
-}
-
-/** Advances the time-driven phases (playback clock, final swell). Echo waits on
- * input and is untouched here; 'complete' is terminal. */
-export function advanceViolin(state: ViolinState, deltaMs: number): ViolinState {
-  if (state.finished || deltaMs <= 0) {
+/** Opens the count-in only after the player has deliberately started the song. */
+export function beginViolin(state: ViolinState): ViolinState {
+  if (state.phase !== 'ready') {
     return state;
   }
-
-  if (state.phase === 'playback') {
-    const phrase = getPhrase(state);
-    if (!phrase) {
-      return state;
-    }
-    const elapsedMs = state.elapsedMs + deltaMs;
-    if (elapsedMs >= playbackDurationMs(phrase, state.tempoScale)) {
-      // Playback finished; open the echo.
-      return {
-        ...state,
-        phase: 'echo',
-        elapsedMs: 0,
-        echoIndex: 0,
-        lastResult: 'none',
-        recovering: false,
-      };
-    }
-    return { ...state, elapsedMs };
-  }
-
-  if (state.phase === 'handoff') {
-    const elapsedMs = state.elapsedMs + deltaMs;
-    if (elapsedMs >= HANDOFF_MS) {
-      // The beat is over — the next phrase begins playing itself, immediately.
-      return {
-        ...state,
-        phraseIndex: state.phraseIndex + 1,
-        phase: 'playback',
-        elapsedMs: 0,
-        echoIndex: 0,
-        tempoScale: 1,
-        lastResult: 'none',
-        recovering: false,
-      };
-    }
-    return { ...state, elapsedMs };
-  }
-
-  if (state.phase === 'finale') {
-    const elapsedMs = state.elapsedMs + deltaMs;
-    if (elapsedMs >= finaleTotalMs()) {
-      return {
-        ...state,
-        phase: 'complete',
-        elapsedMs: finaleTotalMs(),
-        phraseIndex: VIOLIN_FINALE_PHRASES.length - 1,
-        finished: true,
-      };
-    }
-    // Page the staff to whichever phrase is sounding now.
-    return { ...state, elapsedMs, phraseIndex: finalePhraseAt(elapsedMs) };
-  }
-
-  return state;
+  return { ...state, phase: 'count-in', elapsedMs: 0 };
 }
 
-/** Resolves a key press. Only meaningful during an echo:
- * - Unmapped key → ignored (returns the same state).
- * - Correct pitch → it rings; advance the echo (clearing any recovery). Landing a
- *   mid-song phrase's last note opens the handoff beat (then the next phrase plays
- *   itself); landing the FINAL phrase's last note opens the finale — the whole
- *   piece pours back.
- * - Wrong (but mapped) pitch → a gentle waver: reset the echo and replay the
- *   phrase a little slower.
- *
- * `mistakesAllowed` grants ONE forgiven slip per note: the first wrong press on a
- * note does NOT reset the phrase — it wavers and the song waits (`recovering`),
- * and playing the correct note once recovers and continues normally. A SECOND
- * wrong press while recovering is handled as a normal miss (phrase resets). With
- * the setting off (default) the first wrong press is a normal miss, exactly as
- * before. */
-export function pressViolinKey(
+function scoreFor(judgement: 'perfect' | 'good', combo: number): number {
+  const base = judgement === 'perfect' ? 1000 : 600;
+  return base + Math.min(combo, 25) * 20;
+}
+
+function judgeCurrentNote(
   state: ViolinState,
-  key: string,
-  mistakesAllowed = false,
+  judgement: Exclude<ViolinJudgement, 'none'>,
 ): ViolinState {
-  if (state.phase !== 'echo' || state.finished) {
-    return state;
-  }
-  const pressed = getPitchByKey(key);
-  if (!pressed) {
-    return state;
-  }
-  const phrase = getPhrase(state);
-  if (!phrase) {
-    return state;
-  }
-
-  const expected = phrase.notes[state.echoIndex];
-  const expectedPitch = expected ? getPitch(expected.pitchId) : undefined;
-
-  if (expectedPitch && pressed.id === expectedPitch.id) {
-    const nextEcho = state.echoIndex + 1;
-
-    if (nextEcho >= phrase.notes.length) {
-      // She landed the phrase's last note herself.
-      if (isFinalPhrase(state)) {
-        // The whole piece pours back through as the finale.
-        return {
-          ...state,
-          echoIndex: nextEcho,
-          phase: 'finale',
-          phraseIndex: 0,
-          elapsedMs: 0,
-          lastResult: 'ring',
-          recovering: false,
-        };
-      }
-      // A short beat (the ring), then the next phrase plays itself.
-      return {
-        ...state,
-        echoIndex: nextEcho,
-        phase: 'handoff',
-        elapsedMs: 0,
-        lastResult: 'ring',
-        recovering: false,
-      };
-    }
-
-    // A correct note always clears the note's forgiven-slip flag: the next note
-    // gets its own fresh grace.
-    return { ...state, echoIndex: nextEcho, lastResult: 'ring', recovering: false };
-  }
-
-  // Wrong (mapped) note. With mistakes allowed and no slip spent yet on this
-  // note, the song simply waits — same phrase, same cursor — for the correct
-  // note. Otherwise it's a normal miss: reset the phrase and replay slower.
-  if (mistakesAllowed && !state.recovering) {
-    return { ...state, recovering: true, lastResult: 'waver' };
-  }
-
+  const combo = judgement === 'miss' ? 0 : state.combo + 1;
   return {
     ...state,
-    phase: 'playback',
-    elapsedMs: 0,
-    echoIndex: 0,
-    tempoScale: Math.max(MIN_TEMPO_SCALE, state.tempoScale * MISS_SLOWDOWN_FACTOR),
-    lastResult: 'waver',
-    recovering: false,
+    nextNoteIndex: state.nextNoteIndex + 1,
+    score:
+      judgement === 'miss'
+        ? state.score
+        : state.score + scoreFor(judgement, state.combo),
+    combo,
+    maxCombo: Math.max(state.maxCombo, combo),
+    perfectCount: state.perfectCount + (judgement === 'perfect' ? 1 : 0),
+    goodCount: state.goodCount + (judgement === 'good' ? 1 : 0),
+    missCount: state.missCount + (judgement === 'miss' ? 1 : 0),
+    lastJudgement: judgement,
+    lastJudgedNoteIndex: state.nextNoteIndex,
+    lastJudgementAtMs: state.elapsedMs,
   };
+}
+
+/**
+ * Advances the song clock and resolves any notes that have passed the Good
+ * window. Large deltas can miss several notes without leaving the model stuck.
+ */
+export function advanceViolin(state: ViolinState, deltaMs: number): ViolinState {
+  if (state.finished || state.phase === 'ready' || deltaMs <= 0) {
+    return state;
+  }
+
+  let next: ViolinState = {
+    ...state,
+    elapsedMs: state.elapsedMs + deltaMs,
+    phase:
+      state.phase === 'count-in' && state.elapsedMs + deltaMs >= RHYTHM_LEAD_IN_MS
+        ? 'playing'
+        : state.phase,
+  };
+
+  if (next.phase === 'playing') {
+    let note = RHYTHM_CHART[next.nextNoteIndex];
+    while (note && next.elapsedMs - note.timeMs > GOOD_WINDOW_MS) {
+      next = judgeCurrentNote(next, 'miss');
+      note = RHYTHM_CHART[next.nextNoteIndex];
+    }
+
+    const last = RHYTHM_CHART.at(-1);
+    if (
+      !note &&
+      last &&
+      next.elapsedMs >= last.timeMs + last.durationMs + RHYTHM_OUTRO_MS
+    ) {
+      next = { ...next, phase: 'finale', lastJudgement: 'none' };
+    }
+  }
+
+  if (next.phase === 'finale') {
+    const last = RHYTHM_CHART.at(-1);
+    const finaleStart = last
+      ? last.timeMs + last.durationMs + RHYTHM_OUTRO_MS
+      : RHYTHM_LEAD_IN_MS;
+    if (next.elapsedMs >= finaleStart + FINALE_HOLD_MS) {
+      next = { ...next, phase: 'complete', finished: true };
+    }
+  }
+
+  return next;
+}
+
+/**
+ * Judges one mapped keyboard/pointer lane. Early presses outside the timing
+ * window are ignored; a wrong mapped lane inside the window spends the note as
+ * a Miss so key-mashing cannot preserve a combo.
+ */
+export function pressViolinKey(state: ViolinState, keyName: string): ViolinState {
+  if (state.phase !== 'playing' || state.finished) {
+    return state;
+  }
+
+  const pressedPitch = getPitchByKey(keyName);
+  const note = RHYTHM_CHART[state.nextNoteIndex];
+  if (!pressedPitch || !note) {
+    return state;
+  }
+
+  const offsetMs = state.elapsedMs - note.timeMs;
+  if (Math.abs(offsetMs) > GOOD_WINDOW_MS) {
+    return state;
+  }
+
+  if (pressedPitch.id !== note.pitchId) {
+    return judgeCurrentNote(state, 'miss');
+  }
+
+  return judgeCurrentNote(
+    state,
+    Math.abs(offsetMs) <= PERFECT_WINDOW_MS ? 'perfect' : 'good',
+  );
+}
+
+export function currentChartNote(state: ViolinState): RhythmChartNote | undefined {
+  return RHYTHM_CHART[state.nextNoteIndex];
+}
+
+export function getPieceProgress(state: ViolinState): number {
+  if (RHYTHM_CHART.length === 0) {
+    return 1;
+  }
+  return Math.min(1, state.nextNoteIndex / RHYTHM_CHART.length);
 }
 
 export function isPieceComplete(state: ViolinState): boolean {
   return state.finished;
 }
 
-/** 0..1 fraction of the piece done, counting phrases and (roughly) the swell,
- * for warming the room art between phrases. */
-export function getPieceProgress(state: ViolinState): number {
-  if (state.phase === 'finale' || state.phase === 'complete') {
-    return 1;
-  }
-  const total = VIOLIN_PHRASES.length;
-  return Math.min(1, state.phraseIndex / total);
+/** Chart end, including the authored duration of its final note. */
+export function rhythmChartEndMs(): number {
+  const last = RHYTHM_CHART.at(-1);
+  return last ? last.timeMs + last.durationMs : RHYTHM_LEAD_IN_MS;
 }

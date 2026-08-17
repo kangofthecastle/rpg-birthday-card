@@ -233,9 +233,9 @@ export const VIOLIN_FINALE_PHRASES: readonly ViolinPhrase[] = [
 
 const FULL_NOTE_STREAM = VIOLIN_FINALE_PHRASES.flatMap((phrase) => phrase.notes);
 
-/** Measures 1–5, regrouped for the listen-and-echo game. The interactive
- * passage stops on the first G of its final displayed measure (physical K),
- * then hands off to the complete finale replay. */
+/** Measures 1–5, regrouped into seven compact sections for the rhythm chart.
+ * The interactive passage stops on the first G of its final displayed measure
+ * (physical K), then hands off to the golden story finale. */
 export const VIOLIN_PHRASES: readonly ViolinPhrase[] = [
   { id: 'game-page-1-opening', notes: FULL_NOTE_STREAM.slice(0, 4) },
   { id: 'game-page-2-rise', notes: FULL_NOTE_STREAM.slice(4, 9) },

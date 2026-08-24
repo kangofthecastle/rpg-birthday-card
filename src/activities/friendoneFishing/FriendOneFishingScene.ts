@@ -666,13 +666,6 @@ export class FriendOneFishingScene extends Phaser.Scene {
       );
       graphics.strokeRoundedRect(METER_X + 5, targetY, METER_WIDTH - 10, targetHeight, 5);
 
-      if (completed) {
-        const tickX = METER_X + METER_WIDTH - 12;
-        const tickY = targetY + targetHeight / 2;
-        graphics.lineStyle(2, 0xd8fff0, 0.9);
-        graphics.lineBetween(tickX - 5, tickY, tickX - 2, tickY + 3);
-        graphics.lineBetween(tickX - 2, tickY + 3, tickX + 4, tickY - 4);
-      }
     }
 
     const markerColor =

@@ -206,6 +206,7 @@ import {
   playMusic,
   playSfx,
   playViolinNote,
+  setMusicLevel,
   stopMusic,
   type MusicKey,
 } from '../game/audio';
@@ -503,6 +504,10 @@ const MUSIC_BY_LOCATION_ID: Readonly<Record<string, MusicKey>> = {
 
 const ACTIVITY_MUSIC_BY_ID: Readonly<Record<string, MusicKey | undefined>> = {
   'friendone-pc-fishing': 'music-friendone',
+};
+
+const ACTIVITY_MUSIC_LEVEL_BY_ID: Readonly<Record<string, number | undefined>> = {
+  'recipient-violin-piece': 0.28,
 };
 
 // RETAKE relies on its weapon, spike, defuse, and kill cues for its soundscape.
@@ -5508,15 +5513,20 @@ export class LocationScene extends Phaser.Scene {
     }
 
     const activityMusic = ACTIVITY_MUSIC_BY_ID[activityId];
+    const activityMusicLevel = ACTIVITY_MUSIC_LEVEL_BY_ID[activityId];
     const silencesMusic = MUSIC_SILENT_ACTIVITY_IDS.has(activityId);
     if (activityMusic) {
       playMusic(activityMusic, { fadeMs: 900 });
     } else if (silencesMusic) {
       stopMusic({ fadeMs: 900 });
+    } else if (activityMusicLevel !== undefined) {
+      setMusicLevel(activityMusicLevel, { fadeMs: 500 });
     }
     const resumeLocationMusic = () => {
       if (activityMusic || silencesMusic) {
         playMusic(locationMusicKey(this.location.id), { fadeMs: 1200 });
+      } else if (activityMusicLevel !== undefined) {
+        setMusicLevel(1, { fadeMs: 700 });
       }
     };
 
@@ -5560,20 +5570,23 @@ export class LocationScene extends Phaser.Scene {
 
         wakeScene();
         resumeLocationMusic();
-        if (this.location.keepsake && !replayingAfterEnding) {
+        const completedActivityId = completion.activityId ?? activityId;
+        const defersFishingReward =
+          completedActivityId === 'friendone-pc-fishing' && !replayingAfterEnding;
+        if (
+          this.location.keepsake &&
+          !replayingAfterEnding &&
+          !defersFishingReward
+        ) {
           playSfx('sfx-keepsake');
         }
         this.state = completeLocation(this.state, recordedCompletion);
 
         this.registry.set('runState', this.state);
 
-        const completedActivityId = completion.activityId ?? activityId;
         const completionStory = getActivityCompletionStory(completedActivityId);
         if (completionStory?.playerFacing) {
           this.facePlayer(completionStory.playerFacing);
-        }
-        if (completedActivityId === 'friendone-pc-fishing') {
-          await this.revealSecondKoi();
         }
         if (completedActivityId === RETAKE_ACTIVITY_ID) {
           this.removeFriendOneFollower();
@@ -5597,6 +5610,11 @@ export class LocationScene extends Phaser.Scene {
             await showLetterModal(this.location.rewardMessage);
           } else if (this.location.rewardMessage) {
             await this.pauseForDialogue(this.location.rewardMessage);
+          }
+
+          if (defersFishingReward) {
+            playSfx('sfx-keepsake');
+            await this.revealSecondKoi();
           }
 
           if (completionStory?.worldDialogue.length) {

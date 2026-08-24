@@ -424,8 +424,8 @@ function addDoormatAwakening(
     glow.setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.22);
     scene.tweens.add({
       targets: glow,
-      alpha: { from: 0.22, to: 1 },
-      duration: 1200,
+      alpha: { from: 0.08, to: 1 },
+      duration: 1000,
       yoyo: true,
       repeat: -1,
       ease: 'Sine.easeInOut',

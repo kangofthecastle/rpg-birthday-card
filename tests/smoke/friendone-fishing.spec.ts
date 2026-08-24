@@ -22,19 +22,22 @@ test('completes ____ PC fishing activity through test mode', async ({ page }) =>
   await expect(page.getByRole('dialog', { name: '____ Fishing' })).toBeVisible();
   await page.getByRole('button', { name: 'Complete fishing' }).click();
 
+  // The letter is the immediate reward. Its paper must close before the bowl,
+  // +1 KOI animation, and koi-arrival sound are allowed to fire.
+  await expect(page.getByText('____')).toBeVisible();
+  await expect(page.locator('.letter-modal__text')).toHaveText('');
+  await expect(page.locator('body')).not.toHaveAttribute('data-koi-transition');
+  await expect(page.locator('.collection-panel')).not.toContainText('____’s Letter');
+  await page.getByRole('button', { name: 'Continue' }).click();
+
   await expect(page.locator('body')).toHaveAttribute('data-friendone-fish-count', '2');
   await expect(page.locator('body')).toHaveAttribute('data-koi-transition', 'complete');
   await expect(page.locator('body')).not.toHaveAttribute('data-friendone-pc-ready');
 
-  await expect(page.getByText('____')).toBeVisible();
-  await expect(page.locator('.letter-modal__text')).toHaveText('');
-  await expect(page.locator('.collection-panel')).not.toContainText('____’s Letter');
-  await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.getByText('There. Now they have company.')).toBeVisible();
-  await page.getByRole('button', { name: 'Continue' }).click();
-  await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(page.getByText('PEW!')).toBeVisible();
-  await page.getByRole('button', { name: 'Continue' }).click();
+  for (let line = 0; line < 6; line += 1) {
+    await page.getByRole('button', { name: 'Continue' }).click();
+  }
 
   await expect(page.locator('.collection-panel')).toContainText('____’s Letter');
 });

@@ -415,6 +415,28 @@ describe('mute persistence', () => {
 });
 
 describe('music crossfades', () => {
+  it('ducks and restores the music bus without changing the SFX bus', async () => {
+    stubAudioContext();
+    const audio = await import('../../src/game/audio');
+
+    audio.initAudio();
+    const [, musicGain, sfxGain] = createdContexts[0].gains;
+    const originalSfxLevel = sfxGain.gain.value;
+
+    audio.setMusicLevel(0.28, { fadeMs: 500 });
+    expect(musicGain.gain.linearRampToValueAtTime).toHaveBeenCalledWith(
+      expect.closeTo(0.1995 * 0.28, 3),
+      0.5,
+    );
+    expect(sfxGain.gain.value).toBe(originalSfxLevel);
+
+    audio.setMusicLevel(1, { fadeMs: 700 });
+    expect(musicGain.gain.linearRampToValueAtTime).toHaveBeenCalledWith(
+      expect.closeTo(0.1995, 3),
+      0.7,
+    );
+  });
+
   it('fades in a new bed and fades out + disposes the previous one after fadeMs', async () => {
     vi.useFakeTimers();
     stubAudioContext();

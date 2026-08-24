@@ -101,11 +101,13 @@ test('plays the piece on the stand through test mode', async ({ page }) => {
   await expect(
     page.getByRole('dialog', { name: 'the piece on the stand' }),
   ).toBeVisible();
+  await expect(page.locator('body')).toHaveAttribute('data-music-level', '0.28');
 
   // Pre-completion the room shows NO awakening.
   await expect(page.locator('body')).not.toHaveAttribute('data-interior-awakened');
 
   await page.getByRole('button', { name: 'Finish the piece' }).click();
+  await expect(page.locator('body')).toHaveAttribute('data-music-level', '1');
 
   // The moment the piece completes (all three keepsakes now held), the interior
   // awakens IN PLACE — the scene wakes without re-running create(), and the

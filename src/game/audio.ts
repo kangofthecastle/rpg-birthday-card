@@ -132,6 +132,7 @@ interface AudioManagerState {
   sfxGain: GainNode | null;
   initialized: boolean;
   muted: boolean;
+  musicLevel: number;
   currentBed: MusicBedInstance | null;
   resolutionCache: Map<AudioKey, Promise<Resolution>>;
   fileBufferCache: Map<string, Promise<AudioBuffer | null>>;
@@ -144,6 +145,7 @@ const state: AudioManagerState = {
   sfxGain: null,
   initialized: false,
   muted: readStoredMuted(),
+  musicLevel: 1,
   currentBed: null,
   resolutionCache: new Map(),
   fileBufferCache: new Map(),
@@ -182,7 +184,7 @@ export function initAudio(): void {
     const musicGain = ctx.createGain();
     const sfxGain = ctx.createGain();
 
-    musicGain.gain.value = dbToGain(MUSIC_BUS_LEVEL_DB);
+    musicGain.gain.value = dbToGain(MUSIC_BUS_LEVEL_DB) * state.musicLevel;
     sfxGain.gain.value = dbToGain(SFX_BUS_LEVEL_DB);
     masterGain.gain.value = state.muted ? 0 : 1;
 
@@ -526,6 +528,32 @@ export function setMuted(muted: boolean): void {
 export function toggleMuted(): boolean {
   setMuted(!state.muted);
   return state.muted;
+}
+
+export interface SetMusicLevelOptions {
+  fadeMs?: number;
+}
+
+/** Temporarily scales the music bus without affecting SFX or mute state.
+ * Passing 1 restores the normal mix. Safe before audio initialization. */
+export function setMusicLevel(
+  level: number,
+  options: SetMusicLevelOptions = {},
+): void {
+  state.musicLevel = clamp01(level);
+  if (typeof document !== 'undefined') {
+    document.body.dataset.musicLevel = String(state.musicLevel);
+  }
+  if (!state.ctx || !state.musicGain) {
+    return;
+  }
+  fadeGainTo(
+    state.ctx,
+    state.musicGain.gain,
+    state.musicGain.gain.value,
+    dbToGain(MUSIC_BUS_LEVEL_DB) * state.musicLevel,
+    options.fadeMs ?? DEFAULT_MUSIC_FADE_MS,
+  );
 }
 
 // ---------------------------------------------------------------------------

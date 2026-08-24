@@ -1,12 +1,15 @@
 import Phaser from 'phaser';
 import {
-  CATCH_BAR_HEIGHT,
   FISHING_METER_HEIGHT,
-  FISH_TARGET_HEIGHT,
+  LINE_BREAK_MISSES,
   FRIEND_ONE_FISH_SEQUENCE,
+  TIMING_MARKER_HEIGHT,
+  TIMING_TARGET_COUNT,
+  attemptFishingTarget,
   createFishingRound,
   getFishingCompletion,
-  isFishInCatchBar,
+  getTimingTarget,
+  isMarkerInTarget,
   updateFishingRound,
   type FishConfig,
   type FishingRoundState,
@@ -39,8 +42,12 @@ const METER_X = 518;
 const METER_WIDTH = 48;
 const PROGRESS_X = 586;
 const PROGRESS_WIDTH = 16;
+const REEL_X = 497;
+const REEL_Y = METER_TOP + METER_HEIGHT / 2;
+const REEL_RADIUS = 16;
 const COMPLETION_DELAY_MS = 900;
 const NEXT_FISH_DELAY_MS = 850;
+const LINE_BREAK_RESET_DELAY_MS = 850;
 const POND_BACKGROUND_KEY = 'friendone-fishing-pond-dock';
 const POND_BACKGROUND_URL = '/assets/activities/friendone-fishing/pond-dock-v2.png';
 
@@ -72,7 +79,6 @@ const DEPTH_FISH_FX = 10; // koi glow, wake trail, vector-fish fallback
 const DEPTH_FISH = 11; // the pond fish sprite itself
 const DEPTH_MOTION = 20; // shimmer, fishing lines, bobbers, ripples
 const DEPTH_METER = 30; // catch-meter panel + bars
-const DEPTH_METER_FISH = 31; // fish icon shown inside the meter
 const DEPTH_HUD = 40; // name / counter / helper / transition text
 
 // Water-surface outline (scene 640x360 coords), sampled from the painted
@@ -103,6 +109,7 @@ export class FriendOneFishingScene extends Phaser.Scene {
   private currentFishIndex = 0;
   private caughtCount = 0;
   private pointerHeld = false;
+  private pointerPressed = false;
   private isTransitioning = false;
   private isFinalizing = false;
   private callbackDelivered = false;
@@ -129,7 +136,6 @@ export class FriendOneFishingScene extends Phaser.Scene {
   /** Fish ids whose sprite PNG was found and loaded; the rest render as vectors. */
   private readonly spriteReady = new Set<string>();
   private pondFishSprite?: Phaser.GameObjects.Image;
-  private meterFishSprite?: Phaser.GameObjects.Image;
 
   constructor(callbacks: FriendOneFishingSceneCallbacks = DEFAULT_CALLBACKS) {
     super('FriendOneFishingScene');
@@ -214,6 +220,7 @@ export class FriendOneFishingScene extends Phaser.Scene {
     }
 
     const holdActive = this.isHolding();
+    const attemptActive = this.consumeAttempt();
 
     // Drive the model from real elapsed time (clamped) rather than Phaser's
     // smoothed per-frame delta, so difficulty is wall-clock consistent regardless
@@ -224,9 +231,17 @@ export class FriendOneFishingScene extends Phaser.Scene {
       this.round = updateFishingRound(
         this.round,
         this.currentFish,
-        { holdActive },
         modelDelta,
       );
+
+      if (attemptActive) {
+        const attempt = attemptFishingTarget(this.round, this.currentFish);
+        this.round = attempt.state;
+
+        if (attempt.outcome === 'line-break') {
+          this.restartCurrentFishAfterLineBreak();
+        }
+      }
 
       if (getFishingCompletion(this.round)) {
         this.completeCurrentFish();
@@ -340,15 +355,18 @@ export class FriendOneFishingScene extends Phaser.Scene {
 
     this.input.on('pointerdown', () => {
       this.pointerHeld = true;
+      this.pointerPressed = true;
     });
     this.input.on('pointerup', () => {
       this.pointerHeld = false;
     });
     this.input.on('pointerupoutside', () => {
       this.pointerHeld = false;
+      this.pointerPressed = false;
     });
     this.input.on('gameout', () => {
       this.pointerHeld = false;
+      this.pointerPressed = false;
     });
   }
 
@@ -360,11 +378,21 @@ export class FriendOneFishingScene extends Phaser.Scene {
     );
   }
 
+  private consumeAttempt(): boolean {
+    const pressed = Boolean(
+      this.pointerPressed ||
+        (this.spaceKey && Phaser.Input.Keyboard.JustDown(this.spaceKey)) ||
+        (this.enterKey && Phaser.Input.Keyboard.JustDown(this.enterKey)),
+    );
+    this.pointerPressed = false;
+    return pressed;
+  }
+
   private updateHudText(): void {
     // Only the catch counter lives in the viewport now. The fish label and the
-    // drifting-hint line were removed at ____'s request; the "keep it in the
-    // green bar / Esc to leave" guidance lives in the controls strip beneath the
-    // viewport (see friendoneFishingActivity.ts).
+    // drifting-hint line were removed at ____'s request; the timing and line
+    // break guidance lives in the controls strip beneath the viewport (see
+    // friendoneFishingActivity.ts).
     this.counterText.setText(`Caught ${this.caughtCount}/${FRIEND_ONE_FISH_SEQUENCE.length}`);
   }
 
@@ -587,12 +615,9 @@ export class FriendOneFishingScene extends Phaser.Scene {
   private drawMeter(time: number): void {
     const graphics = this.meterGraphics;
     const meterScale = METER_HEIGHT / FISHING_METER_HEIGHT;
-    const barY = METER_TOP + this.round.catchBarY * meterScale;
-    const barHeight = CATCH_BAR_HEIGHT * meterScale;
-    const fishY = METER_TOP + this.round.fishY * meterScale;
-    const fishHeight = FISH_TARGET_HEIGHT * meterScale;
-    const progressHeight = METER_HEIGHT * this.round.progress;
-    const fishInBar = isFishInCatchBar(this.round, this.currentFish);
+    const markerY = METER_TOP + this.round.markerY * meterScale;
+    const markerHeight = Math.max(6, TIMING_MARKER_HEIGHT * meterScale);
+    const markerInTarget = isMarkerInTarget(this.round, this.currentFish);
 
     graphics.clear();
     graphics.fillStyle(0x102831, 0.94);
@@ -605,90 +630,149 @@ export class FriendOneFishingScene extends Phaser.Scene {
     graphics.lineStyle(2, 0xd0e8df, 0.55);
     graphics.strokeRoundedRect(METER_X, METER_TOP, METER_WIDTH, METER_HEIGHT, 8);
 
-    graphics.fillStyle(fishInBar ? 0x74efbc : 0x8fcfd7, fishInBar ? 0.68 : 0.46);
-    graphics.fillRoundedRect(METER_X + 4, barY, METER_WIDTH - 8, barHeight, 6);
-    graphics.lineStyle(2, fishInBar ? 0xd8ffe8 : 0xd6edf0, 0.82);
-    graphics.strokeRoundedRect(METER_X + 4, barY, METER_WIDTH - 8, barHeight, 6);
+    for (let index = 0; index < TIMING_TARGET_COUNT; index += 1) {
+      const target = getTimingTarget({ targetIndex: index }, this.currentFish);
+      const targetY = METER_TOP + (target.centerY - target.height / 2) * meterScale;
+      const targetHeight = target.height * meterScale;
+      const completed = index < this.round.targetIndex;
+      const active = index === this.round.targetIndex;
 
-    this.drawFishTarget(graphics, this.currentFish, fishY + fishHeight / 2, time);
+      graphics.fillStyle(
+        completed ? 0x74c9ae : active ? 0xe7b85d : 0x315866,
+        completed ? 0.48 : active ? 0.42 : 0.28,
+      );
+      graphics.fillRoundedRect(METER_X + 5, targetY, METER_WIDTH - 10, targetHeight, 5);
+      graphics.lineStyle(
+        active ? 2 : 1,
+        completed ? 0xb9ead9 : active ? 0xffe09a : 0x82a8ad,
+        active ? 0.92 : 0.52,
+      );
+      graphics.strokeRoundedRect(METER_X + 5, targetY, METER_WIDTH - 10, targetHeight, 5);
+
+      if (completed) {
+        const tickX = METER_X + METER_WIDTH - 12;
+        const tickY = targetY + targetHeight / 2;
+        graphics.lineStyle(2, 0xd8fff0, 0.9);
+        graphics.lineBetween(tickX - 5, tickY, tickX - 2, tickY + 3);
+        graphics.lineBetween(tickX - 2, tickY + 3, tickX + 4, tickY - 4);
+      }
+    }
+
+    const markerColor =
+      this.round.feedbackKind === 'line-break'
+        ? 0xd86a59
+        : this.round.feedbackKind === 'hit' || markerInTarget
+          ? 0xffdf7a
+          : 0xaeeef1;
+    const markerGlow = this.round.feedbackKind === 'hit' ? 0.45 + Math.sin(time / 45) * 0.12 : 0.24;
+    graphics.fillStyle(markerColor, markerGlow);
+    graphics.fillRoundedRect(METER_X + 1, markerY - markerHeight, METER_WIDTH - 2, markerHeight * 2, 4);
+    graphics.fillStyle(markerColor, 1);
+    graphics.fillRoundedRect(METER_X + 2, markerY - markerHeight / 2, METER_WIDTH - 4, markerHeight, 3);
+    graphics.lineStyle(1, 0xf4ffff, 0.75);
+    graphics.strokeRoundedRect(METER_X + 2, markerY - markerHeight / 2, METER_WIDTH - 4, markerHeight, 3);
 
     graphics.fillStyle(0x263238, 1);
     graphics.fillRoundedRect(PROGRESS_X, METER_TOP, PROGRESS_WIDTH, METER_HEIGHT, 6);
-    graphics.fillStyle(this.currentFish.isSpecial ? 0xffbc58 : 0xa9e58e, 1);
-    graphics.fillRoundedRect(
-      PROGRESS_X,
-      METER_TOP + METER_HEIGHT - progressHeight,
-      PROGRESS_WIDTH,
-      progressHeight,
-      6,
-    );
     graphics.lineStyle(2, 0xf4ead0, 0.55);
     graphics.strokeRoundedRect(PROGRESS_X, METER_TOP, PROGRESS_WIDTH, METER_HEIGHT, 6);
-  }
 
-  private drawFishTarget(
-    graphics: Phaser.GameObjects.Graphics,
-    fish: FishConfig,
-    centerY: number,
-    time: number,
-  ): void {
-    const centerX = METER_X + METER_WIDTH / 2;
-
-    if (fish.isSpecial) {
-      const pulse = 0.6 + Math.sin(time / 140) * 0.25;
-      graphics.fillStyle(0xffd36d, 0.24 + pulse * 0.28);
-      graphics.fillCircle(centerX, centerY, 24 + pulse * 5);
-      graphics.lineStyle(2, 0xfff1a8, 0.72);
-      graphics.strokeCircle(centerX, centerY, 23 + pulse * 3);
-    }
-
-    if (this.spriteReady.has(fish.id)) {
-      this.drawMeterFishSprite(fish.id, centerX, centerY);
-      if (fish.isSpecial) {
-        // Procedural sparkle over the (glow-free) koi cutout in the meter too.
-        graphics.fillStyle(0xfff3af, 0.88);
-        graphics.fillCircle(centerX + 17, centerY - 10, 2.5);
-        graphics.fillCircle(centerX - 18, centerY + 9, 2);
+    const segmentGap = 5;
+    const segmentHeight = (METER_HEIGHT - 12 - segmentGap * (LINE_BREAK_MISSES - 1)) / LINE_BREAK_MISSES;
+    for (let index = 0; index < LINE_BREAK_MISSES; index += 1) {
+      const y = METER_TOP + 6 + index * (segmentHeight + segmentGap);
+      const damaged = index < this.round.misses;
+      const broken = this.round.feedbackKind === 'line-break';
+      graphics.fillStyle(broken ? 0x6f3b3b : damaged ? 0xbc6651 : 0xb8ddd2, broken ? 0.45 : 0.9);
+      graphics.fillRoundedRect(PROGRESS_X + 4, y, PROGRESS_WIDTH - 8, segmentHeight, 3);
+      if (damaged || broken) {
+        graphics.lineStyle(1, 0xffb08d, 0.9);
+        graphics.lineBetween(PROGRESS_X + 3, y + segmentHeight * 0.38, PROGRESS_X + 12, y + segmentHeight * 0.55);
+        graphics.lineBetween(PROGRESS_X + 12, y + segmentHeight * 0.55, PROGRESS_X + 5, y + segmentHeight * 0.72);
       }
-      return;
     }
 
-    if (this.meterFishSprite) {
-      this.meterFishSprite.setVisible(false);
-    }
-
-    if (fish.isSpecial) {
-      graphics.fillStyle(0xfff3af, 0.88);
-      graphics.fillCircle(centerX + 17, centerY - 10, 2.5);
-      graphics.fillCircle(centerX - 18, centerY + 9, 2);
-    }
-
-    graphics.fillStyle(fish.isSpecial ? 0xffa044 : 0x54d8d0, 1);
-    graphics.fillEllipse(centerX, centerY, 34, 18);
-    graphics.fillTriangle(centerX - 18, centerY, centerX - 30, centerY - 10, centerX - 30, centerY + 10);
-    graphics.fillStyle(0x173139, 1);
-    graphics.fillCircle(centerX + 9, centerY - 3, 2);
+    this.drawReel(graphics);
   }
 
-  private drawMeterFishSprite(fishId: string, centerX: number, centerY: number): void {
-    const cfg = fishSpriteFor(fishId);
-    if (!this.meterFishSprite) {
-      this.meterFishSprite = this.add
-        .image(centerX, centerY, cfg.key)
-        .setOrigin(0.5)
-        .setDepth(DEPTH_METER_FISH);
-    } else if (this.meterFishSprite.texture.key !== cfg.key) {
-      this.meterFishSprite.setTexture(cfg.key);
+  private drawReel(graphics: Phaser.GameObjects.Graphics): void {
+    const caught = this.round.feedbackKind === 'hit';
+    const missed = this.round.feedbackKind === 'miss';
+    const broken = this.round.feedbackKind === 'line-break';
+    const angle = this.round.reelAngle;
+    const outline = broken ? 0xc56e5f : caught ? 0xffd36d : missed ? 0xe39a68 : 0xc9e4dc;
+
+    // A deliberately simple, flat 2D reel mounted on the meter's side.
+    graphics.lineStyle(3, caught ? 0xffd36d : 0x789e99, caught ? 0.85 : 0.55);
+    graphics.lineBetween(REEL_X + REEL_RADIUS - 1, REEL_Y, METER_X, REEL_Y);
+    graphics.fillStyle(0x17343d, 1);
+    graphics.fillCircle(REEL_X, REEL_Y, REEL_RADIUS + 2);
+    graphics.lineStyle(caught ? 3 : 2, outline, 0.96);
+    graphics.strokeCircle(REEL_X, REEL_Y, REEL_RADIUS);
+    graphics.fillStyle(0x294f58, 1);
+    graphics.fillCircle(REEL_X, REEL_Y, 11);
+    graphics.lineStyle(1, 0x9bc3ba, 0.52);
+    graphics.strokeCircle(REEL_X, REEL_Y, 8);
+    graphics.strokeCircle(REEL_X, REEL_Y, 5);
+    graphics.lineStyle(2, outline, 0.9);
+    for (let spoke = 0; spoke < 4; spoke += 1) {
+      const spokeAngle = angle + (Math.PI * 2 * spoke) / 4;
+      graphics.lineBetween(
+        REEL_X,
+        REEL_Y,
+        REEL_X + Math.cos(spokeAngle) * 10,
+        REEL_Y + Math.sin(spokeAngle) * 10,
+      );
     }
-    const source = this.textures.get(cfg.key).getSourceImage();
-    const scale = cfg.meterWidth / Math.max(1, source.width);
-    // In the meter the fish points right (canonical art orientation).
-    this.meterFishSprite
-      .setVisible(true)
-      .setPosition(centerX, centerY)
-      .setScale(scale)
-      .setFlipX(false)
-      .setRotation(0);
+    const crankX = REEL_X + Math.cos(angle) * 14;
+    const crankY = REEL_Y + Math.sin(angle) * 14;
+    graphics.lineStyle(2, outline, 1);
+    graphics.lineBetween(
+      REEL_X + Math.cos(angle) * 7,
+      REEL_Y + Math.sin(angle) * 7,
+      crankX,
+      crankY,
+    );
+    graphics.fillStyle(outline, 1);
+    graphics.fillCircle(crankX, crankY, 3.5);
+    graphics.fillStyle(0x102831, 1);
+    graphics.fillCircle(REEL_X, REEL_Y, 3);
+
+    if (caught) {
+      // The pawl drops into the reel for the brief model-level lock interval.
+      graphics.fillStyle(0xffd36d, 1);
+      graphics.fillTriangle(
+        REEL_X + 7,
+        REEL_Y - 20,
+        REEL_X + 15,
+        REEL_Y - 14,
+        REEL_X + 8,
+        REEL_Y - 9,
+      );
+    }
+  }
+
+  private restartCurrentFishAfterLineBreak(): void {
+    const fishIndex = this.currentFishIndex;
+    this.pointerHeld = false;
+    this.pointerPressed = false;
+    this.behavior = spookFish(this.behavior);
+    this.transitionText.setText('Line snapped');
+
+    this.time.delayedCall(LINE_BREAK_RESET_DELAY_MS, () => {
+      if (
+        this.callbackDelivered ||
+        this.isFinalizing ||
+        this.isTransitioning ||
+        this.currentFishIndex !== fishIndex
+      ) {
+        return;
+      }
+
+      this.wake = [];
+      this.resetBehaviorForCurrentFish();
+      this.transitionText.setText('');
+    });
   }
 
   private completeCurrentFish(): void {
@@ -703,6 +787,7 @@ export class FriendOneFishingScene extends Phaser.Scene {
     };
     this.caughtCount += 1;
     this.pointerHeld = false;
+    this.pointerPressed = false;
     // The hooked fish is landed: it darts off the bobber.
     this.behavior = spookFish(this.behavior);
 
@@ -725,9 +810,8 @@ export class FriendOneFishingScene extends Phaser.Scene {
 
     this.currentFishIndex += 1;
     this.round = createFishingRound(this.currentFish, {
-      catchBarY: 142,
-      fishDirection: this.currentFishIndex % 2 === 0 ? 1 : -1,
-      fishY: 124 + this.currentFishIndex * 24,
+      markerDirection: this.currentFishIndex % 2 === 0 ? 1 : -1,
+      markerY: 132 + this.currentFishIndex * 22,
     });
     this.resetBehaviorForCurrentFish();
     this.isTransitioning = false;
@@ -750,6 +834,7 @@ export class FriendOneFishingScene extends Phaser.Scene {
 
     this.callbackDelivered = true;
     this.pointerHeld = false;
+    this.pointerPressed = false;
     this.callbacks.onCancel();
   }
 

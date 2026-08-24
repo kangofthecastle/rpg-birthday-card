@@ -807,12 +807,13 @@ export class LocationScene extends Phaser.Scene {
 
     this.interactKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.E);
     this.promptText = this.add
-      .text(this.fixedScreenX(24), this.fixedScreenY(this.scale.height - 64), '', {
+      .text(this.fixedScreenX(this.scale.width / 2), this.fixedScreenY(this.scale.height - 64), '', {
         color: '#fff7e8',
         backgroundColor: '#1b1f1f',
         padding: { x: 12, y: 8 },
         fontSize: '18px',
       })
+      .setOrigin(0.5, 0)
       .setScrollFactor(0)
       .setScale(1 / this.cameraZoom)
       .setDepth(1000)

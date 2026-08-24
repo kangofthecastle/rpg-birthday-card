@@ -4,9 +4,15 @@
 // windows, score, combo, and automatic misses can therefore be tested without a
 // renderer and remain stable when the browser drops frames.
 
-import { VIOLIN_PHRASES, getPitch } from './melody';
+import { VIOLIN_FINALE_PHRASES } from './melody';
 
-export type ViolinPhase = 'ready' | 'count-in' | 'playing' | 'finale' | 'complete';
+export type ViolinPhase =
+  | 'ready'
+  | 'count-in'
+  | 'playing'
+  | 'retry'
+  | 'finale'
+  | 'complete';
 export type ViolinJudgement = 'none' | 'perfect' | 'good' | 'miss';
 
 export interface RhythmChartNote {
@@ -14,6 +20,7 @@ export interface RhythmChartNote {
   readonly phraseIndex: number;
   readonly noteIndex: number;
   readonly pitchId: string;
+  readonly laneIndex: number;
   readonly timeMs: number;
   readonly durationMs: number;
 }
@@ -21,7 +28,6 @@ export interface RhythmChartNote {
 export interface RhythmLane {
   readonly key: string;
   readonly inputCode: string;
-  readonly name: string;
 }
 
 export interface ViolinState {
@@ -44,44 +50,74 @@ export interface ViolinState {
 
 /** Four broad pitch bands keep the chart readable and comfortable to play. */
 export const RHYTHM_LANES: readonly RhythmLane[] = [
-  { key: 'D', inputCode: 'D', name: 'Low' },
-  { key: 'F', inputCode: 'F', name: 'Mid' },
-  { key: 'J', inputCode: 'J', name: 'High' },
-  { key: 'K', inputCode: 'K', name: 'Peak' },
+  { key: 'D', inputCode: 'D' },
+  { key: 'F', inputCode: 'F' },
+  { key: 'J', inputCode: 'J' },
+  { key: 'K', inputCode: 'K' },
 ] as const;
 export const RHYTHM_KEY_HINT = RHYTHM_LANES.map((lane) => lane.key).join(' ');
 
-/** The original 100 BPM passage is relaxed to 75 BPM for the playable chart. */
-export const RHYTHM_TIME_SCALE = 4 / 3;
+/** The original 100 BPM passage is relaxed to 79 BPM for the playable chart. */
+export const RHYTHM_TIME_SCALE = 100 / 79;
 export const RHYTHM_BEAT_MS = 800;
 export const RHYTHM_LEAD_IN_MS = RHYTHM_BEAT_MS * 3;
+/** Travel time from the top of the runway to the timing line. */
+export const RHYTHM_NOTE_APPROACH_MS = 2100;
+export const RHYTHM_FINAL_NOTE_DURATION_MS = 2000;
 export const PERFECT_WINDOW_MS = 115;
 export const GOOD_WINDOW_MS = 260;
+/** A strong run is required, but misses never consume an attempt. */
+export const VIOLIN_PASS_SCORE = 60_000;
+export const VIOLIN_MISS_PENALTY = 1_000;
 /** A brief hold after the chart before the room opens into its golden finale. */
 export const RHYTHM_OUTRO_MS = 700;
-export const FINALE_HOLD_MS = 2600;
-export const VIOLIN_FINALE_CAPTION = 'Follow the light';
+export const FINALE_HOLD_MS = 5000;
 
-export function rhythmLaneIndexForPitch(pitchId: string): number {
-  const graphStep = getPitch(pitchId)?.graphStep ?? 0;
-  return Math.min(RHYTHM_LANES.length - 1, Math.floor(graphStep / 3));
-}
+/** Hand-balanced four-lane contour for the complete passage. Notes within two
+ * diatonic steps may share a key; larger leaps always change lanes, melodic
+ * direction is preserved, and no lane repeats more than three times. */
+const RHYTHM_LANE_PHRASES: readonly (readonly number[])[] = [
+  [2, 2, 1, 2],
+  [2, 3, 3, 2, 2, 1],
+  [1, 0, 1, 1],
+  [0, 1, 1, 0],
+  [0, 0, 1, 2],
+  [2, 1, 2, 1],
+  [2, 1, 1, 1],
+  [2, 3, 2, 1, 2, 2],
+  [3, 3, 2, 2, 1],
+  [1, 0, 1, 1],
+  [0, 1, 1, 0],
+  [0, 0, 1, 2, 2, 1],
+  [2, 3, 1, 1],
+] as const;
 
-/** Builds one continuous chart from the piece's seven interactive measures. */
+/** Builds one continuous chart through the complete passage that the previous
+ * game iteration played during its automatic post-game finale. */
 export function buildRhythmChart(): readonly RhythmChartNote[] {
   const chart: RhythmChartNote[] = [];
-  let cursorMs = RHYTHM_LEAD_IN_MS;
+  let cursorMs = RHYTHM_LEAD_IN_MS + RHYTHM_NOTE_APPROACH_MS;
 
-  VIOLIN_PHRASES.forEach((phrase, phraseIndex) => {
+  VIOLIN_FINALE_PHRASES.forEach((phrase, phraseIndex) => {
     phrase.notes.forEach((note, noteIndex) => {
+      const laneIndex = RHYTHM_LANE_PHRASES[phraseIndex]?.[noteIndex];
+      if (laneIndex === undefined) {
+        throw new Error(`Missing rhythm lane for phrase ${phraseIndex}, note ${noteIndex}`);
+      }
+      const isFinalNote =
+        phraseIndex === VIOLIN_FINALE_PHRASES.length - 1 &&
+        noteIndex === phrase.notes.length - 1;
       cursorMs += Math.round((note.delayBeforeMs ?? 0) * RHYTHM_TIME_SCALE);
       chart.push({
         index: chart.length,
         phraseIndex,
         noteIndex,
         pitchId: note.pitchId,
+        laneIndex,
         timeMs: cursorMs,
-        durationMs: Math.round(note.durationMs * RHYTHM_TIME_SCALE),
+        durationMs: isFinalNote
+          ? RHYTHM_FINAL_NOTE_DURATION_MS
+          : Math.round(note.durationMs * RHYTHM_TIME_SCALE),
       });
       cursorMs += Math.round(note.durationMs * RHYTHM_TIME_SCALE);
     });
@@ -112,6 +148,9 @@ export function createViolinState(): ViolinState {
 
 /** Opens the count-in only after the player has deliberately started the song. */
 export function beginViolin(state: ViolinState): ViolinState {
+  if (state.phase === 'retry') {
+    return { ...createViolinState(), phase: 'count-in' };
+  }
   if (state.phase !== 'ready') {
     return state;
   }
@@ -133,7 +172,7 @@ function judgeCurrentNote(
     nextNoteIndex: state.nextNoteIndex + 1,
     score:
       judgement === 'miss'
-        ? state.score
+        ? Math.max(0, state.score - VIOLIN_MISS_PENALTY)
         : state.score + scoreFor(judgement, state.combo),
     combo,
     maxCombo: Math.max(state.maxCombo, combo),
@@ -151,7 +190,12 @@ function judgeCurrentNote(
  * window. Large deltas can miss several notes without leaving the model stuck.
  */
 export function advanceViolin(state: ViolinState, deltaMs: number): ViolinState {
-  if (state.finished || state.phase === 'ready' || deltaMs <= 0) {
+  if (
+    state.finished ||
+    state.phase === 'ready' ||
+    state.phase === 'retry' ||
+    deltaMs <= 0
+  ) {
     return state;
   }
 
@@ -177,7 +221,11 @@ export function advanceViolin(state: ViolinState, deltaMs: number): ViolinState 
       last &&
       next.elapsedMs >= last.timeMs + last.durationMs + RHYTHM_OUTRO_MS
     ) {
-      next = { ...next, phase: 'finale', lastJudgement: 'none' };
+      next = {
+        ...next,
+        phase: next.score >= VIOLIN_PASS_SCORE ? 'finale' : 'retry',
+        lastJudgement: 'none',
+      };
     }
   }
 
@@ -217,7 +265,7 @@ export function pressViolinKey(state: ViolinState, keyName: string): ViolinState
     return state;
   }
 
-  const expectedLane = RHYTHM_LANES[rhythmLaneIndexForPitch(note.pitchId)];
+  const expectedLane = RHYTHM_LANES[note.laneIndex];
   if (pressedLane !== expectedLane) {
     return judgeCurrentNote(state, 'miss');
   }

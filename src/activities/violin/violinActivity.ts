@@ -3,7 +3,7 @@ import { addKeyboardActivation } from '../activityDom';
 import { createActivityCloseButton } from '../activityShell';
 import type { ViolinSceneCallbacks } from './ViolinScene';
 import { prepareViolinSamples } from '../../game/audio';
-import { RHYTHM_KEY_HINT } from './violinModel';
+import { RHYTHM_KEY_HINT, VIOLIN_PASS_SCORE } from './violinModel';
 import './violin.css';
 
 const CLOSE_ART_URL = '/assets/activities/violin/close-x.png';
@@ -68,7 +68,7 @@ export function createViolinActivity(
           <div class="activity-shell__viewport">
             <div class="violin-game__host" data-violin-host></div>
           </div>
-          <p class="activity-shell__controls">Space or tap to begin · play each note at the golden line · ${RHYTHM_KEY_HINT} · Esc to leave</p>
+          <p class="activity-shell__controls">Space or tap to begin · play each note at the line · ${RHYTHM_KEY_HINT} · score ${VIOLIN_PASS_SCORE.toLocaleString()} to pass · Esc to leave</p>
           ${
             testMode
               ? '<div class="activity-shell__actions"><button type="button" data-violin-test-complete>Finish the piece</button></div>'

@@ -15,7 +15,7 @@ describe('galaxy letter ending', () => {
     expect(GALAXY_STAR_VARIANTS).toHaveLength(4);
     expect(new Set(GALAXY_STAR_VARIANTS.map(({ key }) => key)).size).toBe(4);
     expect(GALAXY_STAR_VARIANTS.every(({ url }) => url.endsWith('.png'))).toBe(true);
-    expect(GALAXY_STAR_VARIANTS.every(({ displaySize }) => displaySize >= 60)).toBe(true);
+    expect(GALAXY_STAR_VARIANTS.every(({ displaySize }) => displaySize >= 80)).toBe(true);
   });
 
   it('lights every letter-star with one violin action', () => {

@@ -5227,7 +5227,7 @@ export class LocationScene extends Phaser.Scene {
       (position, index): GalaxyLetterStarDisplay => {
         const variant = GALAXY_STAR_VARIANTS[index % GALAXY_STAR_VARIANTS.length];
         const glow = this.add
-          .ellipse(position.x, position.y, 96, 96, 0xffd46f, 0)
+          .ellipse(position.x, position.y, 122, 122, 0xffd46f, 0)
           .setBlendMode(Phaser.BlendModes.ADD)
           .setDepth(809);
         const flare = this.add

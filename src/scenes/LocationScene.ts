@@ -4,6 +4,7 @@ import {
   ENDING_SKY_KEY,
   ENDING_WATER_KEY,
   GALAXY_GROUND_KEY,
+  GALAXY_STAR_VARIANTS,
   GALAXY_VIOLIN_KEY,
   SHORE_WATER_KEY,
   FRIEND_TWO_SPRITE,
@@ -465,7 +466,7 @@ type ClearingCurrentDisplay = ClearingKoiDisplay | ClearingMoteDisplay;
 interface GalaxyLetterStarDisplay {
   readonly index: number;
   readonly glow: Phaser.GameObjects.Ellipse;
-  readonly star: Phaser.GameObjects.Star;
+  readonly star: Phaser.GameObjects.Container;
   lit: boolean;
   collected: boolean;
 }
@@ -1835,14 +1836,26 @@ export class LocationScene extends Phaser.Scene {
       return;
     }
 
-    // Awakened: a soft bloom of light BENEATH the water only. The former warm
-    // seam highlight (a lapping gleam plus a bright band straddling the
-    // waterline) read as a thick, washed-out horizontal bar rather than a wet
-    // gleam, so it's dropped — the feathered damp bank above already carries the
-    // land→water transition. Only the cool underwater bloom remains.
+    // Awakened: a soft bloom of light BENEATH the water only. Fade it in through
+    // the full depth of the painted band; starting a solid rectangle partway down
+    // the water created a conspicuous dark-to-light horizontal cut after the
+    // violin game. The feathered damp bank above still carries the land→water
+    // transition, while this gradient lets the light feel submerged.
     const glow = this.add.graphics().setDepth(-16);
-    glow.fillStyle(0x7fd8ff, 0.14);
-    glow.fillRect(0, top + tile * 0.6, width, bandHeight);
+    this.fillSmoothVerticalBand(
+      glow,
+      0,
+      top,
+      width,
+      bandHeight,
+      () => 0x7fd8ff,
+      (t) => {
+        // Smoothstep keeps both ends of the fade soft: no visible line where the
+        // glow begins, and no sudden jump at the lower edge of the texture.
+        const eased = t * t * (3 - 2 * t);
+        return 0.16 * eased;
+      },
+    );
     this.tweens.add({
       targets: glow,
       alpha: { from: 0.7, to: 1 },
@@ -5212,14 +5225,21 @@ export class LocationScene extends Phaser.Scene {
     const model = createGalaxyLetterState(letters.length);
     const stars = layoutGalaxyLetterStars(letters.length).map(
       (position, index): GalaxyLetterStarDisplay => {
+        const variant = GALAXY_STAR_VARIANTS[index % GALAXY_STAR_VARIANTS.length];
         const glow = this.add
           .ellipse(position.x, position.y, 74, 74, 0x9cc8ff, 0)
           .setBlendMode(Phaser.BlendModes.ADD)
           .setDepth(809);
+        const flare = this.add
+          .image(0, 0, variant.key)
+          .setDisplaySize(variant.displaySize, variant.displaySize)
+          // Optical overlays are authored as light. Additive blending keeps the
+          // rays crisp while discarding any dark fringe from transparent PNG
+          // resampling, so they read as plain starlight rather than stickers.
+          .setBlendMode(Phaser.BlendModes.ADD);
         const star = this.add
-          .star(position.x, position.y, 5, 8, 22, 0xfff1b8, 0.12)
-          .setStrokeStyle(2, 0xb9d9ff, 0.16)
-          .setScale(0.65)
+          .container(position.x, position.y, [flare])
+          .setAlpha(0.12)
           .setDepth(810);
         return { index, glow, star, lit: false, collected: false };
       },
@@ -5345,7 +5365,7 @@ export class LocationScene extends Phaser.Scene {
 
   private lightGalaxyLetterStar(display: GalaxyLetterStarDisplay): void {
     display.lit = true;
-    display.star.setAlpha(1).setStrokeStyle(2, 0xe5f2ff, 0.9);
+    display.star.setAlpha(1);
     display.glow.setAlpha(0.48);
     this.tweens.add({
       targets: display.star,

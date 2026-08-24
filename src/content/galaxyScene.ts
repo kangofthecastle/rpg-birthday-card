@@ -45,3 +45,30 @@ export const SHORE_WATER_URL = '/assets/tiles/shore-water.png';
 // ending-specific cutout has no floor stand, unlike the room inspection art.
 export const GALAXY_VIOLIN_KEY = 'galaxy-ending-violin';
 export const GALAXY_VIOLIN_URL = '/assets/ending/violin-standalone.png';
+
+// Painted flare variants for the ten collectible letter-stars. Cycling a small
+// family keeps the dotted field varied without making any one letter feel more
+// important than another. The source PNGs are square transparent cutouts; the
+// per-variant display sizes compensate for their different ray silhouettes.
+export const GALAXY_STAR_VARIANTS = [
+  {
+    key: 'galaxy-star-flare-1',
+    url: '/assets/ending/stars/star-flare-1.png',
+    displaySize: 40,
+  },
+  {
+    key: 'galaxy-star-flare-2',
+    url: '/assets/ending/stars/star-flare-2.png',
+    displaySize: 42,
+  },
+  {
+    key: 'galaxy-star-flare-3',
+    url: '/assets/ending/stars/star-flare-3.png',
+    displaySize: 42,
+  },
+  {
+    key: 'galaxy-star-flare-4',
+    url: '/assets/ending/stars/star-flare-4.png',
+    displaySize: 38,
+  },
+] as const;

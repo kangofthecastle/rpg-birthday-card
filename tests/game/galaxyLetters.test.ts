@@ -8,8 +8,15 @@ import {
   lightAllGalaxyLetters,
   readGalaxyLetter,
 } from '../../src/game/galaxyLetters';
+import { GALAXY_STAR_VARIANTS } from '../../src/content/galaxyScene';
 
 describe('galaxy letter ending', () => {
+  it('cycles several painted flare variants across the letter-stars', () => {
+    expect(GALAXY_STAR_VARIANTS).toHaveLength(4);
+    expect(new Set(GALAXY_STAR_VARIANTS.map(({ key }) => key)).size).toBe(4);
+    expect(GALAXY_STAR_VARIANTS.every(({ url }) => url.endsWith('.png'))).toBe(true);
+  });
+
   it('lights every letter-star with one violin action', () => {
     const start = createGalaxyLetterState(10);
     const lit = lightAllGalaxyLetters(start);

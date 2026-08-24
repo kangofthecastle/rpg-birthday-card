@@ -33,6 +33,7 @@ import {
   ENDING_WATER_URL,
   GALAXY_GROUND_KEY,
   GALAXY_GROUND_URL,
+  GALAXY_STAR_VARIANTS,
   GALAXY_VIOLIN_KEY,
   GALAXY_VIOLIN_URL,
   SHORE_WATER_KEY,
@@ -136,6 +137,9 @@ export class BootScene extends Phaser.Scene {
     this.load.image(ENDING_SKY_KEY, ENDING_SKY_URL);
     this.load.image(ENDING_WATER_KEY, ENDING_WATER_URL);
     this.load.image(GALAXY_VIOLIN_KEY, GALAXY_VIOLIN_URL);
+    for (const variant of GALAXY_STAR_VARIANTS) {
+      this.load.image(variant.key, variant.url);
+    }
   }
 
   create(): void {

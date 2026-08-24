@@ -62,7 +62,7 @@ export interface FishingAttemptResult {
 export const FRIEND_ONE_FISH_SEQUENCE: readonly FishConfig[] = [
   {
     id: 'pond-drifter',
-    label: 'Silver Minnow',
+    label: 'Silver minnow',
     isSpecial: false,
     speedPerSecond: 66,
     timingSpeedPerSecond: 215,
@@ -71,7 +71,7 @@ export const FRIEND_ONE_FISH_SEQUENCE: readonly FishConfig[] = [
   },
   {
     id: 'reed-darter',
-    label: 'Striped Perch',
+    label: 'Striped perch',
     isSpecial: false,
     speedPerSecond: 94,
     timingSpeedPerSecond: 275,
@@ -80,7 +80,7 @@ export const FRIEND_ONE_FISH_SEQUENCE: readonly FishConfig[] = [
   },
   {
     id: 'glowing-koi',
-    label: 'Glowing Koi',
+    label: 'Glowing koi',
     isSpecial: true,
     speedPerSecond: 120,
     timingSpeedPerSecond: 350,

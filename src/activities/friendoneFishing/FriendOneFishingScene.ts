@@ -805,7 +805,7 @@ export class FriendOneFishingScene extends Phaser.Scene {
 
     if (this.currentFishIndex === FRIEND_ONE_FISH_SEQUENCE.length - 1) {
       this.isFinalizing = true;
-      this.transitionText.setText('Glowing Koi caught');
+      this.transitionText.setText('Glowing koi caught');
       this.time.delayedCall(COMPLETION_DELAY_MS, () => this.completeActivity());
       return;
     }

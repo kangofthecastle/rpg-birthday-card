@@ -20,9 +20,9 @@ describe('fishingModel', () => {
       'glowing-koi',
     ]);
     expect(FRIEND_ONE_FISH_SEQUENCE.map((fish) => fish.label)).toEqual([
-      'Silver Minnow',
-      'Striped Perch',
-      'Glowing Koi',
+      'Silver minnow',
+      'Striped perch',
+      'Glowing koi',
     ]);
 
     const [drifter, darter, koi] = FRIEND_ONE_FISH_SEQUENCE;

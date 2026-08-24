@@ -1,53 +1,54 @@
 # A-Game
 
-A cozy, browser-only, keyboard-driven RPG built as a birthday present for
-____ — a small world she gets pulled into through a booting PC, with her
-friends' houses to visit, a minigame inside each friend's computer, keepsakes
-to collect, and an ending that washes the world away into an ocean under a
-galaxy. One sitting, no save system, no fail states.
+A short birthday adventure made for ____.
 
-Built with Phaser 3, TypeScript, and Vite.
+____ wakes up in a familiar world that is not quite hers. She visits ____ and
+____, plays the games waiting on their computers, collects a few keepsakes,
+and follows a song toward a final celebration under the stars.
 
-## Play
+Built with Phaser 3, TypeScript, and Vite, with Electron packaging for Windows
+and macOS. Best played in one sitting with sound on.
+
+## Run
 
 ```bash
 npm install
-npx playwright install chromium   # once, for the smoke tests
-npm run dev                       # open http://127.0.0.1:5173
+npm run dev
 ```
 
-Move with WASD/arrows, interact with E, advance dialogue with Enter/Space,
-M mutes audio. SPLIT.EXE uses the mouse to aim.
+Open [http://127.0.0.1:5173](http://127.0.0.1:5173).
 
-## The flow
+## Controls
 
-Boot screen → ____'s room (her PC says NO SIGNAL) → the path → ____'s house
-(PC fishing game → Glowing Koi Scale) and ____'s house (SPLIT.EXE →
-Defused Spike Charm) → home again (the violin calls to her → ____'s Sheet Music)
-→ the Lantern Clearing unlocks → the ending → letters.
+- WASD or arrow keys — move
+- E — interact
+- Enter, Space, or click — continue dialogue
+- M — mute
+- Esc — leave an activity
 
-## For ____, before gifting
-
-- **Letters**: paste friends' letters into `src/content/letters.ts` — plain
-  `{ from, text }` entries, instructions in the file.
-- **Music** (optional): drop files into `public/audio/` named per
-  `public/audio/README.md`. Anything missing falls back to built-in synth.
-- **Playtest**: `npm run dev` and play start to finish once.
+Each minigame shows its own controls. The game includes fishing, RETAKE.EXE, a
+violin performance, Boatigami, a galaxy finale with ten letter-stars, and a
+post-ending photo wall.
 
 ## Development
 
 ```bash
-npm test          # vitest unit tests
-npm run build     # typecheck + production build
-npm run smoke     # Playwright end-to-end suite (boots real browser)
-node scripts/write-dev-maps.mjs   # regenerate public/maps/*.tmj (never hand-edit those)
+npm test          # unit and component tests
+npm run build     # type-check and production build
+npm run smoke     # Playwright end-to-end tests
+npm run package   # desktop package for the current OS
 ```
 
-Design docs live in `docs/superpowers/specs/` (see
-`2026-07-07-recipient-birthday-closeout.md` for the shipped design). Asset
-inventory and status: `src/assets/assetManifest.ts`. Image-generation
-prompts used for the art: `docs/assets/codex-prompts/`.
+Install Playwright's browser once with:
 
-Useful dev query params: `?testMode=1` (skip boot overlay, jump to a
-location — see BootScene for `location`/`spawn`/`seedKeepsakes`) and
-`?dressDebug=1` (overlay interact rects and prop colliders in dressed rooms).
+```bash
+npx playwright install chromium
+```
+
+## Personal content
+
+- Galaxy letters and photos: `src/content/galaxyLetters.ts`
+- ____'s letter archive: `src/content/letters.ts`
+- Photo wall: `public/assets/photos/manifest.json`
+- Optional audio: `public/audio/README.md`
+- Replaceable art: `public/assets/README.md`

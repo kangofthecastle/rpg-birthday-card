@@ -8,9 +8,12 @@ import {
 } from '../game/storyProgression';
 import { getLocation } from './locations';
 import type { DialogueLine, LocationInteraction } from './types';
+import type { PlayerFacing } from '../assets/recipientSpriteConfig';
 
 export interface ActivityCompletionStory {
   readonly worldDialogue: readonly DialogueLine[];
+  /** Optional direction ____ turns before the completion beat begins. */
+  readonly playerFacing?: PlayerFacing;
 }
 
 export interface RecipientPcStory {
@@ -58,6 +61,7 @@ const MANGO_RICE_AFTER_RETAKE: readonly DialogueLine[] = [
 
 const ACTIVITY_COMPLETION_STORY: Readonly<Record<string, ActivityCompletionStory>> = {
   [FISHING_ACTIVITY_ID]: {
+    playerFacing: 'down',
     worldDialogue: [
       { speaker: '____', text: 'There. Now they have company.', portraitId: 'portrait-friendone' },
       { speaker: '____', text: 'How’d you do that?', portraitId: 'portrait-recipient' },

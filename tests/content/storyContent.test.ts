@@ -97,6 +97,7 @@ describe('story content resolution', () => {
   });
 
   it('provides world dialogue after fishing and after ____ disappears', () => {
+    expect(getActivityCompletionStory(FISHING_ACTIVITY_ID)?.playerFacing).toBe('down');
     expect(getActivityCompletionStory(FISHING_ACTIVITY_ID)?.worldDialogue.map((line) => line.text)).toEqual([
       'There. Now they have company.',
       'How’d you do that?',

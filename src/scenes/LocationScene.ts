@@ -4662,6 +4662,14 @@ export class LocationScene extends Phaser.Scene {
     this.updatePlayerVisualAnimation();
   }
 
+  private facePlayer(facing: PlayerFacing): void {
+    this.playerFacing = facing;
+    this.tapStepHoldUntil = 0;
+    this.wasPlayerMoving = false;
+    this.syncPlayerVisualFlip();
+    this.playerVisual?.play(RECIPIENT_IDLE_ANIMATIONS[facing], true);
+  }
+
   private syncRotatedPropDepths(): void {
     const overrides = this.getEffectivePropDepthOverrides();
     const playerVisual = this.playerVisual;
@@ -5560,6 +5568,10 @@ export class LocationScene extends Phaser.Scene {
         this.registry.set('runState', this.state);
 
         const completedActivityId = completion.activityId ?? activityId;
+        const completionStory = getActivityCompletionStory(completedActivityId);
+        if (completionStory?.playerFacing) {
+          this.facePlayer(completionStory.playerFacing);
+        }
         if (completedActivityId === 'friendone-pc-fishing') {
           await this.revealSecondKoi();
         }
@@ -5587,7 +5599,6 @@ export class LocationScene extends Phaser.Scene {
             await this.pauseForDialogue(this.location.rewardMessage);
           }
 
-          const completionStory = getActivityCompletionStory(completedActivityId);
           if (completionStory?.worldDialogue.length) {
             await this.pauseForDialogue(completionStory.worldDialogue);
           }

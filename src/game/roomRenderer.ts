@@ -3,6 +3,10 @@ import { RECIPIENT_SPRITE } from '../assets/recipientSpriteConfig';
 import { projectToIso, type IsoOrigin, type IsoPoint } from './isometricProjection';
 import { fnv1a, mulberry32 } from './rng';
 import {
+  createBreathingMoteEmitter,
+  type BreathingMoteMotion,
+} from './loopingMoteEmitter';
+import {
   beamTrapezoid,
   resolveWindowBeamSource,
 } from './windowBeamGeometry';
@@ -244,15 +248,32 @@ export function renderInteriorAwakening(
   options: { readonly fadeInMs?: number; readonly floorMapRect?: FloorMapRect } = {},
 ): RoomRenderResult {
   const container = scene.add.container(0, 0).setDepth(AWAKENING_DEPTH);
+  const moteMotions: BreathingMoteMotion[] = [];
 
-  addWindowShafts(scene, dressing, origin, container);
+  addWindowShafts(scene, dressing, origin, container, moteMotions);
   for (const exit of exits) {
     addDoormatAwakening(scene, dressing, exit, origin, container);
   }
   // Whisper of outside light spilling in over the open (wall-less) front edge
   // where the doormat sits — much quieter than the window beams.
   if (options.floorMapRect) {
-    addDoorwayEdgeSpill(scene, dressing, options.floorMapRect, origin, container);
+    addDoorwayEdgeSpill(
+      scene,
+      dressing,
+      options.floorMapRect,
+      origin,
+      container,
+      moteMotions,
+    );
+  }
+  if (moteMotions.length > 0) {
+    container.add(
+      createBreathingMoteEmitter(
+        scene,
+        buildInteriorMoteTexture(scene, dressing),
+        moteMotions,
+      ),
+    );
   }
 
   const fadeInMs = options.fadeInMs ?? 0;
@@ -278,15 +299,23 @@ function addWindowShafts(
   dressing: RoomDressing,
   origin: IsoOrigin,
   container: Phaser.GameObjects.Container,
+  moteMotions: BreathingMoteMotion[],
 ): void {
   const windows = dressing.props.filter((placement) => placement.frame === 'window');
   if (windows.length === 0) {
     return;
   }
 
-  const moteKey = buildInteriorMoteTexture(scene, dressing);
   windows.forEach((windowProp, index) => {
-    addWindowShaftSet(scene, dressing, windowProp, index, origin, container, moteKey);
+    addWindowShaftSet(
+      scene,
+      dressing,
+      windowProp,
+      index,
+      origin,
+      container,
+      moteMotions,
+    );
   });
 }
 
@@ -303,7 +332,7 @@ function addWindowShaftSet(
   index: number,
   origin: IsoOrigin,
   container: Phaser.GameObjects.Container,
-  moteKey: string,
+  moteMotions: BreathingMoteMotion[],
 ): void {
   const { center: source, slope: sourceSlope } = resolveWindowBeamSource(
     windowProp,
@@ -375,33 +404,31 @@ function addWindowShaftSet(
       const t = 0.15 + rng() * 0.8;
       const mx = source.x + dx * t + (rng() - 0.5) * beam.botHW * 0.9;
       const my = source.y + dy * t;
-      const mote = scene.add
-        .image(mx, my, moteKey)
-        .setBlendMode(Phaser.BlendModes.ADD)
-        .setScale(0.4 + rng() * 0.7)
-        .setAlpha(0);
-      container.add(mote);
+      const scale = 0.4 + rng() * 0.7;
       const driftMag = 28 + rng() * 42;
-      scene.tweens.add({
-        targets: mote,
-        x: mx + (dx / len) * driftMag + (rng() - 0.5) * 14,
-        y: my + (dy / len) * driftMag,
-        duration: 6000 + rng() * 4000,
-        delay: rng() * 2000,
-        yoyo: true,
-        repeat: -1,
-        ease: 'Sine.easeInOut',
-      });
-      scene.tweens.add({
-        targets: mote,
-        alpha: { from: 0.12, to: 0.55 + rng() * 0.2 },
-        duration: 1600 + rng() * 1400,
-        hold: 300 + rng() * 700,
-        delay: rng() * 1800,
-        repeatDelay: rng() * 1400,
-        yoyo: true,
-        repeat: -1,
-        ease: 'Sine.easeInOut',
+      const endX = mx + (dx / len) * driftMag + (rng() - 0.5) * 14;
+      const endY = my + (dy / len) * driftMag;
+      const moveDurationMs = 6000 + rng() * 4000;
+      const moveDelayMs = rng() * 2000;
+      const peakAlpha = 0.55 + rng() * 0.2;
+      const alphaDurationMs = 1600 + rng() * 1400;
+      const alphaHoldMs = 300 + rng() * 700;
+      const alphaDelayMs = rng() * 1800;
+      const alphaRepeatDelayMs = rng() * 1400;
+      moteMotions.push({
+        startX: mx,
+        startY: my,
+        endX,
+        endY,
+        moveDelayMs,
+        moveDurationMs,
+        alphaDelayMs,
+        alphaDurationMs,
+        alphaHoldMs,
+        alphaRepeatDelayMs,
+        lowAlpha: 0.12,
+        peakAlpha,
+        scale,
       });
     }
   }
@@ -478,6 +505,7 @@ function addDoorwayEdgeSpill(
   floor: FloorMapRect,
   origin: IsoOrigin,
   container: Phaser.GameObjects.Container,
+  moteMotions: BreathingMoteMotion[],
 ): void {
   const depth = 250; // how far the glow reaches into the room from the edge (map px)
   const band: PropColliderRect = {
@@ -542,35 +570,32 @@ function addDoorwayEdgeSpill(
   }
 
   // Motes drifting up off the threshold, brighter and more numerous than before.
-  const moteKey = buildInteriorMoteTexture(scene, dressing);
   for (let i = 0; i < 7; i += 1) {
     const fx = floor.x0 + (floor.x1 - floor.x0) * (0.18 + rng() * 0.64);
     const fy = floor.y1 - 12 - rng() * 44;
     const point = projectToIso(fx, fy, origin);
-    const mote = scene.add
-      .image(point.x, point.y, moteKey)
-      .setBlendMode(Phaser.BlendModes.ADD)
-      .setScale(0.34 + rng() * 0.45)
-      .setAlpha(0);
-    container.add(mote);
-    scene.tweens.add({
-      targets: mote,
-      y: point.y - (26 + rng() * 34),
-      duration: 7000 + rng() * 3000,
-      yoyo: true,
-      repeat: -1,
-      ease: 'Sine.easeInOut',
-    });
-    scene.tweens.add({
-      targets: mote,
-      alpha: { from: 0.08, to: 0.3 + rng() * 0.16 },
-      duration: 2200 + rng() * 1500,
-      hold: 400 + rng() * 600,
-      delay: rng() * 2500,
-      repeatDelay: rng() * 1800,
-      yoyo: true,
-      repeat: -1,
-      ease: 'Sine.easeInOut',
+    const scale = 0.34 + rng() * 0.45;
+    const endY = point.y - (26 + rng() * 34);
+    const moveDurationMs = 7000 + rng() * 3000;
+    const peakAlpha = 0.3 + rng() * 0.16;
+    const alphaDurationMs = 2200 + rng() * 1500;
+    const alphaHoldMs = 400 + rng() * 600;
+    const alphaDelayMs = rng() * 2500;
+    const alphaRepeatDelayMs = rng() * 1800;
+    moteMotions.push({
+      startX: point.x,
+      startY: point.y,
+      endX: point.x,
+      endY,
+      moveDelayMs: 0,
+      moveDurationMs,
+      alphaDelayMs,
+      alphaDurationMs,
+      alphaHoldMs,
+      alphaRepeatDelayMs,
+      lowAlpha: 0.08,
+      peakAlpha,
+      scale,
     });
   }
 }

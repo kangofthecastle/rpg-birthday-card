@@ -238,6 +238,10 @@ import {
 import { showLettersScreen } from '../ui/lettersScreen';
 import { showPhotoWall } from '../ui/photoWall';
 import { fnv1a, mulberry32 } from '../game/rng';
+import {
+  createRibbonMoteEmitter,
+  type RibbonMoteMotion,
+} from '../game/loopingMoteEmitter';
 import { SceneKeys } from './sceneKeys';
 
 // --- Post-music-game outdoor awakening: tunable intensity --------------------
@@ -3246,6 +3250,18 @@ export class LocationScene extends Phaser.Scene {
       this.location.id === 'main-outside' &&
       (this.location.edgeExits ?? []).some((exit) => exit.edge === 'south');
     const count = beckonSouth ? tune.moteCount : 16;
+    if (beckonSouth && tune.ribbon) {
+      const motions = Array.from({ length: count }, () =>
+        this.createBeckoningMoteMotion(rng, tune.motePeakAlpha),
+      );
+      createRibbonMoteEmitter(
+        this,
+        'awaken-mote',
+        motions,
+        this.mapDims.height + 32,
+      );
+      return;
+    }
     for (let i = 0; i < count; i += 1) {
       if (beckonSouth) {
         this.spawnBeckoningMote(rng, tune);
@@ -3386,6 +3402,30 @@ export class LocationScene extends Phaser.Scene {
     }
   }
 
+  /**
+   * Builds the same seeded ribbon-mote parameters as spawnBeckoningMote without
+   * allocating three independent Tween objects and one display object per bulb.
+   */
+  private createBeckoningMoteMotion(
+    rng: () => number,
+    motePeakAlpha: number,
+  ): RibbonMoteMotion {
+    const width = this.mapDims.width;
+    const height = this.mapDims.height;
+    const spread = (rng() + rng() - 1) * 0.26;
+    const startX = width * (0.5 + spread);
+    const startY = height + 8 + rng() * 16;
+    const endY = height * (0.06 + rng() * 0.14);
+    const travel = startY - endY;
+    const speed = (height * (0.24 + rng() * 0.16)) / (6400 + rng() * 3600);
+    const runMs = travel / speed;
+    const scale = 0.7 + rng() * 1.0;
+    const sway = 12 + rng() * 20;
+    const delayMs = rng() * runMs;
+    const swayX = (rng() - 0.5) * sway * 2;
+    const peakAlpha = motePeakAlpha + rng() * 0.25;
+    return { startX, startY, endY, swayX, delayMs, runMs, scale, peakAlpha };
+  }
 
   private createMoteTexture(): void {
     if (this.textures.exists('awaken-mote')) {

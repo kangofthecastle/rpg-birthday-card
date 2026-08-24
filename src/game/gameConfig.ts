@@ -10,13 +10,6 @@ export function createGameConfig(parent: HTMLElement): Phaser.Types.Core.GameCon
     height: 720,
     backgroundColor: '#1f2a2a',
     pixelArt: true,
-    // Cap presentation at 60fps. On high-refresh monitors (e.g. 170Hz) the
-    // uncapped loop renders motion so smoothly that the 10fps walk poses read
-    // as a strobing slideshow; 60fps restores the look the game was tuned
-    // against on a 60Hz display, on any panel.
-    fps: {
-      limit: 60,
-    },
     scale: {
       // Fixed 1280x720 logical resolution, letterboxed and centered in the
       // window. FIT keeps the whole 16:9 frame visible at any window size; the

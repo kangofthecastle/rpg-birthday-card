@@ -1,10 +1,11 @@
 // The piece on ____'s music stand — melody data.
 //
 // Measures 1–9 of the user-supplied “Do You Hear the People Sing?” score are
-// transcribed here as one canonical passage. The interactive game uses measures
-// 1–5 in 4–5-note pages; the finale replay expands into the complete measures
-// 1–9 passage. This file remains the single pitch/rhythm source for both, plus
-// the invitation and awakening cues and the ending's sheet-roll plucks.
+// transcribed here as one canonical passage. The rhythm game now plays through
+// the complete measures 1–9 passage that the earlier game reserved for its
+// finale replay. This file remains the single pitch/rhythm source for that chart,
+// the compact legacy passage, the invitation and awakening cues, and the
+// ending's sheet-roll plucks.
 
 export interface ViolinPitch {
   /** Stable id referenced by notes. */
@@ -233,9 +234,8 @@ export const VIOLIN_FINALE_PHRASES: readonly ViolinPhrase[] = [
 
 const FULL_NOTE_STREAM = VIOLIN_FINALE_PHRASES.flatMap((phrase) => phrase.notes);
 
-/** Measures 1–5, regrouped for the listen-and-echo game. The interactive
- * passage stops on the first G of its final displayed measure (physical K),
- * then hands off to the complete finale replay. */
+/** Measures 1–5, regrouped into the seven compact sections used by the earlier
+ * interactive game before it handed off to the automatic full-piece finale. */
 export const VIOLIN_PHRASES: readonly ViolinPhrase[] = [
   { id: 'game-page-1-opening', notes: FULL_NOTE_STREAM.slice(0, 4) },
   { id: 'game-page-2-rise', notes: FULL_NOTE_STREAM.slice(4, 9) },

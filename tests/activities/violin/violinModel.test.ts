@@ -10,78 +10,63 @@ import {
   getPitchByKey,
 } from '../../../src/activities/violin/melody';
 import {
-  FINALE_LEAD_IN_MS,
-  FINALE_PHRASE_GAP_MS,
-  HANDOFF_MS,
-  MIN_TEMPO_SCALE,
+  FINALE_HOLD_MS,
+  GOOD_WINDOW_MS,
+  PERFECT_WINDOW_MS,
+  RHYTHM_CHART,
+  RHYTHM_FINAL_NOTE_DURATION_MS,
+  RHYTHM_FINAL_BPM,
+  RHYTHM_FINAL_TEMPO_NOTES,
+  RHYTHM_LANES,
+  RHYTHM_LEAD_IN_MS,
+  RHYTHM_MID_HOLD_EXTENSION_MS,
+  RHYTHM_MID_HOLD_NOTE_NUMBER,
+  RHYTHM_NOTE_APPROACH_MS,
+  RHYTHM_OUTRO_MS,
+  RHYTHM_TIME_SCALE,
+  RHYTHM_START_BPM,
+  RHYTHM_TEMPO_RAMP_NOTES,
+  VIOLIN_MISS_PENALTY,
+  VIOLIN_HOLD_POINTS_PER_TICK,
+  VIOLIN_PASS_SCORE,
   advanceViolin,
+  awardViolinHoldTicks,
+  beginViolin,
+  buildRhythmChart,
   createViolinState,
-  expectedPitchId,
-  finaleTimeline,
-  finaleTotalMs,
-  getPhrase,
+  currentChartNote,
   getPieceProgress,
-  isFinalPhrase,
   isPieceComplete,
-  litNoteCount,
-  noteStartMs,
-  playbackDurationMs,
-  playbackLitCount,
+  isSustainedRhythmNote,
   pressViolinKey,
+  rhythmChartEndMs,
+  rhythmTempoBpmForNote,
+  rhythmTimeScaleForNote,
   type ViolinState,
 } from '../../../src/activities/violin/violinModel';
 
-/** Advance far enough that the current phrase's playback completes and the echo
- * opens. */
-function runPlaybackToEcho(state: ViolinState): ViolinState {
-  const phrase = getPhrase(state);
-  if (!phrase) {
-    throw new Error('no phrase');
-  }
-  const total = playbackDurationMs(phrase, state.tempoScale);
-  const advanced = advanceViolin(state, total + 1);
-  if (advanced.phase !== 'echo') {
-    throw new Error(`expected echo, got ${advanced.phase}`);
-  }
-  return advanced;
+function advanceToFirstNote(): ViolinState {
+  return advanceViolin(beginViolin(createViolinState()), RHYTHM_CHART[0].timeMs);
 }
 
-/** The keyboard key for the note the echo currently expects. */
-function expectedKey(state: ViolinState): string {
-  const pitchId = expectedPitchId(state);
-  const pitch = pitchId ? getPitch(pitchId) : undefined;
-  if (!pitch) {
-    throw new Error('no expected key');
-  }
-  return pitch.key;
+function keyForNote(note: (typeof RHYTHM_CHART)[number]): string {
+  return RHYTHM_LANES[note.laneIndex].key;
 }
 
-/** Echo the current phrase in full, one correct key at a time. Lands on 'handoff'
- * for a mid-song phrase, or 'finale' for the final phrase. */
-function echoWholePhrase(state: ViolinState): ViolinState {
-  const phrase = getPhrase(state);
-  if (!phrase) {
-    throw new Error('no phrase');
+function playPerfectRunToFinale(): ViolinState {
+  let state = advanceToFirstNote();
+  for (const note of RHYTHM_CHART) {
+    state = advanceViolin(state, note.timeMs - state.elapsedMs);
+    state = pressViolinKey(state, keyForNote(note));
   }
-  let next = state;
-  for (let i = 0; i < phrase.notes.length; i += 1) {
-    next = pressViolinKey(next, expectedKey(next));
-  }
-  return next;
-}
-
-/** From a mid-song 'handoff', let the beat elapse into the next phrase's playback
- * and run that playback to its echo. */
-function handoffToNextEcho(state: ViolinState): ViolinState {
-  const afterBeat = advanceViolin(state, HANDOFF_MS + 1);
-  if (afterBeat.phase !== 'playback') {
-    throw new Error(`expected playback after handoff, got ${afterBeat.phase}`);
-  }
-  return runPlaybackToEcho(afterBeat);
+  return advanceViolin(
+    state,
+    rhythmChartEndMs() + RHYTHM_OUTRO_MS - state.elapsedMs,
+  );
 }
 
 describe('melody data', () => {
-  it('uses compact musical pages and stops the interactive ending on its first K', () => {
+  it('extends the rhythm chart through the previous game finale passage', () => {
     expect(VIOLIN_PHRASES.map((phrase) => phrase.notes.map((note) => note.pitchId))).toEqual([
       ['a4', 'g4', 'f4', 'g4'],
       ['a4', 'bb4', 'c5', 'a4', 'g4'],
@@ -91,456 +76,290 @@ describe('melody data', () => {
       ['fs4', 'g4', 'd4', 'f4'],
       ['e4', 'e4', 'f4', 'g4'],
     ]);
-
-    const {
-      dottedEighth,
-      eighth,
-      sixteenth,
-      quarter,
-      tripletEighth,
-    } = VIOLIN_RHYTHM_MS;
-    expect(VIOLIN_PHRASES.map((phrase) => phrase.notes.map((note) => note.durationMs))).toEqual([
-      [dottedEighth, sixteenth, dottedEighth, sixteenth],
-      [dottedEighth, sixteenth, quarter, tripletEighth, tripletEighth],
-      [tripletEighth, dottedEighth, sixteenth, dottedEighth, sixteenth],
-      [quarter, tripletEighth, tripletEighth, tripletEighth, dottedEighth],
-      [eighth, dottedEighth, sixteenth, dottedEighth],
-      [sixteenth, dottedEighth, sixteenth, dottedEighth],
-      [sixteenth, dottedEighth, sixteenth, quarter],
-    ]);
-    expect(VIOLIN_PHRASES.every((phrase) => phrase.notes.length <= 5)).toBe(true);
-    expect(VIOLIN_PHRASES.every((phrase) => phrase.notes.length >= 4)).toBe(true);
+    expect(VIOLIN_PHRASES.flatMap((phrase) => phrase.notes)).toHaveLength(31);
+    expect(RHYTHM_CHART).toHaveLength(59);
+    expect(RHYTHM_CHART.map((note) => note.pitchId)).toEqual(
+      VIOLIN_FINALE_PHRASES.flatMap((phrase) => phrase.notes.map((note) => note.pitchId)),
+    );
   });
 
-  it('retains the complete measures 1–9 passage for the finale replay', () => {
-    expect(
-      VIOLIN_FINALE_PHRASES.map((phrase) => phrase.notes.map((note) => note.pitchId)),
-    ).toEqual([
-      ['a4', 'g4', 'f4', 'g4'],
-      ['a4', 'bb4', 'c5', 'a4', 'g4', 'f4'],
-      ['e4', 'd4', 'e4', 'f4'],
-      ['c4', 'd4', 'c4', 'bb3'],
-      ['a3', 'c4', 'f4', 'a4'],
-      ['g4', 'fs4', 'g4', 'd4'],
-      ['f4', 'e4', 'e4', 'f4'],
-      ['g4', 'a4', 'g4', 'f4', 'g4', 'a4'],
-      ['bb4', 'c5', 'a4', 'g4', 'f4'],
-      ['e4', 'd4', 'e4', 'f4'],
-      ['c4', 'd4', 'c4', 'bb3'],
-      ['a3', 'c4', 'f4', 'a4', 'g4', 'fs4'],
-      ['g4', 'bb4', 'e4', 'f4'],
-    ]);
-
-    const {
-      dottedEighth,
-      dottedHalf,
-      sixteenth,
-      quarter,
-      tripletEighth,
-    } = VIOLIN_RHYTHM_MS;
-    expect(
-      VIOLIN_FINALE_PHRASES.map((phrase) => phrase.notes.map((note) => note.durationMs)),
-    ).toEqual([
-      [dottedEighth, sixteenth, dottedEighth, sixteenth],
-      [dottedEighth, sixteenth, quarter, tripletEighth, tripletEighth, tripletEighth],
-      [dottedEighth, sixteenth, dottedEighth, sixteenth],
-      [quarter, tripletEighth, tripletEighth, tripletEighth],
-      [dottedEighth, sixteenth, dottedEighth, sixteenth],
-      [dottedEighth, sixteenth, dottedEighth, sixteenth],
-      [dottedEighth, sixteenth, dottedEighth, sixteenth],
-      [quarter, dottedEighth, sixteenth, dottedEighth, sixteenth, dottedEighth],
-      [sixteenth, quarter, tripletEighth, tripletEighth, tripletEighth],
-      [dottedEighth, sixteenth, dottedEighth, sixteenth],
-      [quarter, tripletEighth, tripletEighth, tripletEighth],
-      [dottedEighth, sixteenth, dottedEighth, sixteenth, tripletEighth, tripletEighth],
-      [tripletEighth, dottedEighth, sixteenth, dottedHalf],
-    ]);
+  it('retains the complete measures 1–9 passage for downstream story cues', () => {
     expect(VIOLIN_FINALE_PHRASES.flatMap((phrase) => phrase.notes)).toHaveLength(59);
-    const interactiveNotes = VIOLIN_PHRASES.flatMap((phrase) => phrase.notes);
-    expect(interactiveNotes.map((note) => note.pitchId)).toEqual(
-      VIOLIN_FINALE_PHRASES.flatMap((phrase) => phrase.notes).slice(0, 31).map((note) => note.pitchId),
-    );
-    expect(getPitch(interactiveNotes.at(-1)?.pitchId ?? '')?.key).toBe('K');
+    expect(VIOLIN_FINALE_PHRASES.at(-1)?.notes.at(-1)).toEqual({
+      pitchId: 'f4',
+      durationMs: VIOLIN_RHYTHM_MS.dottedHalf,
+    });
   });
 
   it('continues the Boatigami lantern melody from rolling into kindling', () => {
-    const fullPassage = VIOLIN_FINALE_PHRASES.flatMap((phrase) => phrase.notes);
-    expect(VIOLIN_SHEET_ROLL_MOTIF.map((note) => note.pitchId)).toEqual([
-      'a4',
-      'g4',
-      'f4',
-      'g4',
-      'a4',
-      'bb4',
-    ]);
-    expect(VIOLIN_SHEET_KINDLE_MOTIF.map((note) => note.pitchId)).toEqual([
-      'c5',
-      'a4',
-      'g4',
-      'f4',
-    ]);
+    const passage = VIOLIN_FINALE_PHRASES.flatMap((phrase) => phrase.notes);
     expect([...VIOLIN_SHEET_ROLL_MOTIF, ...VIOLIN_SHEET_KINDLE_MOTIF]).toEqual(
-      fullPassage.slice(0, 10),
+      passage.slice(0, 10),
     );
   });
 
   it('maps every pitch to a unique key and every note to a known pitch', () => {
     const keys = VIOLIN_PITCHES.map((pitch) => pitch.key);
     expect(new Set(keys).size).toBe(keys.length);
-    for (const phrase of VIOLIN_FINALE_PHRASES) {
-      for (const note of phrase.notes) {
-        expect(getPitch(note.pitchId)).toBeDefined();
-      }
+    for (const note of VIOLIN_FINALE_PHRASES.flatMap((phrase) => phrase.notes)) {
+      expect(getPitch(note.pitchId)).toBeDefined();
     }
-  });
-
-  it('looks pitches up by key case-insensitively and rejects unmapped keys', () => {
     expect(getPitchByKey('a')?.key).toBe('A');
     expect(getPitchByKey(" ' ")?.id).toBe('c5');
     expect(getPitchByKey('Z')).toBeUndefined();
   });
-
-  it('distinguishes the passage\'s flats and F-sharp in notation and graph data', () => {
-    const natural = getPitch('f4');
-    const sharp = getPitch('fs4');
-    expect(sharp?.staffStep).toBe(natural?.staffStep);
-    expect(sharp?.graphStep).toBeGreaterThan(natural?.graphStep ?? -1);
-    expect(sharp?.accidental).toBe('sharp');
-    expect(getPitch('bb3')?.accidental).toBe('flat');
-    expect(getPitch('bb4')?.accidental).toBe('flat');
-  });
 });
 
-describe('violinModel — playback', () => {
-  it('starts on the first phrase, playing itself', () => {
-    const state = createViolinState();
-    expect(state.phase).toBe('playback');
-    expect(state.phraseIndex).toBe(0);
-    // The first note sounds/lights immediately at t=0.
-    expect(litNoteCount(state)).toBe(1);
-    expect(expectedPitchId(state)).toBeUndefined();
+describe('violinModel — chart', () => {
+  it('starts after the three-beat count-in and a full note approach', () => {
+    const chart = buildRhythmChart();
+    expect(chart[0].timeMs).toBe(RHYTHM_LEAD_IN_MS + RHYTHM_NOTE_APPROACH_MS);
+    for (let index = 1; index < chart.length; index += 1) {
+      const previous = chart[index - 1];
+      const current = chart[index];
+      const source = VIOLIN_FINALE_PHRASES[current.phraseIndex].notes[current.noteIndex];
+      expect(current.timeMs).toBe(
+          previous.timeMs +
+          previous.durationMs +
+          Math.round((source.delayBeforeMs ?? 0) * rhythmTimeScaleForNote(current.index)),
+      );
+    }
   });
 
-  it('lights notes one by one as playback time elapses', () => {
-    const phrase = VIOLIN_PHRASES[1];
-    // Between the second and third note's start times → first two lit.
-    const midSecondNoteMs = phrase.notes[0].durationMs + 10;
-    expect(playbackLitCount(phrase, midSecondNoteMs, 1)).toBe(2);
-    // The first note lights at t=0; the third only once its start is reached.
-    expect(playbackLitCount(phrase, 0, 1)).toBe(1);
-    const thirdStart = phrase.notes[0].durationMs + phrase.notes[1].durationMs;
-    expect(playbackLitCount(phrase, thirdStart, 1)).toBe(3);
+  it('keeps every chart note tied to its source measure and pitch', () => {
+    for (const chartNote of RHYTHM_CHART) {
+      const source = VIOLIN_FINALE_PHRASES[chartNote.phraseIndex].notes[chartNote.noteIndex];
+      expect(chartNote.pitchId).toBe(source.pitchId);
+      expect(chartNote.laneIndex).toBeGreaterThanOrEqual(0);
+      expect(chartNote.laneIndex).toBeLessThan(RHYTHM_LANES.length);
+      expect(chartNote.durationMs).toBe(
+        chartNote.index === RHYTHM_CHART.length - 1
+          ? RHYTHM_FINAL_NOTE_DURATION_MS
+          : Math.round(source.durationMs * rhythmTimeScaleForNote(chartNote.index)) +
+            (chartNote.index === RHYTHM_MID_HOLD_NOTE_NUMBER - 1
+              ? RHYTHM_MID_HOLD_EXTENSION_MS
+              : 0),
+      );
+      expect(chartNote.index).toBeGreaterThanOrEqual(0);
+    }
   });
 
-  it('preserves the printed dotted-half sustain in measure 9', () => {
-    const phrase = VIOLIN_FINALE_PHRASES.at(-1)!;
-    const resolveIndex = 3;
-    const resolveStart = noteStartMs(phrase, resolveIndex, 1);
-    expect(phrase.notes[resolveIndex].durationMs).toBe(VIOLIN_RHYTHM_MS.dottedHalf);
-    expect(phrase.notes[resolveIndex].pitchId).toBe('f4');
-    expect(noteStartMs(phrase, phrase.notes.length, 1) - resolveStart).toBe(
-      VIOLIN_RHYTHM_MS.dottedHalf,
+  it('extends displayed note 31 by one second and marks only it and the finale sustained', () => {
+    const note31 = RHYTHM_CHART[RHYTHM_MID_HOLD_NOTE_NUMBER - 1];
+    const source = VIOLIN_FINALE_PHRASES[note31.phraseIndex].notes[note31.noteIndex];
+    expect(note31.durationMs).toBe(
+      Math.round(source.durationMs * rhythmTimeScaleForNote(note31.index)) +
+        RHYTHM_MID_HOLD_EXTENSION_MS,
+    );
+    expect(isSustainedRhythmNote(note31.index)).toBe(true);
+    expect(isSustainedRhythmNote(RHYTHM_CHART.length - 1)).toBe(true);
+    expect(isSustainedRhythmNote(note31.index - 1)).toBe(false);
+  });
+
+  it('awards hold points in deterministic whole ticks', () => {
+    const playing = advanceToFirstNote();
+    const scored = awardViolinHoldTicks(playing, 3);
+    expect(scored.score).toBe(playing.score + VIOLIN_HOLD_POINTS_PER_TICK * 3);
+    expect(awardViolinHoldTicks(playing, 0)).toBe(playing);
+    expect(awardViolinHoldTicks(playing, 0.8)).toBe(playing);
+  });
+
+  it('uses four broad lanes and begins the passage at 80 BPM', () => {
+    expect(RHYTHM_LANES.map((lane) => lane.key)).toEqual(['D', 'F', 'J', 'K']);
+    expect(RHYTHM_TIME_SCALE).toBeCloseTo(100 / RHYTHM_START_BPM);
+    expect(new Set(RHYTHM_CHART.map((note) => note.laneIndex))).toEqual(
+      new Set([0, 1, 2, 3]),
     );
   });
 
-  it('opens the echo once playback (plus its tail) has elapsed', () => {
-    const state = runPlaybackToEcho(createViolinState());
-    expect(state.phase).toBe('echo');
-    expect(state.echoIndex).toBe(0);
-    expect(litNoteCount(state)).toBe(0);
-    expect(expectedPitchId(state)).toBe(VIOLIN_PHRASES[0].notes[0].pitchId);
-  });
-});
+  it('ramps down smoothly before holding the final four notes at 75 BPM', () => {
+    const finalStart = RHYTHM_CHART.length - RHYTHM_FINAL_TEMPO_NOTES;
+    const rampStart = finalStart - RHYTHM_TEMPO_RAMP_NOTES;
+    expect(rhythmTempoBpmForNote(0)).toBe(RHYTHM_START_BPM);
 
-describe('violinModel — echo resolution', () => {
-  it('rings and advances on the correct key', () => {
-    let state = runPlaybackToEcho(createViolinState());
-    const key = expectedKey(state);
-    state = pressViolinKey(state, key);
-    expect(state.lastResult).toBe('ring');
-    expect(state.echoIndex).toBe(1);
-    expect(litNoteCount(state)).toBe(1);
-  });
-
-  it('ignores unmapped keys entirely (no miss)', () => {
-    const state = runPlaybackToEcho(createViolinState());
-    const after = pressViolinKey(state, 'Z');
-    expect(after).toBe(state);
-  });
-
-  it('treats a wrong mapped note as a gentle waver: resets and replays slower', () => {
-    const state = runPlaybackToEcho(createViolinState());
-    const expected = expectedKey(state);
-    const wrong = VIOLIN_PITCHES.find((pitch) => pitch.key !== expected)!.key;
-    const after = pressViolinKey(state, wrong);
-    expect(after.lastResult).toBe('waver');
-    expect(after.phase).toBe('playback');
-    expect(after.echoIndex).toBe(0);
-    expect(after.tempoScale).toBeCloseTo(0.9, 5);
-    expect(after.phraseIndex).toBe(0);
-    expect(after.finished).toBe(false);
-  });
-
-  it('never slows past the tempo floor no matter how many misses', () => {
-    let state = runPlaybackToEcho(createViolinState());
-    for (let i = 0; i < 20; i += 1) {
-      const expected = expectedKey(state);
-      const wrong = VIOLIN_PITCHES.find((pitch) => pitch.key !== expected)!.key;
-      state = pressViolinKey(state, wrong);
-      state = runPlaybackToEcho(state);
-    }
-    expect(state.tempoScale).toBeGreaterThanOrEqual(MIN_TEMPO_SCALE);
-    expect(state.tempoScale).toBeCloseTo(MIN_TEMPO_SCALE, 5);
-  });
-
-  it('a miss stretches playback duration (slower), never shortens it', () => {
-    const phrase = VIOLIN_PHRASES[0];
-    const atFull = playbackDurationMs(phrase, 1);
-    const atSlow = playbackDurationMs(phrase, 0.8);
-    expect(atSlow).toBeGreaterThan(atFull);
-  });
-});
-
-describe('violinModel — instant handoff (no takeover)', () => {
-  it('landing a mid-song phrase\'s last note opens the handoff beat, then the next phrase plays', () => {
-    const start = runPlaybackToEcho(createViolinState());
-    const phrase = getPhrase(start)!;
-    const afterEcho = echoWholePhrase(start);
-
-    // She played every note herself — the phrase holds, fully lit, for the beat.
-    expect(afterEcho.phase).toBe('handoff');
-    expect(afterEcho.lastResult).toBe('ring');
-    expect(afterEcho.phraseIndex).toBe(0);
-    expect(afterEcho.echoIndex).toBe(phrase.notes.length);
-    expect(litNoteCount(afterEcho)).toBe(phrase.notes.length);
-    expect(isFinalPhrase(afterEcho)).toBe(false);
-
-    // The beat is brief; before it elapses we are still holding on phrase 0.
-    const midBeat = advanceViolin(afterEcho, HANDOFF_MS - 1);
-    expect(midBeat.phase).toBe('handoff');
-    expect(midBeat.phraseIndex).toBe(0);
-
-    // Once the beat is up, the NEXT phrase begins playing itself immediately.
-    const afterBeat = advanceViolin(midBeat, 2);
-    expect(afterBeat.phase).toBe('playback');
-    expect(afterBeat.phraseIndex).toBe(1);
-    expect(afterBeat.echoIndex).toBe(0);
-    expect(afterBeat.tempoScale).toBe(1);
-    // Playback starts from the top: the first note of phrase 2 is already lit.
-    expect(litNoteCount(afterBeat)).toBe(1);
-  });
-
-  it('the handoff gap from last key to next playback stays under 700ms', () => {
-    expect(HANDOFF_MS).toBeLessThanOrEqual(700);
-  });
-
-  it('never hands off mid-phrase: the final phrase is echoed entirely by the player', () => {
-    let state = runPlaybackToEcho(createViolinState());
-    for (let p = 0; p < VIOLIN_PHRASES.length - 1; p += 1) {
-      state = handoffToNextEcho(echoWholePhrase(state));
-    }
-    expect(isFinalPhrase(state)).toBe(true);
-
-    const phrase = getPhrase(state)!;
-    // Every note but the last keeps us in the echo — no takeover anywhere.
-    for (let i = 0; i < phrase.notes.length - 1; i += 1) {
-      expect(state.phase).toBe('echo');
-      state = pressViolinKey(state, expectedKey(state));
-    }
-    expect(state.phase).toBe('echo');
-    // The player's own last note tips into the finale.
-    state = pressViolinKey(state, expectedKey(state));
-    expect(state.phase).toBe('finale');
-    expect(state.echoIndex).toBe(phrase.notes.length);
-    expect(state.finished).toBe(false);
-  });
-});
-
-describe('violinModel — mistakes allowed (one forgiven slip per note)', () => {
-  /** The key for some mapped note that is NOT the one currently expected. */
-  function wrongKey(state: ViolinState): string {
-    const expected = expectedKey(state);
-    const pitch = VIOLIN_PITCHES.find((p) => p.key !== expected);
-    if (!pitch) {
-      throw new Error('no wrong key');
-    }
-    return pitch.key;
-  }
-
-  it('defaults to off: the first wrong press is a normal miss (unchanged behaviour)', () => {
-    const state = runPlaybackToEcho(createViolinState());
-    // No third argument → mistakes NOT allowed.
-    const after = pressViolinKey(state, wrongKey(state));
-    expect(after.phase).toBe('playback');
-    expect(after.echoIndex).toBe(0);
-    expect(after.recovering).toBe(false);
-    expect(after.lastResult).toBe('waver');
-  });
-
-  it('a fresh state is not mid-recovery', () => {
-    expect(createViolinState().recovering).toBe(false);
-  });
-
-  it('forgives the first wrong press: the phrase holds and waits for the right note', () => {
-    const state = runPlaybackToEcho(createViolinState());
-    const before = { phrase: state.phraseIndex, echo: state.echoIndex, tempo: state.tempoScale };
-
-    const slipped = pressViolinKey(state, wrongKey(state), true);
-    // No reset — same phrase, same cursor, still echoing, just flagged recovering.
-    expect(slipped.phase).toBe('echo');
-    expect(slipped.phraseIndex).toBe(before.phrase);
-    expect(slipped.echoIndex).toBe(before.echo);
-    expect(slipped.tempoScale).toBe(before.tempo);
-    expect(slipped.recovering).toBe(true);
-    expect(slipped.lastResult).toBe('waver');
-  });
-
-  it('recovers when the correct note is then played: it rings, advances, clears the flag', () => {
-    let state = runPlaybackToEcho(createViolinState());
-    const correct = expectedKey(state);
-    state = pressViolinKey(state, wrongKey(state), true);
-    expect(state.recovering).toBe(true);
-
-    state = pressViolinKey(state, correct, true);
-    expect(state.lastResult).toBe('ring');
-    expect(state.echoIndex).toBe(1);
-    expect(state.recovering).toBe(false);
-    expect(state.phase).toBe('echo');
-  });
-
-  it('a SECOND wrong press while recovering is a normal miss (phrase resets, slower)', () => {
-    let state = runPlaybackToEcho(createViolinState());
-    state = pressViolinKey(state, wrongKey(state), true);
-    expect(state.recovering).toBe(true);
-
-    const second = pressViolinKey(state, wrongKey(state), true);
-    expect(second.phase).toBe('playback');
-    expect(second.echoIndex).toBe(0);
-    expect(second.recovering).toBe(false);
-    expect(second.tempoScale).toBeCloseTo(0.9, 5);
-    expect(second.lastResult).toBe('waver');
-  });
-
-  it('grants a fresh slip on each note: recovery on note 0 does not spend note 1\'s grace', () => {
-    let state = runPlaybackToEcho(createViolinState());
-    // Slip + recover on the first note.
-    state = pressViolinKey(state, wrongKey(state), true);
-    state = pressViolinKey(state, expectedKey(state), true);
-    expect(state.echoIndex).toBe(1);
-    expect(state.recovering).toBe(false);
-    // A wrong press on the SECOND note is again forgiven (its own grace).
-    const slipped = pressViolinKey(state, wrongKey(state), true);
-    expect(slipped.recovering).toBe(true);
-    expect(slipped.phase).toBe('echo');
-    expect(slipped.echoIndex).toBe(1);
-  });
-
-  it('a clean correct press (no prior slip) never enters recovery', () => {
-    const state = runPlaybackToEcho(createViolinState());
-    const after = pressViolinKey(state, expectedKey(state), true);
-    expect(after.recovering).toBe(false);
-    expect(after.lastResult).toBe('ring');
-  });
-
-  it('an unmapped key during recovery is ignored and keeps the recovering flag', () => {
-    let state = runPlaybackToEcho(createViolinState());
-    state = pressViolinKey(state, wrongKey(state), true);
-    const after = pressViolinKey(state, 'Z', true);
-    expect(after).toBe(state);
-    expect(after.recovering).toBe(true);
-  });
-});
-
-describe('violinModel — finale (whole-piece replay)', () => {
-  function playToFinale(): ViolinState {
-    let state = runPlaybackToEcho(createViolinState());
-    for (let p = 0; p < VIOLIN_PHRASES.length - 1; p += 1) {
-      state = handoffToNextEcho(echoWholePhrase(state));
-    }
-    expect(isFinalPhrase(state)).toBe(true);
-    const inFinale = echoWholePhrase(state);
-    expect(inFinale.phase).toBe('finale');
-    expect(inFinale.phraseIndex).toBe(0);
-    expect(getPhrase(inFinale)).toBe(VIOLIN_FINALE_PHRASES[0]);
-    return inFinale;
-  }
-
-  it('builds a timeline that covers every note of the piece in order', () => {
-    const timeline = finaleTimeline();
-    const totalNotes = VIOLIN_FINALE_PHRASES.reduce((n, phrase) => n + phrase.notes.length, 0);
-    expect(timeline).toHaveLength(totalNotes);
-    // Start times are strictly increasing (one continuous line).
-    for (let i = 1; i < timeline.length; i += 1) {
-      expect(timeline[i].startMs).toBeGreaterThan(timeline[i - 1].startMs);
-    }
-    // Phrases appear in order, first note of the piece after the lead-in beat.
-    expect(timeline[0].phraseIndex).toBe(0);
-    expect(timeline[0].startMs).toBe(FINALE_LEAD_IN_MS);
-    expect(timeline[timeline.length - 1].phraseIndex).toBe(
-      VIOLIN_FINALE_PHRASES.length - 1,
+    const ramp = Array.from(
+      { length: RHYTHM_TEMPO_RAMP_NOTES },
+      (_, offset) => rhythmTempoBpmForNote(rampStart + offset),
     );
+    expect(ramp[0]).toBeLessThan(RHYTHM_START_BPM);
+    expect(ramp.at(-1)).toBe(RHYTHM_FINAL_BPM);
+    for (let index = 1; index < ramp.length; index += 1) {
+      expect(ramp[index]).toBeLessThanOrEqual(ramp[index - 1]);
+    }
+
+    for (let index = finalStart; index < RHYTHM_CHART.length; index += 1) {
+      expect(rhythmTempoBpmForNote(index)).toBe(RHYTHM_FINAL_BPM);
+    }
   });
 
-  it('adds no silence at page boundaries during the whole-piece replay', () => {
-    expect(FINALE_PHRASE_GAP_MS).toBe(0);
-    const timeline = finaleTimeline();
-    for (let i = 1; i < timeline.length; i += 1) {
-      const previous = timeline[i - 1];
-      const current = timeline[i];
-      if (current.phraseIndex !== previous.phraseIndex) {
-        expect(current.startMs).toBe(previous.startMs + previous.durationMs);
+  it('changes lanes for larger leaps while allowing two-step intervals to share', () => {
+    let runLength = 1;
+    let longestRun = 1;
+    for (let index = 1; index < RHYTHM_CHART.length; index += 1) {
+      const previous = RHYTHM_CHART[index - 1];
+      const current = RHYTHM_CHART[index];
+      const previousPitch = getPitch(previous.pitchId)!;
+      const currentPitch = getPitch(current.pitchId)!;
+      const pitchDelta = currentPitch.staffStep - previousPitch.staffStep;
+      const laneDelta = current.laneIndex - previous.laneIndex;
+
+      if (Math.abs(pitchDelta) > 2) {
+        expect(laneDelta).not.toBe(0);
       }
+      expect(pitchDelta * laneDelta).toBeGreaterThanOrEqual(0);
+
+      runLength = laneDelta === 0 ? runLength + 1 : 1;
+      longestRun = Math.max(longestRun, runLength);
     }
+    expect(longestRun).toBeLessThanOrEqual(3);
   });
 
-  it('pages the staff through every phrase as the piece replays', () => {
-    const state = playToFinale();
-    // At the very top of the finale, nothing has replayed yet (lead-in beat).
-    expect(litNoteCount(state)).toBe(0);
+});
 
-    // Just into phrase 0's replay: phrase 0 showing, its first note lit.
-    const early = advanceViolin(state, FINALE_LEAD_IN_MS + 1);
-    expect(early.phraseIndex).toBe(0);
-    expect(litNoteCount(early)).toBe(1);
-
-    // More notes of phrase 0 ignite in sequence.
-    const phrase0 = VIOLIN_FINALE_PHRASES[0];
-    const twoNotesIn = advanceViolin(early, phrase0.notes[0].durationMs + 5);
-    expect(twoNotesIn.phraseIndex).toBe(0);
-    expect(litNoteCount(twoNotesIn)).toBeGreaterThan(litNoteCount(early));
-
-    // Near the very end the staff has paged all the way to the last phrase.
-    const nearEnd = advanceViolin(state, finaleTotalMs() - 1);
-    expect(nearEnd.phraseIndex).toBe(VIOLIN_FINALE_PHRASES.length - 1);
-    expect(litNoteCount(nearEnd)).toBe(getPhrase(nearEnd)!.notes.length);
+describe('violinModel — timing and scoring', () => {
+  it('waits in a ready state until the player deliberately begins', () => {
+    const ready = createViolinState();
+    expect(ready.phase).toBe('ready');
+    expect(advanceViolin(ready, 10_000)).toBe(ready);
+    expect(beginViolin(ready).phase).toBe('count-in');
   });
 
-  it('completes only after the whole replay (plus its closing hold) has run', () => {
-    const state = playToFinale();
-    expect(isPieceComplete(state)).toBe(false);
-
-    const almost = advanceViolin(state, finaleTotalMs() - 1);
-    expect(almost.finished).toBe(false);
-
-    const done = advanceViolin(almost, 2);
-    expect(done.phase).toBe('complete');
-    expect(isPieceComplete(done)).toBe(true);
-    expect(litNoteCount(done)).toBe(getPhrase(done)!.notes.length);
-    expect(getPieceProgress(done)).toBe(1);
+  it('finishes the count-in before the first note approaches', () => {
+    const almost = advanceViolin(beginViolin(createViolinState()), RHYTHM_LEAD_IN_MS - 1);
+    expect(almost.phase).toBe('count-in');
+    const ready = advanceViolin(almost, 1);
+    expect(ready.phase).toBe('playing');
+    expect(currentChartNote(ready)).toBe(RHYTHM_CHART[0]);
+    expect(RHYTHM_CHART[0].timeMs - ready.elapsedMs).toBe(RHYTHM_NOTE_APPROACH_MS);
   });
 
-  it('ignores further advances and presses once complete', () => {
-    const state = advanceViolin(playToFinale(), finaleTotalMs() + 100);
-    const afterAdvance = advanceViolin(state, 1000);
-    const afterPress = pressViolinKey(afterAdvance, 'A');
-    expect(afterAdvance).toBe(state);
-    expect(afterPress).toBe(afterAdvance);
+  it('awards Perfect at the line and grows score and combo', () => {
+    const ready = advanceToFirstNote();
+    const hit = pressViolinKey(ready, keyForNote(RHYTHM_CHART[0]));
+    expect(hit.lastJudgement).toBe('perfect');
+    expect(hit.score).toBe(1000);
+    expect(hit.combo).toBe(1);
+    expect(hit.perfectCount).toBe(1);
+    expect(hit.nextNoteIndex).toBe(1);
   });
 
-  it('warms the room progressively as the piece advances', () => {
-    const start = getPieceProgress(createViolinState());
-    expect(start).toBe(0);
-    // Progress increases monotonically toward 1 across phrases.
-    expect(getPieceProgress({ ...createViolinState(), phraseIndex: 2 })).toBeGreaterThan(start);
+  it('awards Good inside the outer window', () => {
+    const late = advanceViolin(advanceToFirstNote(), PERFECT_WINDOW_MS + 1);
+    const hit = pressViolinKey(late, keyForNote(RHYTHM_CHART[0]));
+    expect(hit.lastJudgement).toBe('good');
+    expect(hit.score).toBe(600);
+    expect(hit.goodCount).toBe(1);
+  });
+
+  it('ignores an early lane press outside the timing window', () => {
+    let state = advanceToFirstNote();
+    state = pressViolinKey(state, keyForNote(RHYTHM_CHART[0]));
+    const early = pressViolinKey(state, keyForNote(RHYTHM_CHART[1]));
+    expect(early).toBe(state);
+  });
+
+  it('spends the current note as a Miss for a wrong mapped lane in-window', () => {
+    const ready = advanceToFirstNote();
+    const expected = keyForNote(RHYTHM_CHART[0]);
+    const wrong = RHYTHM_LANES.find((lane) => lane.key !== expected)!.key;
+    const miss = pressViolinKey(ready, wrong);
+    expect(miss.lastJudgement).toBe('miss');
+    expect(miss.missCount).toBe(1);
+    expect(miss.score).toBe(0);
+    expect(miss.nextNoteIndex).toBe(1);
+    expect(miss.combo).toBe(0);
+  });
+
+  it('subtracts the miss penalty without letting the score fall below zero', () => {
+    let state = advanceToFirstNote();
+    state = pressViolinKey(state, keyForNote(RHYTHM_CHART[0]));
+    expect(state.score).toBe(1_000);
+
+    state = advanceViolin(state, RHYTHM_CHART[1].timeMs - state.elapsedMs);
+    const expected = keyForNote(RHYTHM_CHART[1]);
+    const wrong = RHYTHM_LANES.find((lane) => lane.key !== expected)!.key;
+    state = pressViolinKey(state, wrong);
+    expect(state.score).toBe(Math.max(0, 1_000 - VIOLIN_MISS_PENALTY));
+  });
+
+  it('ignores unmapped keys and input outside play', () => {
+    const counting = createViolinState();
+    expect(pressViolinKey(counting, 'L')).toBe(counting);
+    const ready = advanceToFirstNote();
+    expect(pressViolinKey(ready, 'Z')).toBe(ready);
+  });
+
+  it('automatically misses overdue notes, including several after a long frame', () => {
+    const state = advanceViolin(
+      beginViolin(createViolinState()),
+      RHYTHM_CHART[3].timeMs + GOOD_WINDOW_MS + 1,
+    );
+    expect(state.nextNoteIndex).toBe(4);
+    expect(state.missCount).toBe(4);
+    expect(state.phase).toBe('playing');
+  });
+
+  it('resets combo on a miss while preserving max combo', () => {
+    let state = advanceToFirstNote();
+    state = pressViolinKey(state, keyForNote(RHYTHM_CHART[0]));
+    state = advanceViolin(state, RHYTHM_CHART[1].timeMs - state.elapsedMs);
+    state = pressViolinKey(state, keyForNote(RHYTHM_CHART[1]));
+    expect(state.combo).toBe(2);
+    state = advanceViolin(state, RHYTHM_CHART[2].timeMs - state.elapsedMs);
+    const expected = keyForNote(RHYTHM_CHART[2]);
+    const wrong = RHYTHM_LANES.find((lane) => lane.key !== expected)!.key;
+    state = pressViolinKey(state, wrong);
+    expect(state.combo).toBe(0);
+    expect(state.maxCombo).toBe(2);
+  });
+});
+
+describe('violinModel — completion', () => {
+  it('reports progress from judged notes', () => {
+    let state = advanceToFirstNote();
+    expect(getPieceProgress(state)).toBe(0);
+    state = pressViolinKey(state, keyForNote(RHYTHM_CHART[0]));
+    expect(getPieceProgress(state)).toBeCloseTo(1 / RHYTHM_CHART.length);
+  });
+
+  it('offers an unlimited retry when the run finishes below the pass score', () => {
+    const state = advanceViolin(
+      beginViolin(createViolinState()),
+      rhythmChartEndMs() + RHYTHM_OUTRO_MS,
+    );
+    expect(state.nextNoteIndex).toBe(RHYTHM_CHART.length);
+    expect(state.missCount).toBe(RHYTHM_CHART.length);
+    expect(state.score).toBe(0);
+    expect(state.score).toBeLessThan(VIOLIN_PASS_SCORE);
+    expect(state.phase).toBe('retry');
+    expect(state.finished).toBe(false);
+
+    const restarted = beginViolin(state);
+    expect(restarted.phase).toBe('count-in');
+    expect(restarted.nextNoteIndex).toBe(0);
+    expect(restarted.score).toBe(0);
+    expect(restarted.missCount).toBe(0);
+  });
+
+  it('enters the finale only after earning the pass score', () => {
+    const finale = playPerfectRunToFinale();
+    expect(VIOLIN_PASS_SCORE).toBe(60_000);
+    expect(finale.score).toBeGreaterThanOrEqual(VIOLIN_PASS_SCORE);
+    expect(finale.phase).toBe('finale');
+    expect(finale.finished).toBe(false);
+  });
+
+  it('completes a passing run after the golden finale hold', () => {
+    const finale = playPerfectRunToFinale();
+    const complete = advanceViolin(finale, FINALE_HOLD_MS);
+    expect(complete.phase).toBe('complete');
+    expect(complete.finished).toBe(true);
+    expect(isPieceComplete(complete)).toBe(true);
+    expect(getPieceProgress(complete)).toBe(1);
+  });
+
+  it('uses non-overlapping timing windows', () => {
+    expect(PERFECT_WINDOW_MS).toBeLessThan(GOOD_WINDOW_MS);
+    expect(GOOD_WINDOW_MS).toBeLessThanOrEqual(300);
   });
 });

@@ -413,7 +413,7 @@ export interface PlayViolinNoteOptions {
 
 /** Plays a single sampled violin note at an arbitrary frequency
  * through the SFX bus. Used by "the piece on the stand" activity so each pitch
- * ____ hears and echoes rings out cleanly. Safe before init / without audio
+ * ____ lands in the rhythm activity rings out cleanly. Safe before init / without audio
  * support (no-op), with an immediate synthesized fallback while samples load. */
 export function playViolinNote(
   frequency: number,

@@ -62,7 +62,7 @@ export interface FishingAttemptResult {
 export const FRIEND_ONE_FISH_SEQUENCE: readonly FishConfig[] = [
   {
     id: 'pond-drifter',
-    label: 'Pond Drifter',
+    label: 'Silver Minnow',
     isSpecial: false,
     speedPerSecond: 66,
     timingSpeedPerSecond: 215,
@@ -71,7 +71,7 @@ export const FRIEND_ONE_FISH_SEQUENCE: readonly FishConfig[] = [
   },
   {
     id: 'reed-darter',
-    label: 'Reed Darter',
+    label: 'Striped Perch',
     isSpecial: false,
     speedPerSecond: 94,
     timingSpeedPerSecond: 275,

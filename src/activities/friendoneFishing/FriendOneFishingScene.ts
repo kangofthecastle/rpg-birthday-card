@@ -49,7 +49,7 @@ const COMPLETION_DELAY_MS = 900;
 const NEXT_FISH_DELAY_MS = 850;
 const LINE_BREAK_RESET_DELAY_MS = 850;
 const POND_BACKGROUND_KEY = 'friendone-fishing-pond-dock';
-const POND_BACKGROUND_URL = '/assets/activities/friendone-fishing/pond-dock-v2.png';
+const POND_BACKGROUND_URL = '/assets/activities/friendone-fishing/pond-dock-v3.png';
 
 // Matches the Fishing activity shell's serif treatment (see
 // `.activity-shell--fishing` in styles.css) so the in-viewport Phaser text is
@@ -60,8 +60,8 @@ const FISHING_FONT = 'Georgia, "Times New Roman", serif';
 // the dock (both rods angle up-and-right, so the line hangs from a tip that
 // sits ABOVE the hand — the previous origins sat on the forearm). The fishing
 // line is drawn from these tips down to the bobber in every frame.
-const PLAYER_ROD_TIP = { x: 182, y: 126 } as const;
-const FRIEND_ONE_ROD_TIP = { x: 272, y: 119 } as const;
+const PLAYER_ROD_TIP = { x: 189, y: 144 } as const;
+const FRIEND_ONE_ROD_TIP = { x: 271, y: 142 } as const;
 
 // The player's bobber rests here (in the open water just off the dock); the
 // pond fish steers toward it. ____'s line is decorative company.
@@ -81,26 +81,43 @@ const DEPTH_MOTION = 20; // shimmer, fishing lines, bobbers, ripples
 const DEPTH_METER = 30; // catch-meter panel + bars
 const DEPTH_HUD = 40; // name / counter / helper / transition text
 
-// Water-surface outline (scene 640x360 coords), sampled from the painted
-// background: the pond's swimmable water bounded above by the dock's front edge
-// (which dips to ~254 at the post base around x=340) and, past x≈378, by open
-// water. Fish sprites AND their wakes are geometry-masked to this polygon so
-// they only ever appear on water — never over the dock or the reed banks.
+// Water-surface outline (scene 640x360 coords), sampled from the painted v3
+// background. The upper contour follows the dock lip, both pairs of feet, and
+// the large front post before opening into the pond at the dock's right edge.
+// Fish sprites AND their wakes are geometry-masked to this polygon so they can
+// pass beneath the seated characters without drawing over their shoes or dock.
 const WATER_MASK_POLYGON: ReadonlyArray<{ x: number; y: number }> = [
-  { x: 196, y: 224 },
-  { x: 226, y: 224 },
-  { x: 262, y: 222 },
-  { x: 300, y: 229 },
-  { x: 322, y: 231 },
-  { x: 334, y: 243 },
-  { x: 340, y: 255 },
-  { x: 352, y: 250 },
-  { x: 360, y: 227 },
-  { x: 376, y: 214 },
-  { x: 382, y: 200 },
-  { x: 610, y: 200 },
-  { x: 610, y: 338 },
-  { x: 196, y: 338 },
+  { x: 112, y: 211 },
+  { x: 136, y: 211 },
+  // ____'s shoes.
+  { x: 139, y: 222 },
+  { x: 145, y: 229 },
+  { x: 156, y: 230 },
+  { x: 160, y: 224 },
+  { x: 165, y: 229 },
+  { x: 176, y: 230 },
+  { x: 181, y: 211 },
+  // Clear water between ____ and ____, then ____'s shoes.
+  { x: 218, y: 211 },
+  { x: 221, y: 224 },
+  { x: 228, y: 231 },
+  { x: 239, y: 230 },
+  { x: 243, y: 223 },
+  { x: 248, y: 229 },
+  { x: 260, y: 230 },
+  { x: 266, y: 211 },
+  // Dock lip and the large front post.
+  { x: 331, y: 211 },
+  { x: 333, y: 239 },
+  { x: 339, y: 245 },
+  { x: 351, y: 245 },
+  { x: 357, y: 239 },
+  { x: 358, y: 211 },
+  { x: 382, y: 211 },
+  { x: 383, y: 0 },
+  { x: 640, y: 0 },
+  { x: 640, y: 338 },
+  { x: 112, y: 338 },
 ];
 
 export class FriendOneFishingScene extends Phaser.Scene {
@@ -685,11 +702,6 @@ export class FriendOneFishingScene extends Phaser.Scene {
       const broken = this.round.feedbackKind === 'line-break';
       graphics.fillStyle(broken ? 0x6f3b3b : damaged ? 0xbc6651 : 0xb8ddd2, broken ? 0.45 : 0.9);
       graphics.fillRoundedRect(PROGRESS_X + 4, y, PROGRESS_WIDTH - 8, segmentHeight, 3);
-      if (damaged || broken) {
-        graphics.lineStyle(1, 0xffb08d, 0.9);
-        graphics.lineBetween(PROGRESS_X + 3, y + segmentHeight * 0.38, PROGRESS_X + 12, y + segmentHeight * 0.55);
-        graphics.lineBetween(PROGRESS_X + 12, y + segmentHeight * 0.55, PROGRESS_X + 5, y + segmentHeight * 0.72);
-      }
     }
 
     this.drawReel(graphics);

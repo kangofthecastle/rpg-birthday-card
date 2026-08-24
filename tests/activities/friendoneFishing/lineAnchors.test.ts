@@ -30,8 +30,8 @@ describe('FriendOneFishingScene fishing-line anchors', () => {
     scene.drawFishingLines(0, false);
 
     expect(lineBetween.mock.calls.slice(0, 2).map(([x, y]) => ({ x, y }))).toEqual([
-      { x: 182, y: 126 },
-      { x: 272, y: 119 },
+      { x: 189, y: 144 },
+      { x: 271, y: 142 },
     ]);
   });
 });

@@ -13,11 +13,16 @@ import {
 } from '../../../src/activities/friendoneFishing/fishingModel';
 
 describe('fishingModel', () => {
-  it('defines three progressively harder fish ending with the glowing koi', () => {
+  it('defines three progressively harder fish with grounded display names', () => {
     expect(FRIEND_ONE_FISH_SEQUENCE.map((fish) => fish.id)).toEqual([
       'pond-drifter',
       'reed-darter',
       'glowing-koi',
+    ]);
+    expect(FRIEND_ONE_FISH_SEQUENCE.map((fish) => fish.label)).toEqual([
+      'Silver Minnow',
+      'Striped Perch',
+      'Glowing Koi',
     ]);
 
     const [drifter, darter, koi] = FRIEND_ONE_FISH_SEQUENCE;

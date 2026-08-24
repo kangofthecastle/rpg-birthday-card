@@ -222,7 +222,12 @@ export function showLettersScreen(
     // Note: the shared letter modal plays 'sfx-letter-open' itself (main has
     // advanced past this branch's base); no call here or it doubles up.
     const letter = letters[index];
-    await openLetter([{ speaker: letter.from, text: letter.text }]);
+    await openLetter([
+      {
+        speaker: letter.showAuthorHeading === false ? undefined : letter.from,
+        text: letter.text,
+      },
+    ]);
 
     model = markLetterRead(model, index);
     buttons[index]?.classList.add('letters-screen__letter--read');

@@ -20,6 +20,7 @@ export interface SheetMusicModalOptions {
 
 export interface PhotoLetterModalOptions {
   readonly speaker?: string;
+  readonly ariaLabel?: string;
   readonly text?: string;
   readonly photoSrc?: string;
   readonly photoAlt?: string;
@@ -149,7 +150,8 @@ export function showPhotoLetterModal(letter: Letter): Promise<void> {
     activeLetter = { host, resolve: finish };
     host.replaceChildren(
       createPhotoLetterModal({
-        speaker: letter.from || undefined,
+        speaker: letter.showAuthorHeading === false ? undefined : letter.from || undefined,
+        ariaLabel: letter.from ? `Letter from ${letter.from}` : 'Letter',
         text: letter.text,
         photoSrc: letter.photoSrc,
         photoAlt: letter.photoAlt,
@@ -236,7 +238,10 @@ export function createPhotoLetterModal(options: PhotoLetterModalOptions): HTMLEl
   modal.className = 'letter-modal photo-letter-modal';
   modal.setAttribute('role', 'dialog');
   modal.setAttribute('aria-modal', 'true');
-  modal.setAttribute('aria-label', options.speaker ? `Letter from ${options.speaker}` : 'Letter');
+  modal.setAttribute(
+    'aria-label',
+    options.ariaLabel ?? (options.speaker ? `Letter from ${options.speaker}` : 'Letter'),
+  );
 
   const paper = document.createElement('div');
   paper.className = 'letter-modal__paper photo-letter-modal__paper';

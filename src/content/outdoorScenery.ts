@@ -361,7 +361,7 @@ export const OUTDOOR_PROPS: Readonly<Record<string, readonly PropPlacement[]>> =
     { name: 'clearing-lantern-string', mapX: 512, mapY: 96 },
     // Framing pines along the west/east edges — a tall spire + broad pines each
     // side, corner-weighted — clear of the central path lane, the spawn row/col
-    // (512,300), the "Kneel at the water" rect (x 320–704, y 440–568), the shore
+    // (512,300), the "Look over the water" rect (x 320–704, y 440–568), the shore
     // water band (y > 512) and the lantern posts. Feet (map px). The fallback's
     // warm rim-light traces the sprite's LEFT edge, so WEST pines are flipped (rim
     // → right, toward the central lanterns) and EAST pines are not (rim → left,

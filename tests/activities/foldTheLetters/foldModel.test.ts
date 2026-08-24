@@ -4,8 +4,6 @@ import {
   applyKindle,
   applyRoll,
   assembledComponentCount,
-  BOATIGAMI_COMPLETE_LINE,
-  BOATIGAMI_OPENING_LINE,
   commitFold,
   componentProgress,
   createRitualState,
@@ -74,17 +72,19 @@ function assembleLantern(start: RitualState): RitualState {
 
 describe('keepsake ritual model — components & verbs', () => {
   it('keeps the edited Boatigami narrative prose in ritual order', () => {
-    expect(BOATIGAMI_OPENING_LINE).toBe(
-      'Three keepsakes, carried a long way. Give them to the water.',
-    );
+    expect(HULL_CREASES.map((crease) => crease.hint)).toEqual([
+      'Drag the top edge down onto the bottom',
+      'Fold the top corners into the centre',
+      'Pull it open from the sides',
+    ]);
     expect(HULL_CREASES.map((crease) => crease.snippet)).toEqual([
       '',
       '',
       '',
     ]);
-    expect(FOLD_COMPONENTS[0].assembledLine).toBe(
-      'The hull holds its shape.',
-    );
+    expect(FOLD_COMPONENTS[0].label).toBe("____'s letter, the hull");
+    expect(FOLD_COMPONENTS[0].assembledLine).toBe('The hull is complete');
+    expect(SAIL_FOLD_CREASE.hint).toBe('Fold a triangle');
     expect(SAIL_FOLD_CREASE.snippet).toBe('');
     expect(SAIL_FACE_LINES).toEqual([
       '',
@@ -92,18 +92,15 @@ describe('keepsake ritual model — components & verbs', () => {
       '',
       '',
     ]);
-    expect(FOLD_COMPONENTS[1].assembledLine).toBe(
-      'The sail catches and holds.',
-    );
+    expect(FOLD_COMPONENTS[1].label).toBe("____'s letter, the sail");
+    expect(FOLD_COMPONENTS[1].assembledLine).toBe('The sail catches wind.');
     expect(LANTERN_STAVES).toEqual([
       '𝄞 the piece, finally played',
       'played once, all the way through',
     ]);
+    expect(FOLD_COMPONENTS[2].label).toBe('Your sheet music, the lantern');
     expect(FOLD_COMPONENTS[2].assembledLine).toBe(
-      'The music curls into a lantern, and the light comes up through the notes.',
-    );
-    expect(BOATIGAMI_COMPLETE_LINE).toBe(
-      'The last fold pulls open, and it’s a boat. Its lantern catches.',
+      'The lantern casts a glow over the water.',
     );
   });
 

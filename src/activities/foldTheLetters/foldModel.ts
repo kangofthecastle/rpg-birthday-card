@@ -84,12 +84,6 @@ export interface FoldComponent {
 
 // --- content ---------------------------------------------------------------
 
-/** Story-facing prose that bookends the Boatigami ritual. */
-export const BOATIGAMI_OPENING_LINE =
-  'Three keepsakes, carried a long way. Give them to the water.';
-export const BOATIGAMI_COMPLETE_LINE =
-  'The last fold pulls open, and it’s a boat. Its lantern catches.';
-
 /**
  * ____'s letter, folded into the hull in THREE continuous folds. Each fold's
  * `fromShape` is exactly the previous fold's `toShape`, and each silhouette is
@@ -100,7 +94,7 @@ export const BOATIGAMI_COMPLETE_LINE =
 export const HULL_CREASES: readonly HullCrease[] = [
   {
     id: 'hull-1',
-    hint: 'fold it in half — drag the top edge down onto the bottom',
+    hint: 'Drag the top edge down onto the bottom',
     snippet: '',
     line: 'horizontal',
     dragAxis: 'vertical',
@@ -111,7 +105,7 @@ export const HULL_CREASES: readonly HullCrease[] = [
   },
   {
     id: 'hull-2',
-    hint: 'both top corners in to the centre — one drag folds them together',
+    hint: 'Fold the top corners into the centre',
     snippet: '',
     line: 'diagonal',
     dragAxis: 'horizontal',
@@ -122,7 +116,7 @@ export const HULL_CREASES: readonly HullCrease[] = [
   },
   {
     id: 'hull-3',
-    hint: 'pull it open from the sides — the boat takes shape',
+    hint: 'Pull it open from the sides',
     snippet: '',
     line: 'vertical',
     dragAxis: 'horizontal',
@@ -137,7 +131,7 @@ export const HULL_CREASES: readonly HullCrease[] = [
  * then the lines that flutter on the sail face as it is hoisted. */
 export const SAIL_FOLD_CREASE: HullCrease = {
   id: 'sail-fold',
-  hint: 'drag corner to corner — fold the triangle of the sail',
+  hint: 'Fold a triangle',
   snippet: '',
   line: 'diagonal',
   dragAxis: 'diagonal',
@@ -164,23 +158,23 @@ export const FOLD_COMPONENTS: readonly FoldComponent[] = [
   {
     id: 'hull',
     verb: 'fold',
-    label: "____'s letter — the hull",
+    label: "____'s letter, the hull",
     letterKeepsakeId: 'glowing-koi-scale',
-    assembledLine: 'The hull holds its shape.',
+    assembledLine: 'The hull is complete',
   },
   {
     id: 'sail',
     verb: 'hoist',
-    label: "____'s letter — the sail",
+    label: "____'s letter, the sail",
     letterKeepsakeId: 'defused-spike-charm',
-    assembledLine: 'The sail catches and holds.',
+    assembledLine: 'The sail catches wind.',
   },
   {
     id: 'lantern',
     verb: 'roll',
-    label: 'your sheet music — the lantern',
+    label: 'Your sheet music, the lantern',
     letterKeepsakeId: 'recipient-sheet-music',
-    assembledLine: 'The music curls into a lantern, and the light comes up through the notes.',
+    assembledLine: 'The lantern casts a glow over the water.',
   },
 ];
 

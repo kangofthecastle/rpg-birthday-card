@@ -4,7 +4,9 @@ import {
   createPhotoLetterModal,
   createSheetMusicModal,
   showLetterModal,
+  showPhotoLetterModal,
 } from '../../src/ui/letterModal';
+import { FRIEND_TWO_BIRTHDAY_LETTER } from '../../src/content/letters';
 
 beforeEach(() => {
   document.body.innerHTML = '<div id="ui-root"><aside class="collection-panel">Keepsakes</aside></div>';
@@ -78,6 +80,18 @@ describe('createPhotoLetterModal', () => {
     expect(modal.querySelector('.photo-letter-modal__photo-placeholder')).not.toBeNull();
     expect(modal.querySelector('.letter-modal__speaker')).toBeNull();
     expect(modal.querySelector('.letter-modal__text')).toBeNull();
+  });
+
+  it('opens ____’s birthday letter at its salutation without a redundant sender heading', async () => {
+    const promise = showPhotoLetterModal(FRIEND_TWO_BIRTHDAY_LETTER);
+    const modal = document.querySelector<HTMLElement>('.photo-letter-modal');
+
+    expect(modal?.getAttribute('aria-label')).toBe('Letter from ____');
+    expect(modal?.querySelector('.letter-modal__speaker')).toBeNull();
+    expect(modal?.querySelector('.letter-modal__text')?.textContent).toMatch(/^Hey ____,/);
+
+    modal?.querySelector<HTMLButtonElement>('.letter-modal__action')?.click();
+    await promise;
   });
 
   it('renders an authored photograph and letter copy when supplied', () => {

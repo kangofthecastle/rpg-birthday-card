@@ -156,7 +156,7 @@ describe('clearing framing pines', () => {
       expect(pine.mapY, `${pine.name} above shore`).toBeLessThan(512);
       // Off the central path lane / spawn column (x≈512).
       expect(Math.abs(pine.mapX - 512), `${pine.name} off centre lane`).toBeGreaterThan(64);
-      // Clear of the "Kneel at the water" rect (x 320–704, y 440–568): a pine that
+      // Clear of the "Look over the water" rect (x 320–704, y 440–568): a pine that
       // sits in that y-band must be outside its x-range.
       if (pine.mapY > 440) {
         expect(pine.mapX < 320 || pine.mapX > 704, `${pine.name} off kneel rect`).toBe(true);

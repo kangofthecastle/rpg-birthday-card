@@ -243,7 +243,7 @@ function createDialogueBox(line: DialogueLine, onNext: () => void): HTMLElement 
   if (line.emphasis === 'italic') {
     text.classList.add('dialogue-box__text--italic');
   }
-  text.textContent = line.text;
+  appendInlineDialogueText(text, line.text);
   content.append(text);
 
   const action = document.createElement('button');
@@ -261,4 +261,19 @@ function createDialogueBox(line: DialogueLine, onNext: () => void): HTMLElement 
   box.append(portraitFrame, content);
 
   return box;
+}
+
+/** Supports the small authored `*action* dialogue` convention without exposing
+ * the Markdown markers in the dialogue box. Only a leading emphasized phrase
+ * is interpreted; every other character remains literal text. */
+function appendInlineDialogueText(host: HTMLElement, value: string): void {
+  const match = value.match(/^\*([^*]+)\*(.*)$/s);
+  if (!match) {
+    host.textContent = value;
+    return;
+  }
+
+  const emphasis = document.createElement('em');
+  emphasis.textContent = match[1];
+  host.append(emphasis, document.createTextNode(match[2]));
 }

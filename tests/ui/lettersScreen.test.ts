@@ -132,6 +132,20 @@ describe('showLettersScreen', () => {
     expect(document.querySelector('.letters-screen__birthday')?.hasAttribute('hidden')).toBe(true);
   });
 
+  it('keeps an intentionally hidden author heading hidden when re-reading', async () => {
+    const openLetter = vi.fn(() => Promise.resolve());
+    showLettersScreen({
+      mode: 'archive',
+      letters: [{ from: '____', text: 'Hey ____,', showAuthorHeading: false }],
+      openLetter,
+    });
+
+    document.querySelector<HTMLButtonElement>('.letters-screen__letter')?.click();
+    await flush();
+
+    expect(openLetter).toHaveBeenCalledWith([{ speaker: undefined, text: 'Hey ____,' }]);
+  });
+
   it('reveals "happy birthday" only after the last unread letter closes', async () => {
     showLettersScreen({ letters: LETTERS, openLetter: () => Promise.resolve() });
 

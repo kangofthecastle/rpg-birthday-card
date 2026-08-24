@@ -21,7 +21,7 @@ import {
 } from '../../src/game/storyProgression';
 
 describe('story content resolution', () => {
-  it('keeps the mango sticky rice warm after RETAKE', () => {
+  it('uses the same mango sticky rice description after RETAKE', () => {
     const fresh = createInitialRunState('recipient-house');
     expect(resolveMangoRiceDialogue(fresh)).toBeUndefined();
 
@@ -31,7 +31,7 @@ describe('story content resolution', () => {
     });
     expect(resolveMangoRiceDialogue(afterRetake)).toEqual([
       {
-        text: 'Mango sticky rice, somehow still warm.',
+        text: 'Mango sticky rice, for some reason.',
         portraitId: 'inspect-mango-rice',
       },
     ]);
@@ -67,9 +67,9 @@ describe('story content resolution', () => {
       'Come on...',
       'Nothing. It won’t even turn on.',
       '1 NEW MESSAGE',
-      'Heyy! Happy birthday! you still coming over today?',
+      'Hey! Happy birthday! Still coming over today?',
       'I’m coming over today?',
-      'Must’ve forgot... I’ll head over now.',
+      'I think I forgot ;-; I’ll head over now!',
     ]);
     expect(first.dialogue[2]).toMatchObject({
       text: '1 NEW MESSAGE',
@@ -97,10 +97,14 @@ describe('story content resolution', () => {
   });
 
   it('provides world dialogue after fishing and after ____ disappears', () => {
+    expect(getActivityCompletionStory(FISHING_ACTIVITY_ID)?.playerFacing).toBe('down');
     expect(getActivityCompletionStory(FISHING_ACTIVITY_ID)?.worldDialogue.map((line) => line.text)).toEqual([
       'There. Now they have company.',
-      "____ said we should come over for a LAN party. Let's go!",
-      'So down!',
+      'How’d you do that?',
+      'Don’t worry about it.',
+      'We should go to ____’s, we’re going to be late.',
+      'We’re going to ____’s??',
+      'I need to use my calendar more.',
     ]);
     expect(getActivityCompletionStory(RETAKE_ACTIVITY_ID)?.worldDialogue.map((line) => line.text)).toEqual([
       '____?',

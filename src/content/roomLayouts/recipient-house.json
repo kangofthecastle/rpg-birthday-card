@@ -95,9 +95,9 @@
     },
     {
       "frame": "photoWall",
-      "mapX": 642,
-      "mapY": 64,
-      "scale": 0.47,
+      "mapX": 614,
+      "mapY": 38,
+      "scale": 0.45,
       "screenYRaise": 12,
       "wallShear": 0.5,
       "fixedDepth": -21,
@@ -129,6 +129,15 @@
       "mapY": 665,
       "heightRatio": 0.92,
       "note": "bedside table (singles-only; beside the bed)"
+    },
+    {
+      "frame": "epilogue-photo",
+      "mapX": 513,
+      "mapY": -61,
+      "heightRatio": 0.377,
+      "wallShear": 0.5,
+      "fixedDepth": -20.9,
+      "note": "post-ending galaxy artwork inside the empty photo-wall frame"
     }
   ],
   "removed": [

@@ -40,9 +40,6 @@ export interface EpiloguePhotoPlacement {
 
 export const EPILOGUE_PHOTO_WALL_SOURCE_SIZE = { width: 358, height: 240 } as const;
 export const EPILOGUE_WALL_SHEAR = 0.5;
-export const EPILOGUE_PHOTO_MASTER_CROP = { x: 0, y: 1, width: 480, height: 616 } as const;
-export const EPILOGUE_SHEARED_PHOTO_TEXTURE_KEY =
-  'story-epilogue-boat-photo-wall-sheared';
 
 export const BOAT_PHOTO_FRAME_PIXELS = {
   x: 146,

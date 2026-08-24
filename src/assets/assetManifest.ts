@@ -221,7 +221,7 @@ export const ASSET_MANIFEST: readonly GameAsset[] = [
     status: 'review',
     locationIds: ['friend-a'],
     notes:
-      'Generated retro pixel-art pond and dock backdrop saved at public/assets/activities/friendone-fishing/pond-dock-v2.png for the ____ PC fishing activity. ____ and ____ are based on the current character sprite references while fishing lines, bobbers, fish, and koi glow remain live Phaser overlays.',
+      'Generated retro pixel-art pond and dock backdrop saved at public/assets/activities/friendone-fishing/pond-dock-v3.png for the ____ PC fishing activity. ____ and ____ sit naturally at the dock edge with their lower legs hanging over it, while fishing lines, bobbers, fish, and koi glow remain live Phaser overlays.',
     qaChecks: ['retro pixel-art readability', 'player and ____ composition', 'meter contrast'],
   },
   {
@@ -353,6 +353,16 @@ export const ASSET_MANIFEST: readonly GameAsset[] = [
     notes:
       'Dark-water arrival and terrain bridge at public/assets/ending/water-arrival.png and water-to-galaxy.png, ending on galaxy-arrival.png: the exact initial camera crop of the playable galaxy-ground.png painting.',
     qaChecks: ['horizon registration', 'boat persists through bridge', 'live-scene handoff'],
+  },
+  {
+    id: 'ending-standalone-violin',
+    kind: 'message-art',
+    label: 'Standalone ending violin',
+    status: 'review',
+    locationIds: ['final-spot'],
+    notes:
+      'Transparent no-stand violin at public/assets/ending/violin-standalone.png, carried by ____ for the one-note star reveal.',
+    qaChecks: ['transparent background', 'no floor stand', 'small-size readability'],
   },
 ];
 

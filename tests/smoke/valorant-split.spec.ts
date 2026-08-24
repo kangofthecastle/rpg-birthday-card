@@ -83,7 +83,8 @@ test('completes RETAKE.EXE at ____ house through test mode', async ({ page }) =>
 
   await page.getByRole('button', { name: 'Defuse the spike' }).click();
 
-  await expect(page.getByText(/Sorry I had to bail before the round ended/)).toBeVisible();
+  await expect(page.getByText(/Sorry I had to bail before the round ended/)).toHaveCount(0);
+  await expect(page.getByText(/Please keep being you\./)).toBeVisible();
   await expect(page.locator('.collection-panel')).not.toContainText('____’s Letter');
   await page.getByRole('button', { name: 'Continue' }).click();
 

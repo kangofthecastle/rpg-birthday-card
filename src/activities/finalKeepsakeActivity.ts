@@ -49,7 +49,7 @@ const REAL_TIMING: EndingTiming = {
   waterToGalaxyMs: 4200,
   galaxyComposeMs: 4700,
   boatFadeMs: 2200,
-  galaxyHoldMs: 900,
+  galaxyHoldMs: 450,
 };
 
 // testMode collapses the pacing so the Playwright full-run smoke stays fast and

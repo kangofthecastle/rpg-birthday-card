@@ -20,7 +20,9 @@ to the procedural version. **No code changes needed.**
 | `/assets/ending/water-arrival.png` | Ending transition frame 1 — the boat begins on dark painted water (**1280×720**). Skipped if absent. |
 | `/assets/ending/water-to-galaxy.png` | Ending transition frame 2 — the horizon remains while the water has become peach-violet terrain (**1280×720**). Skipped if absent. |
 | `/assets/ending/galaxy-arrival.png` | Ending transition terminal frame — exact **1280×720** initial camera crop of `galaxy-ground.png`, held for the seamless live-scene handoff. |
+| `/assets/props/singles/recipient-house-epilogue-photo.png` | **480×616** editable portrait adaptation of ____'s painted galaxy artwork; shown in the empty room frame after the ending and exposed in `?dressEdit=1` for manual alignment. |
 | `/assets/ending/galaxy-ground.png` | **OPTIONAL** full-bleed painted ground for the final galaxy scene (**1408×1024**, the final-spot map size). Replaces the ground that is otherwise **composed from the existing `ending-water.png`** (tiled + code shimmer + light-pools) — so nothing new needs generating. Drop one in only if you want a hand-painted galaxy floor. |
+| `/assets/ending/violin-standalone.png` | Transparent standalone violin ____ receives in the galaxy ending (**256×384**); intentionally has no bow or floor stand. |
 
 ## Room-dressing art (loaded directly, not probed)
 

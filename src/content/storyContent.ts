@@ -8,9 +8,12 @@ import {
 } from '../game/storyProgression';
 import { getLocation } from './locations';
 import type { DialogueLine, LocationInteraction } from './types';
+import type { PlayerFacing } from '../assets/recipientSpriteConfig';
 
 export interface ActivityCompletionStory {
   readonly worldDialogue: readonly DialogueLine[];
+  /** Optional direction ____ turns before the completion beat begins. */
+  readonly playerFacing?: PlayerFacing;
 }
 
 export interface RecipientPcStory {
@@ -30,7 +33,7 @@ const RECIPIENT_PC_FIRST_MESSAGE: readonly DialogueLine[] = [
   { text: '1 NEW MESSAGE', portraitTreatment: 'phone' },
   {
     speaker: '____',
-    text: 'Heyy! Happy birthday! you still coming over today?',
+    text: 'Hey! Happy birthday! Still coming over today?',
     portraitId: 'portrait-friendone',
   },
   {
@@ -40,7 +43,7 @@ const RECIPIENT_PC_FIRST_MESSAGE: readonly DialogueLine[] = [
   },
   {
     speaker: '____',
-    text: 'Must’ve forgot... I’ll head over now.',
+    text: 'I think I forgot ;-; I’ll head over now!',
     portraitId: 'portrait-recipient',
   },
 ];
@@ -51,21 +54,29 @@ const RECIPIENT_PC_STILL_DARK: readonly DialogueLine[] = [
 
 const MANGO_RICE_AFTER_RETAKE: readonly DialogueLine[] = [
   {
-    text: 'Mango sticky rice, somehow still warm.',
+    text: 'Mango sticky rice, for some reason.',
     portraitId: 'inspect-mango-rice',
   },
 ];
 
 const ACTIVITY_COMPLETION_STORY: Readonly<Record<string, ActivityCompletionStory>> = {
   [FISHING_ACTIVITY_ID]: {
+    playerFacing: 'down',
     worldDialogue: [
       { speaker: '____', text: 'There. Now they have company.', portraitId: 'portrait-friendone' },
+      { speaker: '____', text: 'How’d you do that?', portraitId: 'portrait-recipient' },
+      { speaker: '____', text: 'Don’t worry about it.', portraitId: 'portrait-friendone' },
       {
         speaker: '____',
-        text: "____ said we should come over for a LAN party. Let's go!",
+        text: 'We should go to ____’s, we’re going to be late.',
         portraitId: 'portrait-friendone',
       },
-      { speaker: '____', text: 'So down!', portraitId: 'portrait-recipient' },
+      { speaker: '____', text: 'We’re going to ____’s??', portraitId: 'portrait-recipient' },
+      {
+        speaker: '____',
+        text: 'I need to use my calendar more.',
+        portraitId: 'portrait-recipient',
+      },
     ],
   },
   [RETAKE_ACTIVITY_ID]: {

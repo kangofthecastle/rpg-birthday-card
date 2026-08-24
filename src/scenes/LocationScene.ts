@@ -10,7 +10,7 @@ import {
 } from '../content/galaxyScene';
 import { HOME_HOST_NPCS, FRIEND_ONE_SPRITE, resolveHomeNpcPosition } from '../content/homeNpcs';
 import { GALAXY_ENDING_LETTERS } from '../content/galaxyLetters';
-import { LETTERS, type Letter } from '../content/letters';
+import { mergeLetterArchive, type Letter } from '../content/letters';
 import {
   getActivityCompletionStory,
   resolveRecipientPcStory,
@@ -1856,7 +1856,7 @@ export class LocationScene extends Phaser.Scene {
   // on screen — each with its own scale (±15%), heading, drift speed and
   // bob/rotation phase, then advanced every frame in advanceClearingCranes() and
   // wrapped back upstream on exit so the trickle never runs dry. Purely
-  // decorative: no colliders, so they never touch the "Kneel at the water"
+    // decorative: no colliders, so they never touch the "Look over the water"
   // interaction. Depth sits above the water/glow but well below any standing
   // figure, so ____ draws in front when he kneels at the shore.
   private spawnClearingCranes(width: number, height: number, tile: number): void {
@@ -3389,6 +3389,8 @@ export class LocationScene extends Phaser.Scene {
       this.spawnOverride ??
       getPointObject(mapJson, 'Spawns', this.registry.get('spawnId') as string);
 
+    this.playerFacing = this.location.initialPlayerFacing ?? 'down';
+    const initialSourceFacing = RECIPIENT_ANIMATION_SOURCE_FACING[this.playerFacing];
     this.createRecipientAnimations();
     this.player = this.physics.add.sprite(spawn.x, spawn.y, 'player-temp');
     this.player.setVisible(false);
@@ -3401,7 +3403,7 @@ export class LocationScene extends Phaser.Scene {
     // (x-48+30+18, y-64+48+16) = (x, y) — symmetric blocking north and south.
     this.player.body?.setOffset(30, 48);
     this.playerVisual = this.add
-      .sprite(0, 0, RECIPIENT_SPRITE.key, RECIPIENT_IDLE_ROW_START_FRAME.down)
+      .sprite(0, 0, RECIPIENT_SPRITE.key, RECIPIENT_IDLE_ROW_START_FRAME[initialSourceFacing])
       .setOrigin(RECIPIENT_SPRITE.origin.x, RECIPIENT_SPRITE.origin.y)
       .setScale(RECIPIENT_SPRITE.scale)
       .setDepth(10);
@@ -4561,7 +4563,7 @@ export class LocationScene extends Phaser.Scene {
 
     // Fill. Flat (outdoor) markers are axis-aligned rectangles that sit on the
     // ground/water, so a hard-edged fill reads as a rectangle stamped on the
-    // surface — in the clearing the "Kneel at the water" marker looked like a
+    // surface — in the clearing the "Look over the water" marker looked like a
     // shadow with a crisp rim on the twilight water. Feather the fill so it fades
     // in from the edge instead: nested concentric rects, each at a fraction of the
     // target alpha, composite to the full 0.28 in the interior and taper to nearly
@@ -4658,6 +4660,14 @@ export class LocationScene extends Phaser.Scene {
     this.syncRotatedPropDepths();
     this.maybeSpawnWalkDust(position);
     this.updatePlayerVisualAnimation();
+  }
+
+  private facePlayer(facing: PlayerFacing): void {
+    this.playerFacing = facing;
+    this.tapStepHoldUntil = 0;
+    this.wasPlayerMoving = false;
+    this.syncPlayerVisualFlip();
+    this.playerVisual?.play(RECIPIENT_IDLE_ANIMATIONS[facing], true);
   }
 
   private syncRotatedPropDepths(): void {
@@ -5084,7 +5094,7 @@ export class LocationScene extends Phaser.Scene {
       this.canMove = false;
       const archive = showLettersScreen({
         mode: 'archive',
-        letters: [...getCollectedFriendLetters(this.state), ...LETTERS],
+        letters: mergeLetterArchive(getCollectedFriendLetters(this.state)),
         onGoHome: () => this.goHome(),
       });
       await archive.closed;
@@ -5216,7 +5226,7 @@ export class LocationScene extends Phaser.Scene {
       .setDepth(816);
     const violin = this.add
       .image(0, 0, GALAXY_VIOLIN_KEY)
-      .setDisplaySize(24, 72)
+      .setDisplaySize(30, 48)
       .setAngle(8)
       .setDepth(817);
     this.tweens.add({
@@ -5235,7 +5245,7 @@ export class LocationScene extends Phaser.Scene {
       total: letters.length,
       onGoHome: () => this.goHome(),
     });
-    const playKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+    const playKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.E);
 
     const runtime: GalaxyLetterEndingRuntime = {
       model,
@@ -5558,6 +5568,10 @@ export class LocationScene extends Phaser.Scene {
         this.registry.set('runState', this.state);
 
         const completedActivityId = completion.activityId ?? activityId;
+        const completionStory = getActivityCompletionStory(completedActivityId);
+        if (completionStory?.playerFacing) {
+          this.facePlayer(completionStory.playerFacing);
+        }
         if (completedActivityId === 'friendone-pc-fishing') {
           await this.revealSecondKoi();
         }
@@ -5585,7 +5599,6 @@ export class LocationScene extends Phaser.Scene {
             await this.pauseForDialogue(this.location.rewardMessage);
           }
 
-          const completionStory = getActivityCompletionStory(completedActivityId);
           if (completionStory?.worldDialogue.length) {
             await this.pauseForDialogue(completionStory.worldDialogue);
           }

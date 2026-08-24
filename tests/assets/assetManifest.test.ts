@@ -88,7 +88,7 @@ describe('assetManifest', () => {
       locationIds: ['friend-a'],
     });
     expect(friendonePondArt.notes).toContain(
-      'public/assets/activities/friendone-fishing/pond-dock-v2.png',
+      'public/assets/activities/friendone-fishing/pond-dock-v3.png',
     );
     expect(friendonePondArt.notes).toContain('live Phaser overlays');
     expect(friendonePondArt.qaChecks).toEqual(

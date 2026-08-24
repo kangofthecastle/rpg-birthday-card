@@ -18,8 +18,8 @@ body,
   margin: 0;
 }
 
-/* The galaxy stays unobstructed during violin play and letter collection. This
-   host appears only for the final birthday line and return-home action. */
+/* The galaxy stays unobstructed: the only pre-letter UI is a small plain-text
+   violin instruction. The same host later reveals the birthday return action. */
 .galaxy-letters-hud {
   position: absolute;
   inset: 0;
@@ -35,12 +35,26 @@ body,
   display: none;
 }
 
+.galaxy-letters-hud[data-phase='complete'] {
+  align-items: center;
+  padding: 20px;
+}
+
 .galaxy-letters-hud__card {
   display: flex;
   flex-direction: column;
   align-items: center;
   padding: 0;
   text-align: center;
+}
+
+.galaxy-letters-hud__instruction {
+  margin: 0;
+  color: rgba(255, 240, 194, 0.9);
+  font: 16px/1.2 Georgia, serif;
+  letter-spacing: 0.12em;
+  text-transform: lowercase;
+  text-shadow: 0 2px 10px rgba(15, 7, 31, 0.9);
 }
 
 .galaxy-letters-hud__birthday {

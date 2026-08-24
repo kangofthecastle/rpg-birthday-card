@@ -187,7 +187,14 @@ export class ViolinScene extends Phaser.Scene {
 
   update(): void {
     if (this.escapeKey && Phaser.Input.Keyboard.JustDown(this.escapeKey)) {
-      this.deliverCancel();
+      // Once the score has passed, the result is irrevocable. Esc may leave the
+      // result screen early, but it must never turn a successful performance
+      // back into a cancellation with no keepsake.
+      if (this.modelState.phase === 'finale' || this.modelState.phase === 'complete') {
+        this.deliverComplete();
+      } else {
+        this.deliverCancel();
+      }
       return;
     }
 
@@ -233,8 +240,10 @@ export class ViolinScene extends Phaser.Scene {
     this.updateObservability();
 
     if (after.finished && !this.callbackDelivered) {
-      this.callbackDelivered = true;
-      this.time.delayedCall(160, this.callbacks.onComplete);
+      // The five-second finale hold has already given the results room to
+      // breathe. Hand the pass to the story synchronously now so a scene tick,
+      // reload, or teardown cannot strand the player on a successful result.
+      this.deliverComplete();
     }
   }
 
@@ -951,5 +960,13 @@ export class ViolinScene extends Phaser.Scene {
     }
     this.callbackDelivered = true;
     this.callbacks.onCancel();
+  }
+
+  private deliverComplete(): void {
+    if (this.callbackDelivered) {
+      return;
+    }
+    this.callbackDelivered = true;
+    this.callbacks.onComplete();
   }
 }

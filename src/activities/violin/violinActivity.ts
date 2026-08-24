@@ -88,8 +88,14 @@ export function createViolinActivity(
       let game: ViolinGameHandle | null = null;
 
       const destroyGame = (): void => {
-        game?.destroy();
+        const activeGame = game;
         game = null;
+        try {
+          activeGame?.destroy();
+        } catch {
+          // Phaser teardown is best-effort. A renderer cleanup failure must not
+          // undo an activity result that the story has already committed.
+        }
       };
 
       const finish = (callback: () => void): void => {
@@ -98,8 +104,15 @@ export function createViolinActivity(
         }
 
         finished = true;
-        destroyGame();
-        callback();
+        // Commit the activity before tearing down the Phaser instance. The real
+        // rhythm path calls us from inside that instance's own update loop; if
+        // destruction interrupts the loop, story completion must already have
+        // recorded the keepsake and awakening.
+        try {
+          callback();
+        } finally {
+          destroyGame();
+        }
       };
 
       const completePiece = (): void =>

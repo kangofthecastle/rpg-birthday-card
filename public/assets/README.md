@@ -17,8 +17,9 @@ to the procedural version. **No code changes needed.**
 | `/assets/exteriors/friendtwo-house.png` | ____'s house exterior on the path |
 | `/assets/exteriors/friendone-house.png` | ____'s house exterior on the path |
 | `/assets/tiles/shore-water.png` | The clearing's dark-water shore band — **512×128, horizontally tileable**. Tiled across the shore with the awakened-glow effects on top. Procedural water is the fallback. |
-| `/assets/ending/water-arrival.png` | Ending transition frame 1 — open water under a first hint of galaxy (**1280×720**). Cross-fades in over the drifting boat. Skipped if absent. |
-| `/assets/ending/water-to-galaxy.png` | Ending transition frame 2 — the water turning to galaxy (**1280×720**). Skipped if absent. |
+| `/assets/ending/water-arrival.png` | Ending transition frame 1 — the boat begins on dark painted water (**1280×720**). Skipped if absent. |
+| `/assets/ending/water-to-galaxy.png` | Ending transition frame 2 — the horizon remains while the water has become peach-violet terrain (**1280×720**). Skipped if absent. |
+| `/assets/ending/galaxy-arrival.png` | Ending transition terminal frame — exact **1280×720** initial camera crop of `galaxy-ground.png`, held for the seamless live-scene handoff. |
 | `/assets/ending/galaxy-ground.png` | **OPTIONAL** full-bleed painted ground for the final galaxy scene (**1408×1024**, the final-spot map size). Replaces the ground that is otherwise **composed from the existing `ending-water.png`** (tiled + code shimmer + light-pools) — so nothing new needs generating. Drop one in only if you want a hand-painted galaxy floor. |
 
 ## Room-dressing art (loaded directly, not probed)

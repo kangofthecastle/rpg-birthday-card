@@ -18,7 +18,6 @@ import {
   getPhrase,
   litNoteCount,
   pressViolinKey,
-  VIOLIN_FINALE_CAPTION,
   type ViolinState,
 } from './violinModel';
 import { createViolinModes, type ViolinModes } from './violinModes';
@@ -126,9 +125,6 @@ const PRACTICE_TRAIL_MS =
 const WINDOW = { x: 14, y: 52, w: 66, h: 150 } as const;
 const WINDOW_LIGHT = { x: WINDOW.x + WINDOW.w / 2, y: WINDOW.y + WINDOW.h * 0.62 };
 
-const CAPTION_FADE_MS = 1400;
-const CAPTION_HOLD_MS = 1800;
-
 // Warm base wall colours. The sixteen short echo phrases are projected across
 // these five visual rungs so the room keeps warming through the whole passage.
 const WARM_STAGES = [0x241c2b, 0x33232e, 0x45302f, 0x5a3a2e, 0x6f4529] as const;
@@ -191,7 +187,6 @@ export class ViolinScene extends Phaser.Scene {
   private helperText!: Phaser.GameObjects.Text;
   private legendLetters: Phaser.GameObjects.Text[] = [];
   private legendNames: Phaser.GameObjects.Text[] = [];
-  private captionText!: Phaser.GameObjects.Text;
 
   private noteKeys = new Map<string, Phaser.Input.Keyboard.Key>();
   private escapeKey?: Phaser.Input.Keyboard.Key;
@@ -647,14 +642,7 @@ export class ViolinScene extends Phaser.Scene {
     this.helperText.setText('');
     this.titleText.setText('');
 
-    this.captionText.setText(VIOLIN_FINALE_CAPTION);
-    this.tweens.add({
-      targets: this.captionText,
-      alpha: 1,
-      duration: CAPTION_FADE_MS,
-      ease: 'Sine.easeIn',
-    });
-    this.time.delayedCall(CAPTION_FADE_MS + CAPTION_HOLD_MS, () => this.completeActivity());
+    this.completeActivity();
   }
 
   private completeActivity(): void {
@@ -1553,20 +1541,6 @@ export class ViolinScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(50);
 
-    this.captionText = this.add
-      .text(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2, '', {
-        align: 'center',
-        color: '#fff3d6',
-        fontFamily: 'Georgia, serif',
-        fontSize: '26px',
-        fontStyle: 'italic',
-        resolution: RENDER_SCALE,
-        stroke: '#160f18',
-        strokeThickness: 5,
-      })
-      .setOrigin(0.5)
-      .setAlpha(0)
-      .setDepth(60);
   }
 
   // Rounded key caps along the bottom; the expected key glows and any held

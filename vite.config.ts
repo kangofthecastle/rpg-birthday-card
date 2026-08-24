@@ -1,4 +1,11 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname, resolve, sep } from 'node:path';
 import { defineConfig, type Plugin, type ViteDevServer } from 'vite';
 import {
@@ -12,7 +19,118 @@ const SAVE_ROUTE = '/__dev/save-collision-zones';
 const SAVE_LAYOUT_ROUTE = '/__dev/save-room-layout';
 const SAVE_OUTDOOR_LAYOUT_ROUTE = '/__dev/save-outdoor-layout';
 const SAVE_MAP_OBJECTS_ROUTE = '/__dev/save-map-objects';
+const PHOTO_WALL_PHOTO_ROUTE = '/__dev/photo-wall-photo';
+const PHOTO_WALL_PHOTO_URL = '/assets/photos/photo-wall-camera.jpg';
 const LOCATION_ID = /^[a-z0-9-]+$/;
+
+// The webcam keeps an in-browser draft first. These dev-only requests let the
+// player deliberately promote that draft into one fixed, inspectable game
+// asset, or remove that exact asset again. No request-supplied path is used.
+function photoWallPhotoSaverPlugin(): Plugin {
+  return {
+    name: 'photo-wall-photo-saver',
+    apply: 'serve',
+    configureServer(server: ViteDevServer) {
+      server.middlewares.use(PHOTO_WALL_PHOTO_ROUTE, (req, res) => {
+        const outPath = resolve(
+          server.config.root,
+          'public/assets/photos/photo-wall-camera.jpg',
+        );
+        const sendJson = (statusCode: number, payload: Record<string, unknown>): void => {
+          res.statusCode = statusCode;
+          res.setHeader('content-type', 'application/json');
+          res.end(JSON.stringify(payload));
+        };
+
+        if (req.method === 'GET') {
+          if (!existsSync(outPath)) {
+            sendJson(200, { exists: false });
+            return;
+          }
+          sendJson(200, {
+            exists: true,
+            src: `${PHOTO_WALL_PHOTO_URL}?v=${statSync(outPath).mtimeMs}`,
+          });
+          return;
+        }
+
+        if (req.method === 'DELETE') {
+          try {
+            if (existsSync(outPath)) {
+              unlinkSync(outPath);
+            }
+            sendJson(200, { ok: true });
+          } catch (error) {
+            sendJson(500, { ok: false, error: String(error) });
+          }
+          return;
+        }
+
+        if (req.method !== 'POST') {
+          res.statusCode = 405;
+          res.end('Method Not Allowed');
+          return;
+        }
+
+        const chunks: Buffer[] = [];
+        let receivedBytes = 0;
+        let rejected = false;
+        req.on('data', (chunk: Buffer) => {
+          if (rejected) return;
+          receivedBytes += chunk.length;
+          if (receivedBytes > 12 * 1024 * 1024) {
+            rejected = true;
+            sendJson(413, { ok: false, error: 'Photo is too large' });
+            req.destroy();
+            return;
+          }
+          chunks.push(chunk);
+        });
+        req.on('end', () => {
+          if (rejected) return;
+          try {
+            const parsed = JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
+            if (
+              typeof parsed !== 'object' ||
+              parsed === null ||
+              typeof (parsed as Record<string, unknown>).dataUrl !== 'string'
+            ) {
+              sendJson(400, { ok: false, error: 'Invalid payload' });
+              return;
+            }
+            const match = /^data:image\/jpeg;base64,([A-Za-z0-9+/]+={0,2})$/.exec(
+              (parsed as { dataUrl: string }).dataUrl,
+            );
+            if (!match) {
+              sendJson(400, { ok: false, error: 'Expected a JPEG data URL' });
+              return;
+            }
+            const bytes = Buffer.from(match[1], 'base64');
+            if (
+              bytes.length < 4 ||
+              bytes.length > 10 * 1024 * 1024 ||
+              bytes[0] !== 0xff ||
+              bytes[1] !== 0xd8 ||
+              bytes.at(-2) !== 0xff ||
+              bytes.at(-1) !== 0xd9
+            ) {
+              sendJson(400, { ok: false, error: 'Invalid JPEG data' });
+              return;
+            }
+            mkdirSync(dirname(outPath), { recursive: true });
+            writeFileSync(outPath, bytes);
+            sendJson(200, {
+              ok: true,
+              src: `${PHOTO_WALL_PHOTO_URL}?v=${Date.now()}`,
+            });
+          } catch (error) {
+            sendJson(500, { ok: false, error: String(error) });
+          }
+        });
+      });
+    },
+  };
+}
 
 // Dev-only endpoint used by the in-game zone editor (?editZones=1) to persist
 // authored polygons to src/content/collisionZones/<locationId>.json.
@@ -289,6 +407,7 @@ export default defineConfig({
     roomLayoutSaverPlugin(),
     outdoorLayoutSaverPlugin(),
     mapObjectSaverPlugin(),
+    photoWallPhotoSaverPlugin(),
   ],
   server: {
     host: '127.0.0.1',

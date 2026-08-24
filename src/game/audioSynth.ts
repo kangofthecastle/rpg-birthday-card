@@ -656,70 +656,79 @@ function createSplitBed(ctx: AudioContext, output: AudioNode): SynthMusicHandle 
   };
 }
 
-// music-ending: huge slow swelling pad that builds new layers over roughly
-// 20 seconds — root, fifth, octave, third, and a high shimmer, each with
-// its own long attack.
-interface EndingLayer {
-  frequency: number;
-  delayMs: number;
-  attackSeconds: number;
-  gain: number;
-  waveform: OscillatorType;
+// music-ending: a slow harmonic journey with a small answering melody. The old
+// bed exposed one C for five seconds, then stacked more fixed notes onto it; in
+// practice that read as a single monotonous drone through the boat transition.
+const ENDING_PAD_PRESET: PadPreset = {
+  chordProgression: [
+    [65.41, 130.81, 164.81, 196.0], // Cmaj7 colour: C2 C3 E3 G3
+    [55.0, 110.0, 164.81, 196.0], // Am7: A1 A2 E3 G3
+    [43.65, 87.31, 130.81, 164.81], // Fmaj7: F1 F2 C3 E3
+    [49.0, 98.0, 146.83, 196.0], // G open: G1 G2 D3 G3
+  ],
+  chordChangeMs: 6200,
+  chordTransitionSeconds: 1.8,
+  waveform: 'sine',
+  filterType: 'lowpass',
+  filterFrequency: 1850,
+  filterQ: 0.55,
+  voiceGain: 0.052,
+  attackSeconds: 2.4,
+  detuneSpreadCents: 4,
+  lfoRateHz: 0.045,
+  lfoDepthHz: 220,
+  addAiryNoise: true,
+};
+
+interface EndingMelodyNote {
+  readonly frequency: number;
+  readonly gapMs: number;
 }
 
-const ENDING_LAYERS: EndingLayer[] = [
-  { frequency: 130.81, delayMs: 0, attackSeconds: 6, gain: 0.1, waveform: 'sine' }, // C3 root
-  { frequency: 196.0, delayMs: 5000, attackSeconds: 6, gain: 0.08, waveform: 'triangle' }, // G3 fifth
-  { frequency: 261.63, delayMs: 10000, attackSeconds: 7, gain: 0.07, waveform: 'sine' }, // C4 octave
-  { frequency: 329.63, delayMs: 15000, attackSeconds: 8, gain: 0.06, waveform: 'triangle' }, // E4 third
-  { frequency: 523.25, delayMs: 20000, attackSeconds: 8, gain: 0.045, waveform: 'sine' }, // C5 shimmer
+// An original, unhurried C-major/A-minor pentatonic line. Uneven gaps keep it
+// conversational rather than clockwork; each note overlaps softly into the next.
+const ENDING_MELODY: readonly EndingMelodyNote[] = [
+  { frequency: 329.63, gapMs: 2100 }, // E4
+  { frequency: 392.0, gapMs: 1900 }, // G4
+  { frequency: 440.0, gapMs: 2600 }, // A4
+  { frequency: 523.25, gapMs: 3200 }, // C5
+  { frequency: 493.88, gapMs: 1800 }, // B4
+  { frequency: 392.0, gapMs: 2200 }, // G4
+  { frequency: 329.63, gapMs: 1700 }, // E4
+  { frequency: 293.66, gapMs: 3400 }, // D4
 ];
 
+const ENDING_MASTER_GAIN = 0.58;
+
 function createEndingBed(ctx: AudioContext, output: AudioNode): SynthMusicHandle {
-  const filter = ctx.createBiquadFilter();
-  filter.type = 'lowpass';
-  filter.frequency.value = 2200;
-  filter.connect(output);
-
+  const endingBus = ctx.createGain();
+  endingBus.gain.value = ENDING_MASTER_GAIN;
+  endingBus.connect(output);
+  const pad = createPadBed(ctx, endingBus, ENDING_PAD_PRESET);
+  const melodyFilter = ctx.createBiquadFilter();
+  melodyFilter.type = 'lowpass';
+  melodyFilter.frequency.value = 2600;
+  melodyFilter.Q.value = 0.7;
+  melodyFilter.connect(endingBus);
   let disposed = false;
-  const timeoutIds: Array<ReturnType<typeof setTimeout>> = [];
-  const disposers: Array<() => void> = [() => filter.disconnect()];
+  let melodyIndex = 0;
+  let melodyTimer: ReturnType<typeof setTimeout> | undefined;
 
-  const addLayer = (layer: EndingLayer) => {
-    if (disposed) {
-      return;
-    }
-    const osc = ctx.createOscillator();
-    osc.type = layer.waveform;
-    osc.frequency.value = layer.frequency;
-    const gain = ctx.createGain();
-    gain.gain.value = 0;
-    osc.connect(gain);
-    gain.connect(filter);
-
-    const t = ctx.currentTime;
-    gain.gain.setValueAtTime(0, t);
-    gain.gain.linearRampToValueAtTime(layer.gain, t + layer.attackSeconds);
-    osc.start(t);
-
-    disposers.push(() => {
-      try {
-        osc.stop();
-      } catch {
-        // already stopped
-      }
-      osc.disconnect();
-      gain.disconnect();
+  const playNextMelodyNote = (): void => {
+    if (disposed) return;
+    const note = ENDING_MELODY[melodyIndex % ENDING_MELODY.length]!;
+    playTone(ctx, melodyFilter, {
+      type: melodyIndex % 3 === 2 ? 'triangle' : 'sine',
+      frequency: note.frequency,
+      gain: 0.038,
+      attackMs: 180,
+      holdMs: 520,
+      releaseMs: 1700,
     });
+    melodyIndex += 1;
+    melodyTimer = setTimeout(playNextMelodyNote, note.gapMs);
   };
-
-  ENDING_LAYERS.forEach((layer) => {
-    if (layer.delayMs === 0) {
-      addLayer(layer);
-    } else {
-      timeoutIds.push(setTimeout(() => addLayer(layer), layer.delayMs));
-    }
-  });
+  melodyTimer = setTimeout(playNextMelodyNote, 700);
 
   return {
     dispose: () => {
@@ -727,8 +736,12 @@ function createEndingBed(ctx: AudioContext, output: AudioNode): SynthMusicHandle
         return;
       }
       disposed = true;
-      timeoutIds.forEach((id) => clearTimeout(id));
-      disposers.forEach((dispose) => dispose());
+      if (melodyTimer !== undefined) {
+        clearTimeout(melodyTimer);
+      }
+      pad.dispose();
+      melodyFilter.disconnect();
+      endingBus.disconnect();
     },
   };
 }

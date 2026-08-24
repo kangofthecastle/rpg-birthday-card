@@ -41,7 +41,7 @@ export interface LettersScreenOptions {
   /** Previously read letter indexes, restored when reopening the archive. */
   readonly initialReadIndices?: readonly number[];
   /**
-   * Optional quiet "go home" affordance, revealed once every letter is read.
+   * Optional quiet "go back" affordance, revealed once every letter is read.
    * When provided, a gentle button appears beside the "happy birthday" line and
    * calls this to dismiss the screen and return to ____'s room.
    */
@@ -122,7 +122,7 @@ export function showLettersScreen(
 
   const subtitle = document.createElement('p');
   subtitle.className = 'letters-screen__subtitle';
-  subtitle.textContent = 'letters from everyone who loves you';
+  subtitle.textContent = 'Happy Birthday!';
 
   const grid = document.createElement('ul');
   grid.className = 'letters-screen__grid';
@@ -171,7 +171,7 @@ export function showLettersScreen(
   const goHome = document.createElement('button');
   goHome.type = 'button';
   goHome.className = 'letters-screen__go-home';
-  goHome.textContent = 'go home';
+  goHome.textContent = 'go back';
   // With no authored letters, never trap the player on an empty terminal screen:
   // the quiet return-home action is available immediately. Once real letters
   // exist, ending mode continues to reveal it only after all are read.

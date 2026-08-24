@@ -1,4 +1,5 @@
 import type { DialogueLine } from '../content/types';
+import type { Letter } from '../content/letters';
 import { playSfx } from '../game/audio';
 import { getUiRoot } from './domRoot';
 
@@ -13,6 +14,15 @@ export interface SheetMusicModalOptions {
   readonly title: string;
   readonly imageSrc: string;
   readonly imageAlt: string;
+  readonly actionLabel?: string;
+  readonly onAction: () => void;
+}
+
+export interface PhotoLetterModalOptions {
+  readonly speaker?: string;
+  readonly text?: string;
+  readonly photoSrc?: string;
+  readonly photoAlt?: string;
   readonly actionLabel?: string;
   readonly onAction: () => void;
 }
@@ -121,6 +131,35 @@ export function showSheetMusicModal(
   });
 }
 
+/** Opens one of the final constellation's photo-ready letters. */
+export function showPhotoLetterModal(letter: Letter): Promise<void> {
+  closeActiveLetter();
+  playSfx('sfx-letter-open');
+
+  return new Promise((resolve) => {
+    const host = getLetterHost();
+    let complete = false;
+    const finish = () => {
+      if (complete) return;
+      complete = true;
+      if (activeLetter?.host === host) activeLetter = undefined;
+      host.remove();
+      resolve();
+    };
+    activeLetter = { host, resolve: finish };
+    host.replaceChildren(
+      createPhotoLetterModal({
+        speaker: letter.from || undefined,
+        text: letter.text,
+        photoSrc: letter.photoSrc,
+        photoAlt: letter.photoAlt,
+        onAction: finish,
+      }),
+    );
+    host.querySelector<HTMLButtonElement>('.letter-modal__action')?.focus({ preventScroll: true });
+  });
+}
+
 export function createLetterModal(options: LetterModalOptions): HTMLElement {
   const modal = document.createElement('section');
   modal.className = 'letter-modal';
@@ -188,6 +227,65 @@ export function createSheetMusicModal(options: SheetMusicModalOptions): HTMLElem
   });
 
   paper.append(image, action);
+  modal.append(paper);
+  return modal;
+}
+
+export function createPhotoLetterModal(options: PhotoLetterModalOptions): HTMLElement {
+  const modal = document.createElement('section');
+  modal.className = 'letter-modal photo-letter-modal';
+  modal.setAttribute('role', 'dialog');
+  modal.setAttribute('aria-modal', 'true');
+  modal.setAttribute('aria-label', options.speaker ? `Letter from ${options.speaker}` : 'Letter');
+
+  const paper = document.createElement('div');
+  paper.className = 'letter-modal__paper photo-letter-modal__paper';
+
+  const photoFrame = document.createElement('figure');
+  photoFrame.className = 'photo-letter-modal__photo-frame';
+  if (options.photoSrc) {
+    const photo = document.createElement('img');
+    photo.className = 'photo-letter-modal__photo';
+    photo.src = options.photoSrc;
+    photo.alt = options.photoAlt ?? '';
+    photoFrame.append(photo);
+  } else {
+    const placeholder = document.createElement('div');
+    placeholder.className = 'photo-letter-modal__photo-placeholder';
+    placeholder.setAttribute('role', 'img');
+    placeholder.setAttribute('aria-label', 'Photo placeholder');
+    photoFrame.append(placeholder);
+  }
+  paper.append(photoFrame);
+
+  if (options.speaker || options.text) {
+    const body = document.createElement('div');
+    body.className = 'letter-modal__body photo-letter-modal__body';
+    if (options.speaker) {
+      const speaker = document.createElement('strong');
+      speaker.className = 'letter-modal__speaker';
+      speaker.textContent = options.speaker;
+      body.append(speaker);
+    }
+    if (options.text) {
+      const text = document.createElement('p');
+      text.className = 'letter-modal__text';
+      text.textContent = options.text;
+      body.append(text);
+    }
+    paper.append(body);
+  }
+
+  const action = document.createElement('button');
+  action.type = 'button';
+  action.className = 'letter-modal__action photo-letter-modal__action';
+  action.textContent = options.actionLabel ?? 'Continue';
+  action.addEventListener('click', (event) => {
+    event.stopPropagation();
+    options.onAction();
+  });
+
+  paper.append(action);
   modal.append(paper);
   return modal;
 }

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createLetterModal,
+  createPhotoLetterModal,
   createSheetMusicModal,
   showLetterModal,
 } from '../../src/ui/letterModal';
@@ -66,6 +67,33 @@ describe('createSheetMusicModal', () => {
 
     modal.querySelector<HTMLButtonElement>('.letter-modal__action')?.click();
     expect(onAction).toHaveBeenCalledOnce();
+  });
+});
+
+describe('createPhotoLetterModal', () => {
+  it('renders a blank photo-ready letter slot without fake copy', () => {
+    const modal = createPhotoLetterModal({ onAction: vi.fn() });
+
+    expect(modal.getAttribute('aria-label')).toBe('Letter');
+    expect(modal.querySelector('.photo-letter-modal__photo-placeholder')).not.toBeNull();
+    expect(modal.querySelector('.letter-modal__speaker')).toBeNull();
+    expect(modal.querySelector('.letter-modal__text')).toBeNull();
+  });
+
+  it('renders an authored photograph and letter copy when supplied', () => {
+    const modal = createPhotoLetterModal({
+      speaker: '____',
+      text: 'For ____.',
+      photoSrc: '/assets/photos/friendone-and-recipient.png',
+      photoAlt: '____ and ____ together',
+      onAction: vi.fn(),
+    });
+    const photo = modal.querySelector<HTMLImageElement>('.photo-letter-modal__photo');
+
+    expect(modal.getAttribute('aria-label')).toBe('Letter from ____');
+    expect(photo?.getAttribute('src')).toBe('/assets/photos/friendone-and-recipient.png');
+    expect(photo?.getAttribute('alt')).toBe('____ and ____ together');
+    expect(modal.querySelector('.letter-modal__text')?.textContent).toBe('For ____.');
   });
 });
 

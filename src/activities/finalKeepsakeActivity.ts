@@ -8,15 +8,14 @@ import { isImageUrl } from '../game/assetProbe';
  * swap, so the painting continues unbroken with no re-fade and no opening hold.
  * The preceding fold activity may hold its sail-away painting across the scene
  * swap, but that painting is not one of this transition's frames. This sequence
- * starts directly on water-arrival, then breathes through water-to-galaxy and the
- * composed ocean-galaxy. The composited boat drifts smaller toward (but never
- * across) the painted horizon, then fades out as the galaxy settles. It ends
- * holding on the galaxy and hands off (`endingArrival`) to the live scene.
+ * starts directly on water-arrival, then breathes through the horizon bridge and
+ * an exact crop of ____'s painted galaxy ground. The composited boat drifts
+ * smaller toward the painted horizon and fades as the ocean gives way to ground.
+ * It ends holding on the painting and hands off (`endingArrival`) to the live scene.
  *
  * File-first and gracefully degrading: each painted frame is probed; an absent
  * frame is simply skipped (both absent → the key art fades straight into the
- * code-composed galaxy). Nothing blocks on generated art — the galaxy layer is
- * composed from the existing ending-sky/ending-water via CSS, always present.
+ * terminal crop of the playable painting).
  */
 
 const ASSET = {
@@ -33,9 +32,11 @@ const ASSET = {
 // from the value for the dissolve that reveals it; the boat drift duration is
 // derived from their sum (see start()). Single source: every ms lives here.
 interface EndingTiming {
+  /** Quiet opening hold so the boat has time to appear on dark water. */
+  readonly waterHoldMs: number;
   /** Water-arrival → water-to-galaxy dissolve. */
   readonly waterToGalaxyMs: number;
-  /** Water-to-galaxy → composed galaxy dissolve (more room to breathe). */
+  /** Horizon bridge → exact painted-ground crop dissolve (more room to breathe). */
   readonly galaxyComposeMs: number;
   /** How long the boat takes to fade in (with water-arrival) and out. */
   readonly boatFadeMs: number;
@@ -44,15 +45,17 @@ interface EndingTiming {
 }
 
 const REAL_TIMING: EndingTiming = {
-  waterToGalaxyMs: 3600,
+  waterHoldMs: 2800,
+  waterToGalaxyMs: 4200,
   galaxyComposeMs: 4700,
   boatFadeMs: 2200,
-  galaxyHoldMs: 2400,
+  galaxyHoldMs: 900,
 };
 
 // testMode collapses the pacing so the Playwright full-run smoke stays fast and
 // deterministic without losing a beat of the sequence.
 const TEST_TIMING: EndingTiming = {
+  waterHoldMs: 20,
   waterToGalaxyMs: 50,
   galaxyComposeMs: 50,
   boatFadeMs: 40,
@@ -61,6 +64,14 @@ const TEST_TIMING: EndingTiming = {
 
 function isTestMode(): boolean {
   return new URL(window.location.href).searchParams.get('testMode') === '1';
+}
+
+function useFullTransitionTiming(): boolean {
+  return new URL(window.location.href).searchParams.get('fullTransitions') === '1';
+}
+
+function usesCondensedTiming(): boolean {
+  return prefersReducedMotion() || (isTestMode() && !useFullTransitionTiming());
 }
 
 // Reduced-motion collapses to the near-instant test pacing so the JS-driven
@@ -107,15 +118,20 @@ export const finalKeepsakeActivity: ActivityModule = {
   id: 'final-keepsake-reveal',
   title: 'Out to Sea',
   async start({ mount, onComplete }) {
-    const timing = isTestMode() || prefersReducedMotion() ? TEST_TIMING : REAL_TIMING;
+    const condensedTiming = usesCondensedTiming();
+    const timing = condensedTiming ? TEST_TIMING : REAL_TIMING;
     const assets = await probeAssets();
 
     const { frame, boat, galaxy, layers, frameFades } = buildTransition(mount, assets, timing);
+    // The first montage frame is now mounted, so the temporary scene-restart
+    // cover can step out without exposing the destination canvas underneath.
+    document.body.classList.add('ending-montage-mounted');
 
     // The drift spans every fade AFTER frame 0 — the boat is on screen for all of
     // them and lands exactly as the galaxy settles. Synced to the frame-sequence
     // length from one JS source (the CSS drift no longer hard-codes a duration).
-    const driftMs = frameFades.slice(1).reduce((sum, ms) => sum + ms, 0);
+    const driftMs =
+      timing.waterHoldMs + frameFades.slice(1).reduce((sum, ms) => sum + ms, 0);
     const boatFadeInMs = timing.boatFadeMs;
     const boatFadeInDelayMs = 0;
 
@@ -132,7 +148,7 @@ export const finalKeepsakeActivity: ActivityModule = {
     };
 
     // The ending swell + bed rise as the drift begins.
-    playMusic('music-ending', { fadeMs: isTestMode() ? 200 : 3200 });
+    playMusic('music-ending', { fadeMs: condensedTiming ? 200 : 3200 });
 
     // Pin the water-arrival opening frame while later frames retain their gentle
     // drift. Boatigami now hands off directly without a persistent still-image
@@ -142,9 +158,20 @@ export const finalKeepsakeActivity: ActivityModule = {
     void frame(0).offsetWidth;
 
     appearBoat();
+    await wait(timing.waterHoldMs);
 
+    let boatFadeStarted = false;
     // Cross-fade through each subsequent painted frame, ending on the galaxy.
     for (let index = 1; index < layers; index += 1) {
+      // Keep the boat through the entire horizon bridge. It disappears only as
+      // ____'s exact final painting arrives underneath it.
+      if (index === layers - 1 && boat) {
+        boat.style.transition =
+          `transform ${driftMs}ms cubic-bezier(0.3, 0, 0.4, 1), ` +
+          `opacity ${timing.boatFadeMs}ms ease`;
+        boat.style.opacity = '0';
+        boatFadeStarted = true;
+      }
       frame(index).style.opacity = '1';
       // The swell lands as the water turns to galaxy (the penultimate fade).
       if (index === layers - 1) {
@@ -153,14 +180,22 @@ export const finalKeepsakeActivity: ActivityModule = {
       await wait(frameFades[index]!);
     }
 
-    // The galaxy holds; the boat fades away so the handoff to the (boatless)
-    // playable galaxy scene is seamless.
-    if (boat) {
+    // In a degraded one-frame sequence there was no final dissolve to trigger
+    // the fade, so still remove the boat before handing off to the live scene.
+    if (boat && !boatFadeStarted) {
       boat.style.transition = `opacity ${timing.boatFadeMs}ms ease`;
       boat.style.opacity = '0';
     }
+    // The exact arrival crop holds so its fade reveals the matching live view.
     galaxy.dataset.endingGalaxy = 'settled';
-    await wait(Math.max(timing.boatFadeMs, timing.galaxyHoldMs));
+    // In the normal multi-frame sequence the boat has already completed its fade
+    // during the long galaxy dissolve, so only the authored final hold remains.
+    // A degraded one-frame fallback still waits for its just-started boat fade.
+    await wait(
+      boatFadeStarted
+        ? timing.galaxyHoldMs
+        : Math.max(timing.boatFadeMs, timing.galaxyHoldMs),
+    );
 
     // Hand off to the live scene: it wakes beneath this held galaxy frame,
     // cross-fades it out, and hands ____ control on the galaxy water.
@@ -196,10 +231,10 @@ function buildTransition(
   stage.dataset.endingFrames = '';
   stage.dataset.endingStage = ''; // back-compat observability hook for smokes
   stage.setAttribute('role', 'img');
-  stage.setAttribute('aria-label', 'The boat drifts out into the ocean-galaxy.');
+  stage.setAttribute('aria-label', 'The boat drifts from dark water into the galaxy.');
 
   // The ordered frame sequence: painted frames when present (file-first), always
-  // ending on the code-composed galaxy. Each layer stacks above the previous so
+  // ending on the exact painted arrival crop. Each layer stacks above the previous so
   // fading it in reveals it over the one before — a breathing cross-fade. Each
   // frame carries the duration of the dissolve that reveals IT (frame 0 has no
   // dissolve; its value is unused).
@@ -247,27 +282,14 @@ function imageLayer(url: string, fadeMs: number): HTMLElement {
   return layer;
 }
 
-// The composed ocean-galaxy: the SAME painted sky/water layers the wash used,
-// stacked with drifting sunbeams. Always present (pure CSS over the existing
-// ending-sky / ending-water art), so it is the guaranteed terminal frame.
+// The exact 1280x720 camera crop of galaxy-ground.png. It is deliberately still:
+// the held overlay fades directly onto the same pixels in the live scene.
 function galaxyLayer(fadeMs: number): HTMLElement {
   const layer = document.createElement('div');
   layer.className = 'ending-frames__layer ending-frames__layer--galaxy';
   layer.dataset.endingGalaxy = '';
   layer.style.transitionDuration = `${fadeMs}ms`;
 
-  const sky = document.createElement('div');
-  sky.className = 'ending-ocean__sky';
-  const water = document.createElement('div');
-  water.className = 'ending-ocean__water';
-  const beams = document.createElement('div');
-  beams.className = 'ending-ocean__beams';
-  for (let index = 0; index < 3; index += 1) {
-    const beam = document.createElement('span');
-    beam.className = `ending-ocean__beam ending-ocean__beam--${index}`;
-    beams.append(beam);
-  }
-  layer.append(sky, water, beams);
   return layer;
 }
 

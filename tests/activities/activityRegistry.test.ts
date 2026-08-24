@@ -341,7 +341,7 @@ describe('activityRegistry', () => {
   it('mounts the ending transition frames (not the old keepsake stage)', async () => {
     // The ending transition builds its frame overlay once the (file-first) asset
     // probes settle. In jsdom every probe fails, so this exercises the
-    // graceful-degradation build: the composed galaxy is the only frame, no
+    // graceful-degradation build: the painted arrival is the only frame, no
     // painted frames, no boat — and crucially none of the dead keepsake stage.
     const activity = getActivity('final-keepsake-reveal');
     const fixture = document.createElement('div');
@@ -361,7 +361,7 @@ describe('activityRegistry', () => {
       await vi.waitFor(() => {
         expect(mount.querySelector('[data-ending-frames]')).not.toBeNull();
       });
-      // The composed galaxy is the guaranteed terminal frame.
+      // The painted arrival crop is the guaranteed terminal frame.
       expect(mount.querySelector('[data-ending-galaxy]')).not.toBeNull();
       // The gutted keepsake-placement stage is gone entirely.
       expect(mount.querySelector('.ending-keepsake')).toBeNull();

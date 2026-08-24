@@ -37,7 +37,7 @@ describe('finale dialogue', () => {
       { speaker: '____', text: '...we had all the time in the world.' },
       {
         speaker: '____',
-        text: 'Anyway — I’m not the only one who wanted to say something. Everyone did. Go on — read what they wrote you.',
+        text: 'Anyway — I’m not the only one who wanted to say something. Everyone did. Take your violin, ____. Let them hear you.',
       },
     ]);
   });

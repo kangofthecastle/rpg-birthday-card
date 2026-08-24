@@ -148,12 +148,13 @@ describe('showLettersScreen', () => {
     expect(birthday?.textContent).toBe('happy birthday, recipient.');
   });
 
-  it('reveals a "go home" affordance once all letters are read and calls back', async () => {
+  it('reveals a "go back" affordance once all letters are read and calls back', async () => {
     const onGoHome = vi.fn();
     showLettersScreen({ letters: LETTERS, openLetter: () => Promise.resolve(), onGoHome });
 
     const goHome = document.querySelector<HTMLButtonElement>('.letters-screen__go-home');
     expect(goHome).not.toBeNull();
+    expect(goHome?.textContent).toBe('go back');
     // Hidden until every letter is read.
     expect(goHome?.hasAttribute('hidden')).toBe(true);
 
@@ -171,7 +172,7 @@ describe('showLettersScreen', () => {
     expect(document.querySelector('.letters-screen')).toBeNull();
   });
 
-  it('omits the "go home" affordance when no handler is provided', async () => {
+  it('omits the "go back" affordance when no handler is provided', async () => {
     showLettersScreen({ letters: LETTERS, openLetter: () => Promise.resolve() });
     const buttons = document.querySelectorAll<HTMLButtonElement>('.letters-screen__letter');
     buttons[0]?.click();

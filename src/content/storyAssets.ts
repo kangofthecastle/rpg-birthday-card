@@ -3,7 +3,6 @@ export const STORY_KOI_BOWL_TWO_KEY = 'story-koi-bowl-two';
 export const CLEARING_KOI_KEY = 'story-clearing-koi';
 export const FINALE_OMEN_KEY = 'story-finale-omen';
 export const FINALE_OMEN_DISPLAY_SIZE = { width: 82, height: 102 } as const;
-export const EPILOGUE_BOAT_PHOTO_KEY = 'story-epilogue-boat-photo';
 
 /** Normalized to the tightly cropped ____ desk prop, not the whole room. */
 export const FRIEND_ONE_PC_GLASS_CUE = {

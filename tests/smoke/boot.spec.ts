@@ -110,7 +110,7 @@ test('cold open plays, then lands in ____’s room with the unpowered PC and ___
   // egg; the mango corner moved south-east, so the photo wall is the reliable
   // target from the desk.)
   await canvas.click();
-  const eggPhrases = ['photographs', 'At the end of the day', 'Mango sticky rice'];
+  const eggPhrases = ['photographs', 'One frame is left empty', 'Mango sticky rice'];
   const dialogueText = page.locator('.dialogue-box__text');
 
   // Hold Up+Right continuously and poll, rather than pulsing short taps: under

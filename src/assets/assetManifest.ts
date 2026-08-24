@@ -347,12 +347,12 @@ export const ASSET_MANIFEST: readonly GameAsset[] = [
   {
     id: 'ending-ocean-galaxy-backdrop',
     kind: 'message-art',
-    label: 'Ending ocean-galaxy backdrop layers',
+    label: 'Ending water-to-painted-galaxy transition',
     status: 'review',
     locationIds: ['final-spot'],
     notes:
-      'Galaxy sky (public/assets/ending/ending-sky.png) over starlit water (ending-water.png), composited by the ending sequence with code-drawn sunbeams and ripple motion.',
-    qaChecks: ['layer blend seam', 'star readability', 'emotional tone'],
+      'Dark-water arrival and terrain bridge at public/assets/ending/water-arrival.png and water-to-galaxy.png, ending on galaxy-arrival.png: the exact initial camera crop of the playable galaxy-ground.png painting.',
+    qaChecks: ['horizon registration', 'boat persists through bridge', 'live-scene handoff'],
   },
 ];
 

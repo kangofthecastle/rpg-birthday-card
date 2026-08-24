@@ -18,6 +18,59 @@ body,
   margin: 0;
 }
 
+/* The galaxy stays unobstructed during violin play and letter collection. This
+   host appears only for the final birthday line and return-home action. */
+.galaxy-letters-hud {
+  position: absolute;
+  inset: 0;
+  z-index: 760;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0 20px clamp(28px, 5vh, 54px);
+  pointer-events: none;
+}
+
+.galaxy-letters-hud[hidden] {
+  display: none;
+}
+
+.galaxy-letters-hud__card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0;
+  text-align: center;
+}
+
+.galaxy-letters-hud__birthday {
+  margin: 0;
+  color: #fff0c2;
+  font-family: Georgia, serif;
+  font-size: clamp(20px, 3vw, 30px);
+  font-style: italic;
+  text-shadow: 0 2px 10px rgba(15, 7, 31, 0.9);
+}
+
+.galaxy-letters-hud__go-home {
+  margin-top: 14px;
+  padding: 8px 18px;
+  border: 1px solid rgba(255, 237, 184, 0.55);
+  border-radius: 999px;
+  background: rgba(18, 10, 36, 0.58);
+  color: #fff2cb;
+  font: 600 14px/1.2 Georgia, serif;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.galaxy-letters-hud__go-home:hover,
+.galaxy-letters-hud__go-home:focus-visible {
+  background: rgba(255, 231, 161, 0.22);
+  outline: 2px solid rgba(255, 239, 194, 0.5);
+  outline-offset: 3px;
+}
+
 body {
   overflow: hidden;
   /* It's a game: nothing on screen (dialogue, HUD, photo captions, letters)
@@ -58,6 +111,15 @@ body {
   position: absolute;
   inset: 0;
   pointer-events: none;
+}
+
+/* Boatigami restarts the Phaser scene before mounting the ending montage. Keep
+ * the montage's first frame behind #ui-root during that short handoff so the
+ * destination galaxy can never flash through before the dark-water opening is
+ * ready. The activity itself paints over this background as soon as it mounts. */
+body.ending-transition-active:not(.ending-montage-mounted) #ui-root {
+  pointer-events: auto;
+  background: #06040f url('/assets/ending/water-arrival.png') center / cover no-repeat;
 }
 
 .boot-message {
@@ -215,14 +277,13 @@ body {
 }
 
 /* ===================================================================== */
-/*  Ending — the lantern clearing washing into the ocean-galaxy          */
+/*  Ending — dark water dissolving into ____'s painted galaxy ground    */
 /* ===================================================================== */
 
 /* The ending transition: a breathing cross-fade of full-scene frames — the boat
- * drifting out to sea and the water turning to galaxy — with the composited paper
- * boat riding on top. Each layer stacks above the previous; fading it in reveals
- * it over the one before. The scene fades the final held galaxy out to hand off
- * into the live, playable galaxy place. */
+ * drifting out to sea before the horizon becomes the painted ground — with the
+ * composited paper boat riding on top. The scene fades the exact final camera crop
+ * out to hand off into the live, playable galaxy place. */
 .ending-frames {
   position: absolute;
   inset: 0;
@@ -247,10 +308,10 @@ body {
   animation: ending-frame-drift 26s ease-in-out infinite alternate;
 }
 
-/* The composed ocean-galaxy — the guaranteed terminal frame (pure CSS over the
- * existing sky/water art). */
+/* Exact initial camera crop of galaxy-ground.png; no drift, so the handoff stays
+ * registered to the live scene beneath it. */
 .ending-frames__layer--galaxy {
-  background: radial-gradient(circle at 50% 34%, #17123a, #06040f 78%);
+  background: url('/assets/ending/galaxy-arrival.png') center / cover no-repeat #271939;
 }
 
 @keyframes ending-frame-drift {
@@ -273,8 +334,8 @@ body {
   width: 128px;
   height: 96px;
   transform: translate(-50%, 8px) scale(1);
-  /* Starts hidden: fades in with the water-arrival dissolve, then fades out as
-   * the galaxy settles. The transition (durations driven from EndingTiming in
+  /* Starts hidden: fades in on the held dark water, then fades out as the
+   * horizon bridge becomes terrain. The transition (durations driven from EndingTiming in
    * JS — no hand-synced ms here) is set inline; see finalKeepsakeActivity. */
   opacity: 0;
   filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.55));
@@ -1117,6 +1178,50 @@ body {
   font-weight: 700;
 }
 
+.photo-letter-modal__paper {
+  width: min(820px, 100%);
+  min-height: min(520px, calc(100% - 32px));
+  align-items: center;
+  gap: 18px;
+}
+
+.photo-letter-modal__photo-frame {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: min(560px, 92%);
+  min-height: 300px;
+  margin: 0;
+  place-items: center;
+  padding: 14px 14px 42px;
+  background: #f5ead2;
+  box-shadow:
+    3px 5px 0 rgba(91, 53, 33, 0.28),
+    0 12px 24px rgba(67, 39, 27, 0.2);
+  transform: rotate(-0.6deg);
+}
+
+.photo-letter-modal__photo,
+.photo-letter-modal__photo-placeholder {
+  width: 100%;
+  height: min(330px, 42vh);
+  object-fit: cover;
+}
+
+.photo-letter-modal__photo-placeholder {
+  border: 2px dashed rgba(104, 74, 53, 0.2);
+  background:
+    linear-gradient(135deg, rgba(119, 91, 71, 0.035) 25%, transparent 25%) 0 0 / 18px 18px,
+    linear-gradient(315deg, rgba(119, 91, 71, 0.035) 25%, transparent 25%) 0 0 / 18px 18px,
+    #e9ddc8;
+}
+
+.photo-letter-modal__body {
+  width: min(560px, 92%);
+  padding-bottom: 8px;
+  text-align: left;
+}
+
 .letter-modal__speaker {
   color: #754329;
   font-size: clamp(22px, 3vw, 32px);
@@ -1858,11 +1963,11 @@ body.ending-transition-active .collection-panel {
   background:
     linear-gradient(
       180deg,
-      rgba(3, 7, 24, 0.3) 0%,
-      rgba(5, 9, 30, 0.1) 38%,
-      rgba(2, 5, 21, 0.36) 100%
+      rgba(23, 10, 38, 0.18) 0%,
+      rgba(23, 10, 38, 0.04) 38%,
+      rgba(23, 10, 38, 0.22) 100%
     ),
-    url('/assets/ui/photo-wall-night-v1.png') center / cover no-repeat #101634;
+    url('/assets/ending/galaxy-ground.png') center / cover no-repeat #271939;
 }
 
 /* The wall is a dialog surface that takes programmatic focus for Esc handling;
@@ -1872,36 +1977,125 @@ body.ending-transition-active .collection-panel {
   outline: none;
 }
 
-/* During the hero settle the in-frame copy of the boat stays hidden, so the
-   flying hero is the only boat on screen until it lands. */
-.photo-wall--introducing .photo-wall__media--story {
-  visibility: hidden;
-}
-
 .photo-wall__header,
 .photo-wall__board {
   transition: opacity 260ms ease;
 }
 
-.photo-wall--introducing:not(.photo-wall--reduced-motion) .photo-wall__header,
-.photo-wall--introducing:not(.photo-wall--reduced-motion) .photo-wall__board {
+.photo-wall--introducing .photo-wall__header,
+.photo-wall--introducing .photo-wall__board {
+  opacity: 0.22;
   pointer-events: none;
 }
 
-.photo-wall__hero {
+.photo-wall__camera-hero {
   position: absolute;
-  top: 9vh;
+  top: 7vh;
   left: 50%;
   z-index: 6;
-  display: block;
-  width: auto;
-  height: min(82vh, 900px);
-  aspect-ratio: 60 / 77;
-  object-fit: cover;
+  display: flex;
+  width: min(560px, calc(100% - 40px));
+  flex-direction: column;
+  align-items: center;
+  padding: 18px 18px 28px;
+  border: 0;
+  background: #fbf8ed;
+  box-shadow: 0 20px 60px rgba(3, 5, 19, 0.58);
   translate: -50% 0;
   transform-origin: top left;
   will-change: transform, opacity;
+}
+
+.photo-wall__camera-trigger {
+  position: relative;
+  display: grid;
+  width: 100%;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.photo-wall__camera-countdown {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #fff8e8;
+  font: 700 clamp(72px, 15vw, 132px)/1 Georgia, serif;
+  text-shadow:
+    0 3px 8px rgba(8, 4, 15, 0.92),
+    0 0 24px rgba(8, 4, 15, 0.74);
   pointer-events: none;
+}
+
+.photo-wall__camera-trigger:focus-visible {
+  outline: 3px solid #e1a85d;
+  outline-offset: 4px;
+}
+
+.photo-wall__camera-placeholder {
+  display: grid;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  place-items: center;
+  background: linear-gradient(145deg, #241f46, #4d3266);
+}
+
+.photo-wall__camera-placeholder.photo-wall__media--large {
+  width: 100%;
+}
+
+.photo-wall__camera-icon {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  font-size: clamp(46px, 9vw, 84px);
+  line-height: 1;
+  text-align: center;
+  filter: grayscale(1) brightness(2.1);
+}
+
+.photo-wall__camera-preview {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  object-position: 50% 50%;
+  margin-inline: auto;
+  transform: scaleX(-1);
+}
+
+.photo-wall__camera-status {
+  min-height: 1.4em;
+  margin: 16px 0 8px;
+  color: #7a5433;
+  font: italic 18px/1.3 Georgia, serif;
+}
+
+.photo-wall__camera-actions {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.photo-wall__camera-shutter,
+.photo-wall__camera-cancel {
+  padding: 8px 16px;
+  border: 1px solid rgba(83, 49, 31, 0.45);
+  border-radius: 999px;
+  background: #e6c889;
+  color: #4d2e21;
+  font: 700 14px/1.2 Georgia, serif;
+  cursor: pointer;
+}
+
+.photo-wall__camera-cancel {
+  background: transparent;
 }
 
 @keyframes photo-wall-in {
@@ -1994,6 +2188,81 @@ body.ending-transition-active .collection-panel {
   transition: transform 200ms ease, box-shadow 200ms ease;
 }
 
+.photo-wall__camera-slot {
+  display: flex;
+  flex: 0 0 clamp(180px, 24vw, 280px);
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.photo-wall__camera-slot .photo-wall__frame {
+  width: 100%;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+}
+
+.photo-wall__file-controls {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #fff0cb;
+}
+
+.photo-wall__file-button {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  padding: 8px;
+  place-items: center;
+  border: 1px solid rgba(255, 231, 181, 0.68);
+  border-radius: 999px;
+  background: rgba(9, 16, 46, 0.72);
+  color: #fff0cb;
+  cursor: pointer;
+  transition: background 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.photo-wall__file-button svg {
+  width: 100%;
+  height: 100%;
+  fill: currentColor;
+}
+
+.photo-wall__file-button:hover:not(:disabled),
+.photo-wall__file-button:focus-visible {
+  background: rgba(255, 231, 181, 0.24);
+  outline: 2px solid rgba(255, 247, 232, 0.96);
+  outline-offset: 2px;
+  transform: translateY(-1px);
+}
+
+.photo-wall__file-delete:hover:not(:disabled),
+.photo-wall__file-delete:focus-visible {
+  color: #ffc1ac;
+  border-color: rgba(255, 193, 172, 0.82);
+}
+
+.photo-wall__file-save.is-saved {
+  color: #c8efb0;
+  border-color: rgba(200, 239, 176, 0.78);
+}
+
+.photo-wall__file-button:disabled {
+  cursor: default;
+  opacity: 0.38;
+}
+
+.photo-wall__file-status {
+  grid-column: 1 / -1;
+  min-height: 1.2em;
+  color: rgba(255, 240, 203, 0.78);
+  font: italic 12px/1.2 Georgia, serif;
+  text-align: center;
+}
+
 .photo-wall__frame:hover,
 .photo-wall__frame:focus-visible {
   transform: rotate(0deg) translateY(-3px) scale(1.02);
@@ -2021,10 +2290,6 @@ body.ending-transition-active .collection-panel {
   height: auto;
   object-fit: cover;
   background: #efe4cd;
-}
-
-.photo-wall__media--story {
-  aspect-ratio: 60 / 77;
 }
 
 .photo-wall__media--placeholder {
@@ -2109,8 +2374,6 @@ body.ending-transition-active .collection-panel {
     transition-duration: 0.001ms;
   }
 
-  .photo-wall__hero,
-  .photo-wall__intro-scrim,
   .photo-wall__header,
   .photo-wall__board {
     transition-duration: 0.001ms;

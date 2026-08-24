@@ -32,7 +32,7 @@ One file per row, named exactly as shown (`.mp3` or `.ogg`):
 | `music-path.mp3` | The outdoor path between houses — open, airy, a little breezy. Not sad, not tense. |
 | `music-friendone.mp3` | ____'s fishing minigame — soft, watery, a little playful. Think calm pond, light plucked notes. |
 | `music-split.mp3` | SPLIT.EXE (the shooter minigame) — low, tense, but not aggressive or harsh. Sparse and focused, like held breath. |
-| `music-ending.mp3` | The ocean-galaxy ending — huge, slow, emotional swell. Should feel like it keeps building and opening up. |
+| `music-ending.mp3` | The water-to-galaxy ending — a warm four-chord swell with a sparse answering melody. It should keep opening up without becoming a fixed drone. |
 | `music-letters.mp3` | The post-ending letters screen — a softer, quieter cousin of the home theme. Warm and settled. |
 
 ## Sound effects (short one-shot sounds)

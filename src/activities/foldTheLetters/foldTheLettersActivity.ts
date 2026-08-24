@@ -88,6 +88,10 @@ function isTestMode(): boolean {
   return new URL(window.location.href).searchParams.get('testMode') === '1';
 }
 
+function useFullTransitionTiming(): boolean {
+  return new URL(window.location.href).searchParams.get('fullTransitions') === '1';
+}
+
 // Reduced-motion collapses the auto beats to the near-instant test pacing so the
 // JS-driven inline transitions (which override the CSS reduced-motion block)
 // still honor the user's preference — single source, no double-maintained ms.
@@ -103,7 +107,10 @@ export const foldTheLettersActivity: ActivityModule = {
   id: 'fold-the-letters',
   title: 'fold',
   async start({ mount, onCancel, onComplete }) {
-    const timing = isTestMode() || prefersReducedMotion() ? TEST_TIMING : REAL_TIMING;
+    const timing =
+      prefersReducedMotion() || (isTestMode() && !useFullTransitionTiming())
+        ? TEST_TIMING
+        : REAL_TIMING;
 
     mount.innerHTML = `
       <section class="activity-panel activity-shell activity-shell--fold" role="dialog" aria-label="fold" data-fold-panel>

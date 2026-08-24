@@ -33,6 +33,8 @@ import {
   ENDING_WATER_URL,
   GALAXY_GROUND_KEY,
   GALAXY_GROUND_URL,
+  GALAXY_VIOLIN_KEY,
+  GALAXY_VIOLIN_URL,
   SHORE_WATER_KEY,
   SHORE_WATER_URL,
 } from '../content/galaxyScene';
@@ -45,7 +47,6 @@ import {
 } from '../content/friendtwoPartialSprite';
 import {
   CLEARING_KOI_KEY,
-  EPILOGUE_BOAT_PHOTO_KEY,
   FINALE_OMEN_KEY,
   STORY_KOI_BOWL_ONE_KEY,
   STORY_KOI_BOWL_TWO_KEY,
@@ -106,11 +107,6 @@ export class BootScene extends Phaser.Scene {
       FINALE_OMEN_KEY,
       '/assets/activities/valorant-split/omen.png',
     );
-    this.load.image(
-      EPILOGUE_BOAT_PHOTO_KEY,
-      '/assets/photos/recipient-boat-wall-photo.png',
-    );
-
     // ____, the NPC who waits at the galaxy water for the final conversation.
     // The galaxy staging still uses his original full 4-dir atlas.
     this.load.spritesheet(FRIEND_TWO_SPRITE.key, FRIEND_TWO_SPRITE.url, {
@@ -139,6 +135,7 @@ export class BootScene extends Phaser.Scene {
     // ending's terminal CSS frame composites them.
     this.load.image(ENDING_SKY_KEY, ENDING_SKY_URL);
     this.load.image(ENDING_WATER_KEY, ENDING_WATER_URL);
+    this.load.image(GALAXY_VIOLIN_KEY, GALAXY_VIOLIN_URL);
   }
 
   create(): void {

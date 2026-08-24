@@ -1,18 +1,16 @@
 import Phaser from 'phaser';
 import { getActivity } from '../activities/activityRegistry';
 import {
-  ENDING_KEEPSAKE_ID,
-  FINAL_ENDING_LETTERS,
-} from '../activities/finalKeepsake/endingModel';
-import {
   ENDING_SKY_KEY,
   ENDING_WATER_KEY,
   GALAXY_GROUND_KEY,
+  GALAXY_VIOLIN_KEY,
   SHORE_WATER_KEY,
   FRIEND_TWO_SPRITE,
 } from '../content/galaxyScene';
 import { HOME_HOST_NPCS, FRIEND_ONE_SPRITE, resolveHomeNpcPosition } from '../content/homeNpcs';
-import { LETTERS } from '../content/letters';
+import { GALAXY_ENDING_LETTERS } from '../content/galaxyLetters';
+import { LETTERS, type Letter } from '../content/letters';
 import {
   getActivityCompletionStory,
   resolveRecipientPcStory,
@@ -189,6 +187,16 @@ import {
   type FinaleRevealState,
 } from '../game/finaleReveal';
 import {
+  areAllGalaxyLettersLit,
+  areAllGalaxyLettersRead,
+  canCollectGalaxyLetter,
+  createGalaxyLetterState,
+  layoutGalaxyLetterStars,
+  lightAllGalaxyLetters,
+  readGalaxyLetter,
+  type GalaxyLetterState,
+} from '../game/galaxyLetters';
+import {
   EPILOGUE_WALL_SHEAR,
   resolveEpilogueRoomAnchors,
 } from '../game/epilogueRoom';
@@ -216,7 +224,15 @@ import {
 } from '../ui/collectionPanel';
 import { showDialogue, type ShowDialogueOptions } from '../ui/dialogueBox';
 import { clearUiRoot, getUiRoot } from '../ui/domRoot';
-import { showLetterModal, showSheetMusicModal } from '../ui/letterModal';
+import {
+  showGalaxyLettersHud,
+  type GalaxyLettersHudHandle,
+} from '../ui/galaxyLettersHud';
+import {
+  showLetterModal,
+  showPhotoLetterModal,
+  showSheetMusicModal,
+} from '../ui/letterModal';
 import { showLettersScreen } from '../ui/lettersScreen';
 import { showPhotoWall } from '../ui/photoWall';
 import { fnv1a, mulberry32 } from '../game/rng';
@@ -445,6 +461,32 @@ interface ClearingMoteDisplay {
 
 type ClearingCurrentDisplay = ClearingKoiDisplay | ClearingMoteDisplay;
 
+interface GalaxyLetterStarDisplay {
+  readonly index: number;
+  readonly glow: Phaser.GameObjects.Ellipse;
+  readonly star: Phaser.GameObjects.Star;
+  lit: boolean;
+  collected: boolean;
+}
+
+interface GalaxyLetterEndingRuntime {
+  model: GalaxyLetterState;
+  readonly letters: readonly Letter[];
+  readonly stars: readonly GalaxyLetterStarDisplay[];
+  readonly violin: Phaser.GameObjects.Image;
+  readonly violinGlow: Phaser.GameObjects.Ellipse;
+  readonly playKey?: Phaser.Input.Keyboard.Key;
+  readonly hud: GalaxyLettersHudHandle;
+  awakening: boolean;
+  openingLetter: boolean;
+}
+
+const GALAXY_VIOLIN_PITCH_ID = 'a4';
+const GALAXY_VIOLIN_NOTE_MS = 3600;
+const GALAXY_STAR_REVEAL_SPAN_MS = 2200;
+
+const GALAXY_STAR_COLLECT_RADIUS = 46;
+
 
 // Ambient bed per location; activities layer their own bed on top and the
 // location bed resumes when they end. The ending swaps beds itself.
@@ -625,6 +667,7 @@ export class LocationScene extends Phaser.Scene {
   // Last facing actually displayed on the follower sprite; feeds the
   // hysteresis so facing stays sticky across frames instead of flapping.
   private friendoneFollowerFacing: FollowerFacing = 'down';
+  private galaxyLetterEnding?: GalaxyLetterEndingRuntime;
   private friendonePcReadyCue: Phaser.GameObjects.GameObject[] = [];
   private violinCueTimers: Phaser.Time.TimerEvent[] = [];
   private finaleActor?: Phaser.GameObjects.Image | Phaser.GameObjects.Sprite;
@@ -707,6 +750,8 @@ export class LocationScene extends Phaser.Scene {
     this.violinCueTimers = [];
     this.finaleActor = undefined;
     this.finaleReveal = createFinaleReveal(this.state.endingCompleted);
+    this.galaxyLetterEnding = undefined;
+    this.collectionPanel = undefined;
   }
 
   create(): void {
@@ -715,6 +760,7 @@ export class LocationScene extends Phaser.Scene {
       'ending-transition-active',
       this.autoStartActivityId === 'final-keepsake-reveal',
     );
+    document.body.classList.remove('ending-montage-mounted');
     const params = new URLSearchParams(window.location.search);
     // The zone editor forces the collider/zone debug overlay on so the author
     // always sees current collision truth while editing.
@@ -732,6 +778,9 @@ export class LocationScene extends Phaser.Scene {
     delete document.body.dataset.introThemeHum;
     delete document.body.dataset.introPcBuzz;
     delete document.body.dataset.introPcGlitch;
+    delete document.body.dataset.galaxyEndingPhase;
+    delete document.body.dataset.galaxyStarsLit;
+    delete document.body.dataset.galaxyLettersRead;
     this.createMap();
     this.createPlayer();
     this.createFriendOneFollower();
@@ -1029,6 +1078,7 @@ export class LocationScene extends Phaser.Scene {
 
     this.controller.update(this.canMove);
     this.syncPlayerVisual();
+    this.updateGalaxyLetterEnding();
     this.updateFriendOneFollower(delta);
 
     if (this.debugMarkers) {
@@ -2036,8 +2086,8 @@ export class LocationScene extends Phaser.Scene {
 
   // The galaxy place's ground: the painted ocean-galaxy you stand ON. A file-first
   // painted override (galaxy-ground.png) replaces it whole; otherwise it is
-  // COMPOSED from the SAME paintings as the ending's terminal CSS frame — the
-  // galaxy sky pinned across the top down to a horizon, the starlit water below,
+  // COMPOSED from the older sky/water fallback paintings — the galaxy sky pinned
+  // across the top down to a horizon, the starlit water below,
   // with an alpha-gradient blend band fading the water's top edge over the sky so
   // there is no hard horizon seam. No vignette and no procedural stars/light-pools:
   // the paintings already carry the stars, and the finale wants full even
@@ -2857,7 +2907,7 @@ export class LocationScene extends Phaser.Scene {
       mail.strokePath();
     }
     document.body.dataset.pcPowered = 'true';
-    document.body.dataset.roomPhotoComplete = 'true';
+    delete document.body.dataset.roomPhotoComplete;
   }
 
   private startStoryAudioCues(): void {
@@ -3380,6 +3430,13 @@ export class LocationScene extends Phaser.Scene {
   }
 
   private createHud(): void {
+    // The final galaxy turns the earned letters into world collectibles. Keeping
+    // the backpack panel here would let them be opened before ____ gives ____
+    // the violin and would undercut the ending's reveal.
+    if (this.location.id === 'final-spot') {
+      this.collectionPanel = undefined;
+      return;
+    }
     const panel = createCollectionPanel(this.state, {
       canInteract: () => this._canMove,
       // Re-reading freezes the player (mirrors pauseForDialogue) so held movement
@@ -4936,7 +4993,10 @@ export class LocationScene extends Phaser.Scene {
       this.location.interactions
         .filter((interaction) =>
           isInteractionAvailable(interaction, this.state) &&
-          !(interaction.endingConversation && this.state.endingCompleted),
+          !(
+            interaction.endingConversation &&
+            (this.state.endingCompleted || this.finaleReveal.phase !== 'omen')
+          ),
         )
         .map((interaction) => interaction.id),
     );
@@ -5123,40 +5183,261 @@ export class LocationScene extends Phaser.Scene {
     }
     this.finaleReveal = advanceFinaleReveal(this.finaleReveal, 'ending-complete');
     delete document.body.dataset.finaleActor;
-    await this.runTerminalEnding();
+    this.startGalaxyLetterEnding();
   }
 
-  // The ending's tail, once the galaxy conversation with ____ closes. Freezes
-  // the live scene and releases key capture so keys held under the (non-capturing)
-  // overlays can't drive the player, shows the two short final letters over the
-  // galaxy, marks the ending complete, then sleeps the scene beneath the
-  // persistent letters screen (whose "go home" restarts the world).
-  private async runTerminalEnding(): Promise<void> {
+  // ____'s conversation now hands the ending back to ____. One sustained
+  // violin note wakes every star dotted across the galaxy; once they are shining
+  // she can collect each one and open its photo-letter. Only the last closed
+  // letter reveals the quiet return home.
+  private startGalaxyLetterEnding(): void {
     this.canMove = false;
-    this.input.keyboard?.disableGlobalCapture();
+    this.setPrompt('');
+    const letters = GALAXY_ENDING_LETTERS;
+    const model = createGalaxyLetterState(letters.length);
+    const stars = layoutGalaxyLetterStars(letters.length).map(
+      (position, index): GalaxyLetterStarDisplay => {
+        const glow = this.add
+          .ellipse(position.x, position.y, 74, 74, 0x9cc8ff, 0)
+          .setBlendMode(Phaser.BlendModes.ADD)
+          .setDepth(809);
+        const star = this.add
+          .star(position.x, position.y, 5, 8, 22, 0xfff1b8, 0.12)
+          .setStrokeStyle(2, 0xb9d9ff, 0.16)
+          .setScale(0.65)
+          .setDepth(810);
+        return { index, glow, star, lit: false, collected: false };
+      },
+    );
 
-    for (const letter of FINAL_ENDING_LETTERS) {
-      await showLetterModal(letter as readonly DialogueLine[]);
-    }
+    const violinGlow = this.add
+      .ellipse(0, 0, 58, 78, 0xffd27c, 0.11)
+      .setBlendMode(Phaser.BlendModes.ADD)
+      .setDepth(816);
+    const violin = this.add
+      .image(0, 0, GALAXY_VIOLIN_KEY)
+      .setDisplaySize(24, 72)
+      .setAngle(8)
+      .setDepth(817);
+    this.tweens.add({
+      targets: violinGlow,
+      alpha: { from: 0.07, to: 0.2 },
+      scaleX: { from: 0.86, to: 1.12 },
+      scaleY: { from: 0.9, to: 1.08 },
+      duration: 1700,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
 
-    this.state = markEndingCompleted(this.state);
-    this.registry.set('runState', this.state);
-
-    this.scene.sleep();
-    showLettersScreen({
+    const hud = showGalaxyLettersHud({
       host: getUiRoot(),
-      fadeIn: true,
-      letters: [...getCollectedFriendLetters(this.state), ...LETTERS],
+      total: letters.length,
       onGoHome: () => this.goHome(),
     });
+    const playKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+
+    const runtime: GalaxyLetterEndingRuntime = {
+      model,
+      letters,
+      stars,
+      violin,
+      violinGlow,
+      playKey,
+      hud,
+      awakening: false,
+      openingLetter: false,
+    };
+    this.galaxyLetterEnding = runtime;
+    this.positionGalaxyViolin(runtime);
+    this.syncGalaxyLetterObservability(runtime);
+
+    if (letters.length === 0) {
+      this.finishGalaxyLetterEnding(runtime);
+    }
+  }
+
+  private updateGalaxyLetterEnding(): void {
+    const runtime = this.galaxyLetterEnding;
+    if (!runtime) {
+      return;
+    }
+
+    this.positionGalaxyViolin(runtime);
+    if (runtime.awakening) {
+      return;
+    }
+    if (!areAllGalaxyLettersLit(runtime.model)) {
+      if (runtime.playKey && Phaser.Input.Keyboard.JustDown(runtime.playKey)) {
+        this.playGalaxyViolinFinale(runtime);
+      }
+      return;
+    }
+
+    if (runtime.openingLetter || areAllGalaxyLettersRead(runtime.model)) {
+      return;
+    }
+
+    const collectible = runtime.stars.find(
+      ({ index, star, collected }) =>
+        !collected &&
+        canCollectGalaxyLetter(runtime.model, index) &&
+        Phaser.Math.Distance.Between(this.player.x, this.player.y, star.x, star.y) <=
+          GALAXY_STAR_COLLECT_RADIUS,
+    );
+    if (collectible) {
+      void this.collectGalaxyLetter(runtime, collectible);
+    }
+  }
+
+  private positionGalaxyViolin(runtime: GalaxyLetterEndingRuntime): void {
+    const x = (this.playerVisual?.x ?? this.player.x) + 21;
+    const y = (this.playerVisual?.y ?? this.player.y) - 43;
+    runtime.violin.setPosition(x, y).setDepth(this.player.y + 18);
+    runtime.violinGlow.setPosition(x, y).setDepth(this.player.y + 17);
+  }
+
+  private playGalaxyViolinFinale(runtime: GalaxyLetterEndingRuntime): void {
+    runtime.awakening = true;
+    runtime.model = lightAllGalaxyLetters(runtime.model);
+    const testMode = new URLSearchParams(window.location.search).get('testMode') === '1';
+    const noteMs = testMode ? 520 : GALAXY_VIOLIN_NOTE_MS;
+    const revealSpanMs = testMode ? 360 : GALAXY_STAR_REVEAL_SPAN_MS;
+    const pitch = getPitch(GALAXY_VIOLIN_PITCH_ID);
+    if (pitch) {
+      playViolinNote(pitch.frequency, noteMs, { volume: 0.78 });
+    }
+
+    runtime.hud.setAwakening();
+    this.syncGalaxyLetterObservability(runtime);
+
+    runtime.stars.forEach((display, index) => {
+      const delay = runtime.stars.length <= 1
+        ? 0
+        : (revealSpanMs * index) / (runtime.stars.length - 1);
+      this.time.delayedCall(delay, () => {
+        this.lightGalaxyLetterStar(display);
+      });
+    });
+
+    this.time.delayedCall(noteMs, () => {
+      runtime.awakening = false;
+      runtime.hud.setCollecting(runtime.model.read.length);
+      document.body.dataset.galaxyEndingPhase = 'collecting';
+      this.canMove = true;
+    });
+  }
+
+  private lightGalaxyLetterStar(display: GalaxyLetterStarDisplay): void {
+    display.lit = true;
+    display.star.setAlpha(1).setStrokeStyle(2, 0xe5f2ff, 0.9);
+    display.glow.setAlpha(0.48);
+    this.tweens.add({
+      targets: display.star,
+      scaleX: { from: 1.8, to: 1 },
+      scaleY: { from: 1.8, to: 1 },
+      angle: '+=36',
+      duration: 520,
+      ease: 'Back.easeOut',
+      onComplete: () => {
+        this.tweens.add({
+          targets: display.star,
+          scaleX: { from: 0.94, to: 1.08 },
+          scaleY: { from: 0.94, to: 1.08 },
+          duration: 1250 + display.index * 120,
+          yoyo: true,
+          repeat: -1,
+          ease: 'Sine.easeInOut',
+        });
+      },
+    });
+    this.tweens.add({
+      targets: display.glow,
+      alpha: { from: 0.18, to: 0.55 },
+      scaleX: { from: 0.72, to: 1.14 },
+      scaleY: { from: 0.72, to: 1.14 },
+      duration: 1450 + display.index * 100,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+  }
+
+  private async collectGalaxyLetter(
+    runtime: GalaxyLetterEndingRuntime,
+    display: GalaxyLetterStarDisplay,
+  ): Promise<void> {
+    runtime.openingLetter = true;
+    display.collected = true;
+    runtime.hud.element.hidden = true;
+    this.canMove = false;
+    this.setPrompt('');
+
+    const testMode = new URLSearchParams(window.location.search).get('testMode') === '1';
+    const duration = testMode ? 60 : 360;
+    await new Promise<void>((resolve) => {
+      this.tweens.killTweensOf([display.star, display.glow]);
+      this.tweens.add({
+        targets: [display.star, display.glow],
+        x: this.player.x,
+        y: this.player.y - 34,
+        alpha: 0,
+        scaleX: 0.2,
+        scaleY: 0.2,
+        duration,
+        ease: 'Cubic.easeIn',
+        onComplete: () => resolve(),
+      });
+    });
+    display.star.setVisible(false);
+    display.glow.setVisible(false);
+
+    const letter = runtime.letters[display.index];
+    if (letter) {
+      await showPhotoLetterModal(letter);
+    }
+    runtime.hud.element.hidden = false;
+    runtime.model = readGalaxyLetter(runtime.model, display.index);
+    runtime.hud.setCollecting(runtime.model.read.length);
+    runtime.openingLetter = false;
+    this.syncGalaxyLetterObservability(runtime);
+
+    if (areAllGalaxyLettersRead(runtime.model)) {
+      this.finishGalaxyLetterEnding(runtime);
+      return;
+    }
+    this.canMove = true;
+  }
+
+  private finishGalaxyLetterEnding(runtime: GalaxyLetterEndingRuntime): void {
+    this.state = markEndingCompleted(this.state);
+    this.registry.set('runState', this.state);
+    this.canMove = false;
+    runtime.hud.setComplete();
+    document.body.dataset.galaxyEndingPhase = 'complete';
+    this.syncGalaxyLetterObservability(runtime);
+  }
+
+  private syncGalaxyLetterObservability(runtime: GalaxyLetterEndingRuntime): void {
+    document.body.dataset.galaxyEndingPhase = areAllGalaxyLettersRead(runtime.model)
+      ? 'complete'
+      : runtime.awakening
+        ? 'awakening'
+      : areAllGalaxyLettersLit(runtime.model)
+        ? 'collecting'
+        : 'playing';
+    document.body.dataset.galaxyStarsLit = String(runtime.model.lit);
+    document.body.dataset.galaxyLettersRead = String(runtime.model.read.length);
   }
 
   // Cross-fades the ending transition's held galaxy frame out to reveal the live,
   // playable galaxy scene beneath, then hands ____ control. Movement is frozen
   // until the frame is fully gone, so no input reaches the scene mid-reveal.
   private async revealGalaxyArrival(overlayMount: HTMLElement): Promise<void> {
-    const testMode = new URLSearchParams(window.location.search).get('testMode') === '1';
-    const fadeMs = testMode ? 40 : 1500;
+    const params = new URLSearchParams(window.location.search);
+    const condensedPreview =
+      params.get('testMode') === '1' && params.get('fullTransitions') !== '1';
+    const fadeMs = condensedPreview ? 40 : 1500;
     overlayMount.style.pointerEvents = 'none';
     overlayMount.style.transition = `opacity ${fadeMs}ms ease`;
     void overlayMount.offsetWidth;
@@ -5210,6 +5491,7 @@ export class LocationScene extends Phaser.Scene {
     const restoreHud = (): void => {
       document.body.classList.remove('minigame-active');
       document.body.classList.remove('ending-transition-active');
+      document.body.classList.remove('ending-montage-mounted');
     };
     if (activityId === 'final-keepsake-reveal') {
       document.body.classList.add('ending-transition-active');
@@ -5266,36 +5548,12 @@ export class LocationScene extends Phaser.Scene {
 
         activityMount.remove();
 
-        // The terminal ending is the ONLY completion that mounts the persistent
-        // letters screen and must leave the scene asleep with input released. Key
-        // that on the ending activity's OWN identity (its 'ending-light'
-        // keepsake), NOT on locationId 'final-spot' — otherwise any activity that
-        // merely wants to travel INTO final-spot (the origami ritual's travelTo)
-        // would be mistaken for the ending and stranded asleep.
-        const isEndingCompletion = completion.keepsakeId === ENDING_KEEPSAKE_ID;
-
-        // The ending is terminal: the final activity mounts the persistent
-        // letters screen over everything and this room is never returned to.
-        // Keep the scene ASLEEP with global key-capture released and movement
-        // disabled so keys held under the (non-capturing) letters overlay can't
-        // drive the still-live player into a north edge transition — which would
-        // reload into 'clearing' and stomp the ending's 'music-ending' bed. Only
-        // the normal completion path restores control.
-        if (!isEndingCompletion) {
-          wakeScene();
-          resumeLocationMusic();
-        }
+        wakeScene();
+        resumeLocationMusic();
         if (this.location.keepsake && !replayingAfterEnding) {
           playSfx('sfx-keepsake');
         }
         this.state = completeLocation(this.state, recordedCompletion);
-
-        if (isEndingCompletion) {
-          this.state = markEndingCompleted(this.state);
-          this.registry.set('runState', this.state);
-          // Terminal: do not wake, do not restore control. Scene stays asleep.
-          return;
-        }
 
         this.registry.set('runState', this.state);
 
@@ -5355,14 +5613,13 @@ export class LocationScene extends Phaser.Scene {
   }
 
   /**
-   * The quiet return from the ending's terminal letters screen. Dismisses the
-   * persistent overlay and restarts the world into ____'s awakened room with
-   * control restored — the game's soft landing. `endingCompleted` is already set,
-   * so the room comes up in its golden state and the photo wall reveals.
+   * The quiet return after every galaxy letter-star has been read. Dismisses the
+   * ending HUD and restarts the world into ____'s awakened room with control
+   * restored — the game's soft landing. `endingCompleted` is already set, so the
+   * room comes up in its golden state and the photo wall reveals.
    */
   private goHome(): void {
-    // Re-arm this game's key capture (released while the terminal activity ran)
-    // and clear the persistent letters overlay before we leave.
+    // Re-arm key capture defensively and clear the galaxy HUD before we leave.
     this.input.keyboard?.enableGlobalCapture();
     if (this.scene.isSleeping()) {
       this.scene.wake();

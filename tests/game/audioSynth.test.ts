@@ -195,19 +195,23 @@ describe('music synth beds', () => {
     expect(fakeCtx.oscillators).toHaveLength(oscillatorCountAtDispose);
   });
 
-  it('music-ending adds new layers over time and dispose() halts pending layers', () => {
+  it('music-ending begins with harmony, adds melody, and stops scheduling on dispose', () => {
     vi.useFakeTimers();
     const { ctx, fakeCtx, output } = createFakeGraph();
     const handle = MUSIC_SYNTHS['music-ending'](ctx, output as unknown as AudioNode);
 
     const initialOscillatorCount = fakeCtx.oscillators.length;
-    expect(initialOscillatorCount).toBeGreaterThan(0);
+    // Four simultaneous chord voices plus the pad's slow filter LFO: never the
+    // old single-note opening drone.
+    expect(initialOscillatorCount).toBeGreaterThanOrEqual(5);
+    expect(new Set(fakeCtx.oscillators.slice(0, 4).map((osc) => osc.frequency.value)).size).toBe(4);
+    expect(fakeCtx.gains.some((gain) => gain.gain.value === 0.58)).toBe(true);
 
-    vi.advanceTimersByTime(5000);
+    vi.advanceTimersByTime(1000);
     expect(fakeCtx.oscillators.length).toBeGreaterThan(initialOscillatorCount);
 
     const oscillatorCountAtHalfway = fakeCtx.oscillators.length;
-    vi.advanceTimersByTime(15000); // reach the ~20s mark
+    vi.advanceTimersByTime(15000);
     expect(fakeCtx.oscillators.length).toBeGreaterThan(oscillatorCountAtHalfway);
 
     const finalOscillatorCount = fakeCtx.oscillators.length;

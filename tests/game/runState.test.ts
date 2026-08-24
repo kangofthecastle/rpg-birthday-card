@@ -223,7 +223,6 @@ describe('runState', () => {
       'friendone-pc-ready',
       'friendtwo-house-entered',
       'recipient-return-home',
-      'outside-after-violin',
       'violin-called',
     ]));
   });

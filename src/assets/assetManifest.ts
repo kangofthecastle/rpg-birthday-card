@@ -354,6 +354,16 @@ export const ASSET_MANIFEST: readonly GameAsset[] = [
       'Dark-water arrival and terrain bridge at public/assets/ending/water-arrival.png and water-to-galaxy.png, ending on galaxy-arrival.png: the exact initial camera crop of the playable galaxy-ground.png painting.',
     qaChecks: ['horizon registration', 'boat persists through bridge', 'live-scene handoff'],
   },
+  {
+    id: 'ending-standalone-violin',
+    kind: 'message-art',
+    label: 'Standalone ending violin',
+    status: 'review',
+    locationIds: ['final-spot'],
+    notes:
+      'Transparent no-stand violin at public/assets/ending/violin-standalone.png, carried by ____ for the one-note star reveal.',
+    qaChecks: ['transparent background', 'no floor stand', 'small-size readability'],
+  },
 ];
 
 export function getAssetsForLocation(locationId: string): readonly GameAsset[] {

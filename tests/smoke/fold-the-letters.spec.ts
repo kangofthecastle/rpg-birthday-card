@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 // The keepsake ritual: with all three keepsakes in hand, the clearing's southern
-// shore unlocks. Kneeling at the water makes the boat — ____'s letter FOLDED into
+// shore unlocks. Looking over the water makes the boat — ____'s letter FOLDED into
 // the hull, ____'s letter HOISTED as the sail, ____'s sheet music ROLLED and
 // KINDLED into the lantern — and the sail-away cinematic carries her INTO the
 // lantern clearing (final-spot).
@@ -49,6 +49,12 @@ test('makes the boat with real gestures and arrives at the lantern clearing WITH
 
   const panel = page.locator('[data-fold-panel]');
   const foldCanvas = page.getByRole('dialog', { name: 'fold' }).locator('canvas');
+  await expect(panel.locator('[data-fold-hint]')).toHaveText(
+    "____'s letter, the hull: Drag the top edge down onto the bottom",
+  );
+  await expect(
+    page.getByText('Three keepsakes, carried a long way. Give them to the water.'),
+  ).toHaveCount(0);
 
   // Logical (0..640, 0..400) → client px, using the live canvas box.
   const toClient = async (lx: number, ly: number): Promise<{ x: number; y: number }> => {
@@ -167,7 +173,7 @@ test('makes the boat with real gestures and arrives at the lantern clearing WITH
   // has handed off, ____ reacts automatically before the player walks to Omen.
   const arrivalQuestion = page.getByText('Where am I? Who is that?');
   const identityQuestion = page.getByText('You... who are you?');
-  const conversationLine = page.getByText('I knew you would make it — you always do.');
+  const conversationLine = page.getByText('Hey! Took you a minute, huh?');
   await expect(arrivalQuestion).toBeVisible();
   await page.getByRole('button', { name: 'Continue' }).click();
 

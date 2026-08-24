@@ -6,7 +6,7 @@ beforeEach(() => {
 });
 
 describe('showGalaxyLettersHud', () => {
-  it('stays invisible until revealing the final go-home choice', () => {
+  it('shows only the plain play instruction before revealing the final choice', () => {
     const onGoHome = vi.fn();
     const hud = showGalaxyLettersHud({ total: 2, onGoHome });
     const goHome = hud.element.querySelector<HTMLButtonElement>(
@@ -15,7 +15,8 @@ describe('showGalaxyLettersHud', () => {
     expect(goHome?.textContent).toBe('go home');
 
     expect(hud.element.dataset.phase).toBe('playing');
-    expect(hud.element.hidden).toBe(true);
+    expect(hud.element.hidden).toBe(false);
+    expect(hud.element.textContent).toContain('press e');
     expect(hud.element.querySelectorAll('kbd')).toHaveLength(0);
     expect(goHome?.hidden).toBe(true);
 

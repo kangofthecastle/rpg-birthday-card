@@ -30,7 +30,7 @@ const RECIPIENT_PC_FIRST_MESSAGE: readonly DialogueLine[] = [
   { text: '1 NEW MESSAGE', portraitTreatment: 'phone' },
   {
     speaker: '____',
-    text: 'Heyy! Happy birthday! you still coming over today?',
+    text: 'Hey! Happy birthday! Still coming over today?',
     portraitId: 'portrait-friendone',
   },
   {
@@ -40,7 +40,7 @@ const RECIPIENT_PC_FIRST_MESSAGE: readonly DialogueLine[] = [
   },
   {
     speaker: '____',
-    text: 'Must’ve forgot... I’ll head over now.',
+    text: 'I think I forgot ;-; I’ll head over now!',
     portraitId: 'portrait-recipient',
   },
 ];
@@ -51,7 +51,7 @@ const RECIPIENT_PC_STILL_DARK: readonly DialogueLine[] = [
 
 const MANGO_RICE_AFTER_RETAKE: readonly DialogueLine[] = [
   {
-    text: 'Mango sticky rice, somehow still warm.',
+    text: 'Mango sticky rice, for some reason.',
     portraitId: 'inspect-mango-rice',
   },
 ];
@@ -65,7 +65,7 @@ const ACTIVITY_COMPLETION_STORY: Readonly<Record<string, ActivityCompletionStory
         text: "____ said we should come over for a LAN party. Let's go!",
         portraitId: 'portrait-friendone',
       },
-      { speaker: '____', text: 'So down!', portraitId: 'portrait-recipient' },
+      { speaker: '____', text: 'PEW!', portraitId: 'portrait-recipient' },
     ],
   },
   [RETAKE_ACTIVITY_ID]: {

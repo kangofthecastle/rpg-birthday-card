@@ -6,8 +6,6 @@ import {
   applyKindle,
   applyRoll,
   assembledComponentCount,
-  BOATIGAMI_COMPLETE_LINE,
-  BOATIGAMI_OPENING_LINE,
   commitFold,
   componentProgress,
   createRitualState,
@@ -118,7 +116,7 @@ export const foldTheLettersActivity: ActivityModule = {
         <div class="activity-shell__viewport">
           <canvas class="fold-stage__canvas" data-fold-canvas></canvas>
         </div>
-        <p class="activity-shell__controls" data-fold-hint>${BOATIGAMI_OPENING_LINE}</p>
+        <p class="activity-shell__controls" data-fold-hint></p>
         ${
           isTestMode()
             ? '<div class="activity-shell__actions"><button type="button" data-fold-test-complete>Fold the boat</button></div>'
@@ -222,16 +220,16 @@ export const foldTheLettersActivity: ActivityModule = {
       }
       if (verb === 'fold') {
         const crease = currentFoldCrease(state);
-        return `${component.label} — ${crease?.hint ?? ''}`;
+        return `${component.label}: ${crease?.hint ?? ''}`;
       }
       if (verb === 'hoist') {
-        return `${component.label} — hoist the sail: drag it up the mast to the top`;
+        return `${component.label}: hoist the sail by dragging it to the top.`;
       }
       if (verb === 'roll') {
-        return `${component.label} — roll the page: drag it sideways into a lantern`;
+        return `${component.label}: roll the page, dragging it sideways`;
       }
       if (verb === 'kindle') {
-        return `${component.label} — press and hold to kindle the light`;
+        return `${component.label}: press and hold to light it.`;
       }
       return component.label;
     };
@@ -548,7 +546,7 @@ export const foldTheLettersActivity: ActivityModule = {
       }
       sailingAway = true;
       syncDataAttrs();
-      setHint(BOATIGAMI_COMPLETE_LINE);
+      setHint('');
       cancelButton!.disabled = true;
       const testCompleteButton = mount.querySelector<HTMLButtonElement>('[data-fold-test-complete]');
       if (testCompleteButton) {

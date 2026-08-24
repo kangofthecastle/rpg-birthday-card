@@ -10,7 +10,7 @@ import {
 } from '../content/galaxyScene';
 import { HOME_HOST_NPCS, FRIEND_ONE_SPRITE, resolveHomeNpcPosition } from '../content/homeNpcs';
 import { GALAXY_ENDING_LETTERS } from '../content/galaxyLetters';
-import { LETTERS, type Letter } from '../content/letters';
+import { mergeLetterArchive, type Letter } from '../content/letters';
 import {
   getActivityCompletionStory,
   resolveRecipientPcStory,
@@ -1856,7 +1856,7 @@ export class LocationScene extends Phaser.Scene {
   // on screen — each with its own scale (±15%), heading, drift speed and
   // bob/rotation phase, then advanced every frame in advanceClearingCranes() and
   // wrapped back upstream on exit so the trickle never runs dry. Purely
-  // decorative: no colliders, so they never touch the "Kneel at the water"
+    // decorative: no colliders, so they never touch the "Look over the water"
   // interaction. Depth sits above the water/glow but well below any standing
   // figure, so ____ draws in front when he kneels at the shore.
   private spawnClearingCranes(width: number, height: number, tile: number): void {
@@ -4561,7 +4561,7 @@ export class LocationScene extends Phaser.Scene {
 
     // Fill. Flat (outdoor) markers are axis-aligned rectangles that sit on the
     // ground/water, so a hard-edged fill reads as a rectangle stamped on the
-    // surface — in the clearing the "Kneel at the water" marker looked like a
+    // surface — in the clearing the "Look over the water" marker looked like a
     // shadow with a crisp rim on the twilight water. Feather the fill so it fades
     // in from the edge instead: nested concentric rects, each at a fraction of the
     // target alpha, composite to the full 0.28 in the interior and taper to nearly
@@ -5084,7 +5084,7 @@ export class LocationScene extends Phaser.Scene {
       this.canMove = false;
       const archive = showLettersScreen({
         mode: 'archive',
-        letters: [...getCollectedFriendLetters(this.state), ...LETTERS],
+        letters: mergeLetterArchive(getCollectedFriendLetters(this.state)),
         onGoHome: () => this.goHome(),
       });
       await archive.closed;
@@ -5216,7 +5216,7 @@ export class LocationScene extends Phaser.Scene {
       .setDepth(816);
     const violin = this.add
       .image(0, 0, GALAXY_VIOLIN_KEY)
-      .setDisplaySize(24, 72)
+      .setDisplaySize(30, 48)
       .setAngle(8)
       .setDepth(817);
     this.tweens.add({
@@ -5235,7 +5235,7 @@ export class LocationScene extends Phaser.Scene {
       total: letters.length,
       onGoHome: () => this.goHome(),
     });
-    const playKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+    const playKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.E);
 
     const runtime: GalaxyLetterEndingRuntime = {
       model,

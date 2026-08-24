@@ -292,7 +292,6 @@ export class SplitScene extends Phaser.Scene {
   private roundText!: Phaser.GameObjects.Text;
   private popupText!: Phaser.GameObjects.Text;
   private promptText!: Phaser.GameObjects.Text;
-  private warnText!: Phaser.GameObjects.Text;
 
   private tracers: Tracer[] = [];
   private muzzles: MuzzleFlash[] = [];
@@ -417,20 +416,6 @@ export class SplitScene extends Phaser.Scene {
       .setOrigin(0.5, 0)
       .setDepth(816)
       .setVisible(false);
-    this.warnText = this.add
-      .text(ARENA.width / 2, 62, '', {
-        align: 'center',
-        color: '#ffb347',
-        fontFamily: 'Arial, sans-serif',
-        fontSize: '22px',
-        fontStyle: '800',
-        stroke: '#141414',
-        strokeThickness: 5,
-      })
-      .setOrigin(0.5, 0)
-      .setDepth(816)
-      .setVisible(false);
-
     this.crosshair = this.hasArt(ART_KEYS.ui)
       ? this.add
           .image(this.pointer.x, this.pointer.y, ART_KEYS.ui, 'crosshair')
@@ -755,7 +740,8 @@ export class SplitScene extends Phaser.Scene {
           this.killSoundIndex += 1;
           break;
         case 'reinforcement':
-          this.showWarn('MORE INBOUND');
+          // The arriving enemies are the warning; keep the screen free of a
+          // separate reinforcement caption.
           break;
         case 'defuse-interrupted':
           this.showPopup('OFF THE SPIKE', '#ff5470');
@@ -1588,18 +1574,6 @@ export class SplitScene extends Phaser.Scene {
 
   }
 
-  private showWarn(text: string): void {
-    this.warnText.setText(text).setVisible(true).setAlpha(1);
-    this.tweens.killTweensOf(this.warnText);
-    this.tweens.add({
-      targets: this.warnText,
-      alpha: 0,
-      delay: 1000,
-      duration: 500,
-      onComplete: () => this.warnText.setVisible(false),
-    });
-  }
-
   private showPopup(text: string, color: string): void {
     this.popupText.setText(text).setColor(color).setVisible(true).setAlpha(1).setScale(1);
     this.tweens.killTweensOf(this.popupText);
@@ -1626,7 +1600,6 @@ export class SplitScene extends Phaser.Scene {
     this.input.setDefaultCursor('default');
     this.crosshair.setVisible(false);
     this.promptText.setVisible(false);
-    this.warnText.setVisible(false);
     this.showPopup('CLUTCH.', '#2ee6c4');
     this.cameras.main.flash(400, 46, 230, 196);
     this.playSfx('clutch');

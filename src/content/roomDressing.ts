@@ -261,6 +261,18 @@ const RECIPIENT_HOUSE_DRESSING: RoomDressing = {
       fixedDepth: -21,
       note: 'photo-wall cluster + empty frame -> recipient-photo-wall',
     },
+    // Filled only after the ending (or while dressEdit is active). This is a
+    // singles-only prop so the editor can drag, nudge, and resize the generated
+    // portrait independently of the wooden photo-wall cluster behind it.
+    {
+      frame: 'epilogue-photo',
+      mapX: 511,
+      mapY: -64,
+      heightRatio: 0.357,
+      wallShear: 0.5,
+      fixedDepth: -20.9,
+      note: 'post-ending galaxy artwork inside the empty photo-wall frame',
+    },
     {
       frame: 'camera',
       mapX: 1240,

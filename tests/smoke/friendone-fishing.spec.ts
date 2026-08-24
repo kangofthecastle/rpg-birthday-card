@@ -33,7 +33,7 @@ test('completes ____ PC fishing activity through test mode', async ({ page }) =>
   await expect(page.getByText('There. Now they have company.')).toBeVisible();
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(page.getByText('So down!')).toBeVisible();
+  await expect(page.getByText('PEW!')).toBeVisible();
   await page.getByRole('button', { name: 'Continue' }).click();
 
   await expect(page.locator('.collection-panel')).toContainText('____’s Letter');

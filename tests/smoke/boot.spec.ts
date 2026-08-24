@@ -81,11 +81,11 @@ test('cold open plays, then lands in ____’s room with the unpowered PC and ___
   await expect(page.getByText('1 NEW MESSAGE')).toBeVisible();
   await expect(page.locator('body')).toHaveAttribute('data-phone-notification-count', '1');
   await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(page.getByText('Heyy! Happy birthday! you still coming over today?')).toBeVisible();
+  await expect(page.getByText('Hey! Happy birthday! Still coming over today?')).toBeVisible();
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.getByText('I’m coming over today?')).toBeVisible();
   await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(page.getByText('Must’ve forgot... I’ll head over now.')).toBeVisible();
+  await expect(page.getByText('I think I forgot ;-; I’ll head over now!')).toBeVisible();
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.locator('body')).toHaveAttribute('data-phone-notification-count', '1');
 

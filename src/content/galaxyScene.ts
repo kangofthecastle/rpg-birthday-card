@@ -41,7 +41,7 @@ export const GALAXY_GROUND_URL = '/assets/ending/galaxy-ground.png';
 export const SHORE_WATER_KEY = 'shore-water';
 export const SHORE_WATER_URL = '/assets/tiles/shore-water.png';
 
-// The violin ____ receives after ____'s final conversation. This transparent
-// object portrait is small enough to read as a carried instrument in the world.
+// The standalone violin ____ receives after ____'s final conversation. This
+// ending-specific cutout has no floor stand, unlike the room inspection art.
 export const GALAXY_VIOLIN_KEY = 'galaxy-ending-violin';
-export const GALAXY_VIOLIN_URL = '/assets/portraits/objects/violin.png';
+export const GALAXY_VIOLIN_URL = '/assets/ending/violin-standalone.png';

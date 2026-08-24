@@ -16,7 +16,7 @@ export interface GalaxyLettersHudHandle {
   destroy(): void;
 }
 
-/** Invisible finale state host that reveals only the final return-home choice. */
+/** Minimal finale host: a plain play instruction, then the final return choice. */
 export function showGalaxyLettersHud(
   options: GalaxyLettersHudOptions,
 ): GalaxyLettersHudHandle {
@@ -31,6 +31,10 @@ export function showGalaxyLettersHud(
   const card = document.createElement('div');
   card.className = 'galaxy-letters-hud__card';
 
+  const instruction = document.createElement('p');
+  instruction.className = 'galaxy-letters-hud__instruction';
+  instruction.textContent = 'press e';
+
   const birthday = document.createElement('p');
   birthday.className = 'galaxy-letters-hud__birthday';
   birthday.textContent = HAPPY_BIRTHDAY_LINE;
@@ -43,7 +47,7 @@ export function showGalaxyLettersHud(
   goHome.hidden = true;
   goHome.addEventListener('click', options.onGoHome);
 
-  card.append(birthday, goHome);
+  card.append(instruction, birthday, goHome);
   overlay.append(card);
   host.append(overlay);
 
@@ -51,19 +55,25 @@ export function showGalaxyLettersHud(
     element: overlay,
     setPlaying() {
       overlay.dataset.phase = 'playing';
-      overlay.hidden = true;
+      overlay.hidden = false;
+      instruction.hidden = false;
+      birthday.hidden = true;
+      goHome.hidden = true;
     },
     setAwakening() {
       overlay.dataset.phase = 'awakening';
+      instruction.hidden = true;
       overlay.hidden = true;
     },
     setCollecting(_read) {
       overlay.dataset.phase = 'collecting';
+      instruction.hidden = true;
       overlay.hidden = true;
     },
     setComplete() {
       overlay.dataset.phase = 'complete';
       overlay.hidden = false;
+      instruction.hidden = true;
       birthday.hidden = false;
       goHome.hidden = false;
       goHome.focus({ preventScroll: true });

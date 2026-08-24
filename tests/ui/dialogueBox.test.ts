@@ -6,6 +6,21 @@ describe('showDialogue', () => {
     document.body.innerHTML = '<div id="ui-root"><aside class="collection-panel">Keepsakes</aside></div>';
   });
 
+  it('renders a leading Markdown-style action in italics without showing markers', async () => {
+    const promise = showDialogue([
+      { speaker: '____', text: '*~shrugs~* Do you want to catch one?' },
+    ]);
+
+    const root = document.querySelector('[data-ui-layer="dialogue"]');
+    expect(root?.querySelector('.dialogue-box__text')?.textContent).toBe(
+      '~shrugs~ Do you want to catch one?',
+    );
+    expect(root?.querySelector('.dialogue-box__text em')?.textContent).toBe('~shrugs~');
+
+    root?.querySelector<HTMLButtonElement>('.dialogue-box__action')?.click();
+    await promise;
+  });
+
   it('renders authored dialogue as safe text without replacing other UI layers', async () => {
     const promise = showDialogue([
       {

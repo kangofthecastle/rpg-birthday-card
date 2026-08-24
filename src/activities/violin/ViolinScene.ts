@@ -8,12 +8,16 @@ import {
   RHYTHM_LANES,
   RHYTHM_LEAD_IN_MS,
   RHYTHM_NOTE_APPROACH_MS,
+  VIOLIN_HOLD_POINTS_PER_TICK,
+  VIOLIN_HOLD_TICK_MS,
   VIOLIN_MISS_PENALTY,
   VIOLIN_PASS_SCORE,
   advanceViolin,
+  awardViolinHoldTicks,
   beginViolin,
   createViolinState,
   getPieceProgress,
+  isSustainedRhythmNote,
   pressViolinKey,
   type ViolinJudgement,
   type ViolinState,
@@ -52,6 +56,21 @@ const INK = 0x2c1c1b;
 const BURGUNDY = 0x5a2830;
 const WINDOW_LIGHT = { x: 110, y: 112 } as const;
 const LATE_LIGHT_START = 0.68;
+const HOLD_COMPLETION_RATIO = 0.9;
+
+type HoldInputSource = 'keyboard' | 'pointer';
+
+interface ActiveHold {
+  readonly noteIndex: number;
+  readonly laneIndex: number;
+  readonly keyName: string;
+  readonly source: HoldInputSource;
+  readonly durationMs: number;
+  readonly deadlineMs: number;
+  readonly requiredHoldMs: number;
+  heldMs: number;
+  awardedTicks: number;
+}
 
 function laneWidth(): number {
   return BOARD.width / RHYTHM_LANES.length;
@@ -113,6 +132,9 @@ export class ViolinScene extends Phaser.Scene {
   private missPulse = 0;
   private finaleStrength = 0;
   private lateLightStrength = 0;
+  private activeHold: ActiveHold | null = null;
+  private holdFeedback: 'held' | 'early' | null = null;
+  private holdFeedbackStrength = 0;
 
   constructor(callbacks: ViolinSceneCallbacks = DEFAULT_CALLBACKS) {
     super('ViolinScene');
@@ -179,10 +201,12 @@ export class ViolinScene extends Phaser.Scene {
     const after = advanceViolin(before, delta);
     this.modelState = after;
     this.reactToAdvance(before, after);
+    this.updateActiveHold(delta);
 
     this.judgementStrength = Math.max(0, this.judgementStrength - delta / 520);
     this.strikePulse = Math.max(0, this.strikePulse - delta / 260);
     this.missPulse = Math.max(0, this.missPulse - delta / 360);
+    this.holdFeedbackStrength = Math.max(0, this.holdFeedbackStrength - delta / 700);
     this.laneFlashes.forEach((value, lane) => {
       const next = Math.max(0, value - delta / 220);
       if (next <= 0) {
@@ -334,7 +358,7 @@ export class ViolinScene extends Phaser.Scene {
         0,
         RHYTHM_LANES.length - 1,
       );
-      this.resolvePress(RHYTHM_LANES[lane].key);
+      this.resolvePress(RHYTHM_LANES[lane].key, 'pointer');
     });
   }
 
@@ -356,7 +380,7 @@ export class ViolinScene extends Phaser.Scene {
           this.startSong();
           return;
         }
-        this.resolvePress(keyName);
+        this.resolvePress(keyName, 'keyboard');
         return;
       }
     }
@@ -369,11 +393,17 @@ export class ViolinScene extends Phaser.Scene {
     this.judgementStrength = 0;
     this.strikePulse = 0;
     this.missPulse = 0;
+    this.activeHold = null;
+    this.holdFeedback = null;
+    this.holdFeedbackStrength = 0;
     this.laneFlashes.clear();
     this.lastWallTime = performance.now();
   }
 
-  private resolvePress(keyName: string): void {
+  private resolvePress(
+    keyName: string,
+    inputSource: HoldInputSource = 'keyboard',
+  ): void {
     const lane = RHYTHM_LANES.findIndex((rhythmLane) => rhythmLane.key === keyName);
     if (lane >= 0) {
       this.laneFlashes.set(lane, 1);
@@ -395,6 +425,27 @@ export class ViolinScene extends Phaser.Scene {
           connected: before.nextNoteIndex > 0,
         });
       }
+      if (note && isSustainedRhythmNote(note.index)) {
+        this.activeHold = {
+          noteIndex: note.index,
+          laneIndex: note.laneIndex,
+          keyName,
+          source: inputSource,
+          durationMs: note.durationMs,
+          deadlineMs: note.timeMs + note.durationMs,
+          requiredHoldMs: Math.max(
+            VIOLIN_HOLD_TICK_MS,
+            Math.min(
+              note.durationMs,
+              note.timeMs + note.durationMs - before.elapsedMs,
+            ),
+          ),
+          heldMs: 0,
+          awardedTicks: 0,
+        };
+        this.holdFeedback = null;
+        this.holdFeedbackStrength = 0;
+      }
       if (lane >= 0) {
         this.showScorePopup(lane, after.score - before.score, after.lastJudgement);
       }
@@ -406,6 +457,62 @@ export class ViolinScene extends Phaser.Scene {
       playSfx('sfx-violin-waver');
       this.missPulse = 1;
     }
+  }
+
+  private updateActiveHold(deltaMs: number): void {
+    const hold = this.activeHold;
+    if (!hold) {
+      return;
+    }
+
+    const frameEndMs = this.modelState.elapsedMs;
+    const frameStartMs = frameEndMs - deltaMs;
+    const eligibleDeltaMs = Math.max(
+      0,
+      Math.min(frameEndMs, hold.deadlineMs) - frameStartMs,
+    );
+    if (this.isHoldInputDown(hold) && eligibleDeltaMs > 0) {
+      hold.heldMs = Math.min(hold.requiredHoldMs, hold.heldMs + eligibleDeltaMs);
+      this.laneFlashes.set(hold.laneIndex, 1);
+
+      const earnedTicks = Math.floor(hold.heldMs / VIOLIN_HOLD_TICK_MS);
+      const newTicks = earnedTicks - hold.awardedTicks;
+      if (newTicks > 0) {
+        hold.awardedTicks = earnedTicks;
+        this.modelState = awardViolinHoldTicks(this.modelState, newTicks);
+        this.showScorePopup(
+          hold.laneIndex,
+          newTicks * VIOLIN_HOLD_POINTS_PER_TICK,
+          'good',
+        );
+      }
+    }
+
+    if (this.modelState.elapsedMs < hold.deadlineMs) {
+      return;
+    }
+
+    const completion = hold.heldMs / hold.requiredHoldMs;
+    this.holdFeedback = completion >= HOLD_COMPLETION_RATIO ? 'held' : 'early';
+    this.holdFeedbackStrength = 1;
+    this.activeHold = null;
+  }
+
+  private isHoldInputDown(hold: ActiveHold): boolean {
+    if (hold.source === 'keyboard') {
+      return this.noteKeys.get(hold.keyName)?.isDown ?? false;
+    }
+
+    const pointer = this.input.activePointer;
+    if (!pointer.isDown || pointer.x < BOARD.x || pointer.x > BOARD.x + BOARD.width) {
+      return false;
+    }
+    const lane = Phaser.Math.Clamp(
+      Math.floor((pointer.x - BOARD.x) / laneWidth()),
+      0,
+      RHYTHM_LANES.length - 1,
+    );
+    return lane === hold.laneIndex;
   }
 
   private showScorePopup(
@@ -537,6 +644,25 @@ export class ViolinScene extends Phaser.Scene {
       return;
     }
 
+    const activeHold = this.activeHold;
+    if (activeHold) {
+      const cx = laneCentre(activeHold.laneIndex);
+      const width = Math.min(78, laneWidth() - 16);
+      const tailHeight = this.sustainTailHeight(activeHold.durationMs);
+      const headY =
+        HIT_LINE_Y +
+        (this.modelState.elapsedMs - RHYTHM_CHART[activeHold.noteIndex].timeMs) *
+          NOTE_SPEED_PX_PER_MS;
+      this.drawSustainTail(
+        g,
+        cx,
+        headY,
+        width,
+        tailHeight,
+        this.isHoldInputDown(activeHold),
+      );
+    }
+
     for (let i = this.modelState.nextNoteIndex; i < RHYTHM_CHART.length; i += 1) {
       const note = RHYTHM_CHART[i];
       const untilHit = note.timeMs - this.modelState.elapsedMs;
@@ -551,20 +677,73 @@ export class ViolinScene extends Phaser.Scene {
       const cx = laneCentre(lane);
       const y = HIT_LINE_Y - untilHit * NOTE_SPEED_PX_PER_MS;
       const width = Math.min(78, laneWidth() - 16);
-      const sustain = Math.max(13, note.durationMs * NOTE_SPEED_PX_PER_MS);
-      const tailHeight = Math.min(62, sustain);
+      const isSustainedNote = isSustainedRhythmNote(i);
 
-      g.fillStyle(GOLD, 0.13);
-      g.fillRoundedRect(cx - width * 0.35, y - tailHeight, width * 0.7, tailHeight, 6);
-      g.fillStyle(BURGUNDY, 0.98);
-      g.fillRoundedRect(cx - width / 2, y - 7, width, 14, 6);
-      g.fillStyle(BRIGHT_GOLD, 0.9);
-      g.fillRoundedRect(cx - width / 2 + 2, y - 5, width - 4, 5, 3);
-      g.lineStyle(1.5, CREAM, 0.8);
-      g.strokeRoundedRect(cx - width / 2, y - 7, width, 14, 6);
-      g.fillStyle(INK, 0.75);
-      g.fillCircle(cx, y, 2.5);
+      if (isSustainedNote) {
+        this.drawSustainTail(
+          g,
+          cx,
+          y,
+          width,
+          this.sustainTailHeight(note.durationMs),
+          false,
+        );
+      }
+      this.drawNoteHead(g, cx, y, width);
     }
+  }
+
+  private sustainTailHeight(durationMs: number): number {
+    return Math.min(
+      HIT_LINE_Y - RUNWAY_TOP,
+      Math.max(34, durationMs * NOTE_SPEED_PX_PER_MS),
+    );
+  }
+
+  private drawSustainTail(
+    g: Phaser.GameObjects.Graphics,
+    cx: number,
+    y: number,
+    width: number,
+    height: number,
+    lit: boolean,
+  ): void {
+    const tailX = cx - width * 0.35;
+    const tailWidth = width * 0.7;
+    const visibleTop = Math.max(RUNWAY_TOP, y - height);
+    const visibleBottom = Math.min(HIT_LINE_Y, y);
+    const visibleHeight = visibleBottom - visibleTop;
+    if (visibleHeight <= 0) {
+      return;
+    }
+    g.fillStyle(lit ? BRIGHT_GOLD : 0x70432e, lit ? 0.72 : 0.88);
+    g.fillRoundedRect(tailX, visibleTop, tailWidth, visibleHeight, 6);
+    g.fillStyle(lit ? 0xffefb0 : GOLD, lit ? 0.52 : 0.28);
+    g.fillRoundedRect(
+      tailX + 3,
+      visibleTop + 2,
+      tailWidth - 6,
+      Math.max(1, visibleHeight - 4),
+      4,
+    );
+    g.lineStyle(1.5, lit ? 0xfff2bd : BRIGHT_GOLD, lit ? 0.95 : 0.7);
+    g.strokeRoundedRect(tailX, visibleTop, tailWidth, visibleHeight, 6);
+  }
+
+  private drawNoteHead(
+    g: Phaser.GameObjects.Graphics,
+    cx: number,
+    y: number,
+    width: number,
+  ): void {
+    g.fillStyle(BURGUNDY, 0.98);
+    g.fillRoundedRect(cx - width / 2, y - 7, width, 14, 6);
+    g.fillStyle(BRIGHT_GOLD, 0.9);
+    g.fillRoundedRect(cx - width / 2 + 2, y - 5, width - 4, 5, 3);
+    g.lineStyle(1.5, CREAM, 0.8);
+    g.strokeRoundedRect(cx - width / 2, y - 7, width, 14, 6);
+    g.fillStyle(INK, 0.75);
+    g.fillCircle(cx, y, 2.5);
   }
 
   private drawEffects(): void {
@@ -588,8 +767,12 @@ export class ViolinScene extends Phaser.Scene {
     const finale = this.finaleGfx;
     finale.clear();
     const light = this.lateLightStrength;
+    const resultBoost =
+      this.modelState.phase === 'finale' || this.modelState.phase === 'complete'
+        ? this.finaleStrength
+        : 0;
     if (light > 0) {
-      finale.fillStyle(0xffc766, light * 0.04);
+      finale.fillStyle(0xffc766, light * (0.04 + resultBoost * 0.06));
       finale.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
       const beams = [
@@ -624,7 +807,10 @@ export class ViolinScene extends Phaser.Scene {
 
       for (let layer = 5; layer >= 1; layer -= 1) {
         const t = layer / 5;
-        finale.fillStyle(0xfff1c9, light * 0.015 * (1.1 - t * 0.55));
+        finale.fillStyle(
+          0xfff1c9,
+          light * (0.015 + resultBoost * 0.02) * (1.1 - t * 0.55),
+        );
         finale.fillEllipse(WINDOW_LIGHT.x, WINDOW_LIGHT.y, 150 * t, 210 * t);
       }
 
@@ -635,7 +821,10 @@ export class ViolinScene extends Phaser.Scene {
         const x = seededUnit(index, 3) * CANVAS_WIDTH + Math.sin(now / 1300 + index) * 10;
         const y = CANVAS_HEIGHT - travel;
         const twinkle = 0.45 + Math.sin(now / 420 + index * 1.7) * 0.35;
-        finale.fillStyle(0xffefbd, light * (0.05 + twinkle * 0.1));
+        finale.fillStyle(
+          0xffefbd,
+          light * (0.05 + twinkle * 0.1) * (1 + resultBoost * 0.65),
+        );
         finale.fillCircle(x, y, 0.7 + seededUnit(index, 4) * 1.4);
       }
     }
@@ -695,18 +884,37 @@ export class ViolinScene extends Phaser.Scene {
       this.subText.setText('').setAlpha(0);
     }
 
-    const label = judgementLabel(state.lastJudgement);
-    const colour =
-      state.lastJudgement === 'perfect'
-        ? '#ffe6a6'
-        : state.lastJudgement === 'good'
-          ? '#e8bd76'
-          : '#e18a8a';
+    const holdActive = this.activeHold !== null;
+    const holding = this.activeHold ? this.isHoldInputDown(this.activeHold) : false;
+    const holdResultVisible = this.holdFeedbackStrength > 0 && this.holdFeedback !== null;
+    const label = holdActive
+      ? holding
+        ? 'HOLD'
+        : 'KEEP HOLDING'
+      : holdResultVisible
+        ? this.holdFeedback === 'held'
+          ? 'HELD'
+          : 'RELEASED EARLY'
+        : judgementLabel(state.lastJudgement);
+    const colour = holding || (holdResultVisible && this.holdFeedback === 'held')
+      ? '#fff1ae'
+      : holdActive || holdResultVisible
+        ? '#e18a8a'
+        : state.lastJudgement === 'perfect'
+          ? '#ffe6a6'
+          : state.lastJudgement === 'good'
+            ? '#e8bd76'
+            : '#e18a8a';
+    const feedbackAlpha = holdActive
+      ? 1
+      : holdResultVisible
+        ? this.holdFeedbackStrength
+        : this.judgementStrength;
     this.judgementText
       .setText(label)
       .setColor(colour)
-      .setAlpha(this.judgementStrength)
-      .setScale(0.92 + this.judgementStrength * 0.08);
+      .setAlpha(feedbackAlpha)
+      .setScale(0.92 + feedbackAlpha * 0.08);
 
     const hideBoard = state.phase === 'finale' || state.phase === 'complete';
     this.boardGfx.setAlpha(hideBoard ? 1 - this.finaleStrength : 1);
@@ -726,6 +934,9 @@ export class ViolinScene extends Phaser.Scene {
     panel.dataset.violinMaxCombo = String(this.modelState.maxCombo);
     panel.dataset.violinJudgement = this.modelState.lastJudgement;
     panel.dataset.violinPassScore = String(VIOLIN_PASS_SCORE);
+    panel.dataset.violinHold = this.activeHold
+      ? String(this.activeHold.heldMs / this.activeHold.requiredHoldMs)
+      : 'none';
     const note = RHYTHM_CHART[this.modelState.nextNoteIndex];
     panel.dataset.violinWindow = String(
       this.modelState.phase === 'playing' &&

@@ -15,22 +15,33 @@ import {
   PERFECT_WINDOW_MS,
   RHYTHM_CHART,
   RHYTHM_FINAL_NOTE_DURATION_MS,
+  RHYTHM_FINAL_BPM,
+  RHYTHM_FINAL_TEMPO_NOTES,
   RHYTHM_LANES,
   RHYTHM_LEAD_IN_MS,
+  RHYTHM_MID_HOLD_EXTENSION_MS,
+  RHYTHM_MID_HOLD_NOTE_NUMBER,
   RHYTHM_NOTE_APPROACH_MS,
   RHYTHM_OUTRO_MS,
   RHYTHM_TIME_SCALE,
+  RHYTHM_START_BPM,
+  RHYTHM_TEMPO_RAMP_NOTES,
   VIOLIN_MISS_PENALTY,
+  VIOLIN_HOLD_POINTS_PER_TICK,
   VIOLIN_PASS_SCORE,
   advanceViolin,
+  awardViolinHoldTicks,
   beginViolin,
   buildRhythmChart,
   createViolinState,
   currentChartNote,
   getPieceProgress,
   isPieceComplete,
+  isSustainedRhythmNote,
   pressViolinKey,
   rhythmChartEndMs,
+  rhythmTempoBpmForNote,
+  rhythmTimeScaleForNote,
   type ViolinState,
 } from '../../../src/activities/violin/violinModel';
 
@@ -108,9 +119,9 @@ describe('violinModel — chart', () => {
       const current = chart[index];
       const source = VIOLIN_FINALE_PHRASES[current.phraseIndex].notes[current.noteIndex];
       expect(current.timeMs).toBe(
-        previous.timeMs +
+          previous.timeMs +
           previous.durationMs +
-          Math.round((source.delayBeforeMs ?? 0) * RHYTHM_TIME_SCALE),
+          Math.round((source.delayBeforeMs ?? 0) * rhythmTimeScaleForNote(current.index)),
       );
     }
   });
@@ -124,18 +135,61 @@ describe('violinModel — chart', () => {
       expect(chartNote.durationMs).toBe(
         chartNote.index === RHYTHM_CHART.length - 1
           ? RHYTHM_FINAL_NOTE_DURATION_MS
-          : Math.round(source.durationMs * RHYTHM_TIME_SCALE),
+          : Math.round(source.durationMs * rhythmTimeScaleForNote(chartNote.index)) +
+            (chartNote.index === RHYTHM_MID_HOLD_NOTE_NUMBER - 1
+              ? RHYTHM_MID_HOLD_EXTENSION_MS
+              : 0),
       );
       expect(chartNote.index).toBeGreaterThanOrEqual(0);
     }
   });
 
-  it('uses four broad lanes and plays the passage at 79 BPM', () => {
+  it('extends displayed note 31 by one second and marks only it and the finale sustained', () => {
+    const note31 = RHYTHM_CHART[RHYTHM_MID_HOLD_NOTE_NUMBER - 1];
+    const source = VIOLIN_FINALE_PHRASES[note31.phraseIndex].notes[note31.noteIndex];
+    expect(note31.durationMs).toBe(
+      Math.round(source.durationMs * rhythmTimeScaleForNote(note31.index)) +
+        RHYTHM_MID_HOLD_EXTENSION_MS,
+    );
+    expect(isSustainedRhythmNote(note31.index)).toBe(true);
+    expect(isSustainedRhythmNote(RHYTHM_CHART.length - 1)).toBe(true);
+    expect(isSustainedRhythmNote(note31.index - 1)).toBe(false);
+  });
+
+  it('awards hold points in deterministic whole ticks', () => {
+    const playing = advanceToFirstNote();
+    const scored = awardViolinHoldTicks(playing, 3);
+    expect(scored.score).toBe(playing.score + VIOLIN_HOLD_POINTS_PER_TICK * 3);
+    expect(awardViolinHoldTicks(playing, 0)).toBe(playing);
+    expect(awardViolinHoldTicks(playing, 0.8)).toBe(playing);
+  });
+
+  it('uses four broad lanes and begins the passage at 80 BPM', () => {
     expect(RHYTHM_LANES.map((lane) => lane.key)).toEqual(['D', 'F', 'J', 'K']);
-    expect(RHYTHM_TIME_SCALE).toBeCloseTo(100 / 79);
+    expect(RHYTHM_TIME_SCALE).toBeCloseTo(100 / RHYTHM_START_BPM);
     expect(new Set(RHYTHM_CHART.map((note) => note.laneIndex))).toEqual(
       new Set([0, 1, 2, 3]),
     );
+  });
+
+  it('ramps down smoothly before holding the final four notes at 75 BPM', () => {
+    const finalStart = RHYTHM_CHART.length - RHYTHM_FINAL_TEMPO_NOTES;
+    const rampStart = finalStart - RHYTHM_TEMPO_RAMP_NOTES;
+    expect(rhythmTempoBpmForNote(0)).toBe(RHYTHM_START_BPM);
+
+    const ramp = Array.from(
+      { length: RHYTHM_TEMPO_RAMP_NOTES },
+      (_, offset) => rhythmTempoBpmForNote(rampStart + offset),
+    );
+    expect(ramp[0]).toBeLessThan(RHYTHM_START_BPM);
+    expect(ramp.at(-1)).toBe(RHYTHM_FINAL_BPM);
+    for (let index = 1; index < ramp.length; index += 1) {
+      expect(ramp[index]).toBeLessThanOrEqual(ramp[index - 1]);
+    }
+
+    for (let index = finalStart; index < RHYTHM_CHART.length; index += 1) {
+      expect(rhythmTempoBpmForNote(index)).toBe(RHYTHM_FINAL_BPM);
+    }
   });
 
   it('changes lanes for larger leaps while allowing two-step intervals to share', () => {

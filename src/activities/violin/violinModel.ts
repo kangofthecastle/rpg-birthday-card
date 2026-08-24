@@ -57,13 +57,22 @@ export const RHYTHM_LANES: readonly RhythmLane[] = [
 ] as const;
 export const RHYTHM_KEY_HINT = RHYTHM_LANES.map((lane) => lane.key).join(' ');
 
-/** The original 100 BPM passage is relaxed to 79 BPM for the playable chart. */
-export const RHYTHM_TIME_SCALE = 100 / 79;
+/** The passage begins at 80 BPM, then eases into a 75 BPM closing phrase. */
+export const RHYTHM_START_BPM = 80;
+export const RHYTHM_FINAL_BPM = 75;
+export const RHYTHM_FINAL_TEMPO_NOTES = 4;
+export const RHYTHM_TEMPO_RAMP_NOTES = 8;
+export const RHYTHM_TIME_SCALE = 100 / RHYTHM_START_BPM;
 export const RHYTHM_BEAT_MS = 800;
 export const RHYTHM_LEAD_IN_MS = RHYTHM_BEAT_MS * 3;
 /** Travel time from the top of the runway to the timing line. */
 export const RHYTHM_NOTE_APPROACH_MS = 2100;
+/** The displayed note 31 has room to ring before the next phrase continues. */
+export const RHYTHM_MID_HOLD_NOTE_NUMBER = 31;
+export const RHYTHM_MID_HOLD_EXTENSION_MS = 500;
 export const RHYTHM_FINAL_NOTE_DURATION_MS = 2000;
+export const VIOLIN_HOLD_TICK_MS = 200;
+export const VIOLIN_HOLD_POINTS_PER_TICK = 100;
 export const PERFECT_WINDOW_MS = 115;
 export const GOOD_WINDOW_MS = 260;
 /** A strong run is required, but misses never consume an attempt. */
@@ -92,6 +101,35 @@ const RHYTHM_LANE_PHRASES: readonly (readonly number[])[] = [
   [2, 3, 1, 1],
 ] as const;
 
+const RHYTHM_NOTE_COUNT = VIOLIN_FINALE_PHRASES.reduce(
+  (total, phrase) => total + phrase.notes.length,
+  0,
+);
+
+export function isSustainedRhythmNote(noteIndex: number): boolean {
+  return (
+    noteIndex === RHYTHM_MID_HOLD_NOTE_NUMBER - 1 ||
+    noteIndex === RHYTHM_NOTE_COUNT - 1
+  );
+}
+
+export function rhythmTempoBpmForNote(noteIndex: number): number {
+  const finalStart = RHYTHM_NOTE_COUNT - RHYTHM_FINAL_TEMPO_NOTES;
+  const rampStart = finalStart - RHYTHM_TEMPO_RAMP_NOTES;
+  if (noteIndex >= finalStart) {
+    return RHYTHM_FINAL_BPM;
+  }
+  if (noteIndex < rampStart) {
+    return RHYTHM_START_BPM;
+  }
+  const rampProgress = (noteIndex - rampStart + 1) / RHYTHM_TEMPO_RAMP_NOTES;
+  return RHYTHM_START_BPM + (RHYTHM_FINAL_BPM - RHYTHM_START_BPM) * rampProgress;
+}
+
+export function rhythmTimeScaleForNote(noteIndex: number): number {
+  return 100 / rhythmTempoBpmForNote(noteIndex);
+}
+
 /** Builds one continuous chart through the complete passage that the previous
  * game iteration played during its automatic post-game finale. */
 export function buildRhythmChart(): readonly RhythmChartNote[] {
@@ -100,6 +138,8 @@ export function buildRhythmChart(): readonly RhythmChartNote[] {
 
   VIOLIN_FINALE_PHRASES.forEach((phrase, phraseIndex) => {
     phrase.notes.forEach((note, noteIndex) => {
+      const chartIndex = chart.length;
+      const timeScale = rhythmTimeScaleForNote(chartIndex);
       const laneIndex = RHYTHM_LANE_PHRASES[phraseIndex]?.[noteIndex];
       if (laneIndex === undefined) {
         throw new Error(`Missing rhythm lane for phrase ${phraseIndex}, note ${noteIndex}`);
@@ -107,19 +147,24 @@ export function buildRhythmChart(): readonly RhythmChartNote[] {
       const isFinalNote =
         phraseIndex === VIOLIN_FINALE_PHRASES.length - 1 &&
         noteIndex === phrase.notes.length - 1;
-      cursorMs += Math.round((note.delayBeforeMs ?? 0) * RHYTHM_TIME_SCALE);
+      cursorMs += Math.round((note.delayBeforeMs ?? 0) * timeScale);
+      const scaledDurationMs = Math.round(note.durationMs * timeScale);
+      const durationMs = isFinalNote
+        ? RHYTHM_FINAL_NOTE_DURATION_MS
+        : scaledDurationMs +
+          (chartIndex === RHYTHM_MID_HOLD_NOTE_NUMBER - 1
+            ? RHYTHM_MID_HOLD_EXTENSION_MS
+            : 0);
       chart.push({
-        index: chart.length,
+        index: chartIndex,
         phraseIndex,
         noteIndex,
         pitchId: note.pitchId,
         laneIndex,
         timeMs: cursorMs,
-        durationMs: isFinalNote
-          ? RHYTHM_FINAL_NOTE_DURATION_MS
-          : Math.round(note.durationMs * RHYTHM_TIME_SCALE),
+        durationMs,
       });
-      cursorMs += Math.round(note.durationMs * RHYTHM_TIME_SCALE);
+      cursorMs += durationMs;
     });
   });
 
@@ -274,6 +319,21 @@ export function pressViolinKey(state: ViolinState, keyName: string): ViolinState
     state,
     Math.abs(offsetMs) <= PERFECT_WINDOW_MS ? 'perfect' : 'good',
   );
+}
+
+/** Adds deterministic score ticks while a sustained note is actively held. */
+export function awardViolinHoldTicks(
+  state: ViolinState,
+  tickCount: number,
+): ViolinState {
+  const wholeTicks = Math.max(0, Math.floor(tickCount));
+  if (state.phase !== 'playing' || state.finished || wholeTicks === 0) {
+    return state;
+  }
+  return {
+    ...state,
+    score: state.score + wholeTicks * VIOLIN_HOLD_POINTS_PER_TICK,
+  };
 }
 
 export function currentChartNote(state: ViolinState): RhythmChartNote | undefined {

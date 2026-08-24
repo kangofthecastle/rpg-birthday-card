@@ -99,8 +99,11 @@ describe('story content resolution', () => {
   it('provides world dialogue after fishing and after ____ disappears', () => {
     expect(getActivityCompletionStory(FISHING_ACTIVITY_ID)?.worldDialogue.map((line) => line.text)).toEqual([
       'There. Now they have company.',
-      "____ said we should come over for a LAN party. Let's go!",
-      'PEW!',
+      'How’d you do that?',
+      'Don’t worry about it.',
+      'We should go to ____’s, we’re going to be late.',
+      'We’re going to ____’s??',
+      'I need to use my calendar more.',
     ]);
     expect(getActivityCompletionStory(RETAKE_ACTIVITY_ID)?.worldDialogue.map((line) => line.text)).toEqual([
       '____?',

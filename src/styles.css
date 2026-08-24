@@ -35,6 +35,11 @@ body,
   display: none;
 }
 
+.galaxy-letters-hud[data-phase='complete'] {
+  align-items: center;
+  padding: 20px;
+}
+
 .galaxy-letters-hud__card {
   display: flex;
   flex-direction: column;

@@ -1,3 +1,5 @@
+import type { PlayerFacing } from '../assets/recipientSpriteConfig';
+
 export type LocationKind = 'outdoor' | 'friend' | 'final' | 'home';
 /**
  * How a location's map space is drawn to the screen. `iso` is the 2.5D diamond
@@ -143,6 +145,8 @@ export interface LocationDefinition {
   readonly kind: LocationKind;
   /** Screen projection for this map. Defaults to 'iso' when omitted. */
   readonly projection?: ProjectionMode;
+  /** Direction ____ faces immediately on entering this location. Defaults to down. */
+  readonly initialPlayerFacing?: PlayerFacing;
   readonly title: string;
   readonly mapKey: string;
   readonly mapUrl: string;

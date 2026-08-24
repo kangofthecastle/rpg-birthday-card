@@ -3389,6 +3389,8 @@ export class LocationScene extends Phaser.Scene {
       this.spawnOverride ??
       getPointObject(mapJson, 'Spawns', this.registry.get('spawnId') as string);
 
+    this.playerFacing = this.location.initialPlayerFacing ?? 'down';
+    const initialSourceFacing = RECIPIENT_ANIMATION_SOURCE_FACING[this.playerFacing];
     this.createRecipientAnimations();
     this.player = this.physics.add.sprite(spawn.x, spawn.y, 'player-temp');
     this.player.setVisible(false);
@@ -3401,7 +3403,7 @@ export class LocationScene extends Phaser.Scene {
     // (x-48+30+18, y-64+48+16) = (x, y) — symmetric blocking north and south.
     this.player.body?.setOffset(30, 48);
     this.playerVisual = this.add
-      .sprite(0, 0, RECIPIENT_SPRITE.key, RECIPIENT_IDLE_ROW_START_FRAME.down)
+      .sprite(0, 0, RECIPIENT_SPRITE.key, RECIPIENT_IDLE_ROW_START_FRAME[initialSourceFacing])
       .setOrigin(RECIPIENT_SPRITE.origin.x, RECIPIENT_SPRITE.origin.y)
       .setScale(RECIPIENT_SPRITE.scale)
       .setDepth(10);

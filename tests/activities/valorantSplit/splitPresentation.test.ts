@@ -21,4 +21,11 @@ describe('RETAKE.EXE presentation', () => {
     );
     expect(splitSceneSource).not.toContain('player.ammoInMag + player.reserveRounds');
   });
+
+  it('keeps the Phantom label clear of the segmented magazine bar', () => {
+    expect(splitSceneSource).toContain(
+      'HUD.ammoRightX - HUD.ammoBarWidth - HUD.weaponLabelGap, barTop + 8, \'PHANTOM\'',
+    );
+    expect(splitSceneSource).toContain('const bx = HUD.ammoRightX - barW;');
+  });
 });

@@ -60,12 +60,19 @@ const ACTIVITY_COMPLETION_STORY: Readonly<Record<string, ActivityCompletionStory
   [FISHING_ACTIVITY_ID]: {
     worldDialogue: [
       { speaker: '____', text: 'There. Now they have company.', portraitId: 'portrait-friendone' },
+      { speaker: '____', text: 'How’d you do that?', portraitId: 'portrait-recipient' },
+      { speaker: '____', text: 'Don’t worry about it.', portraitId: 'portrait-friendone' },
       {
         speaker: '____',
-        text: "____ said we should come over for a LAN party. Let's go!",
+        text: 'We should go to ____’s, we’re going to be late.',
         portraitId: 'portrait-friendone',
       },
-      { speaker: '____', text: 'PEW!', portraitId: 'portrait-recipient' },
+      { speaker: '____', text: 'We’re going to ____’s??', portraitId: 'portrait-recipient' },
+      {
+        speaker: '____',
+        text: 'I need to use my calendar more.',
+        portraitId: 'portrait-recipient',
+      },
     ],
   },
   [RETAKE_ACTIVITY_ID]: {

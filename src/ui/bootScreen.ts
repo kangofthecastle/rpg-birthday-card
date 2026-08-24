@@ -13,7 +13,7 @@ import { initAudio, playSfx } from '../game/audio';
 export const DEFAULT_BOOT_LINES: readonly string[] = [
   'FOR RECIPIENT — v1.0',
   'loading: one small world..........ok',
-  'loading: bad jokes...ok',
+  'loading: bad jokes................ok',
   'warning: contents may cause smiling',
 ];
 

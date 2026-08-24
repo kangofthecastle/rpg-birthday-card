@@ -132,6 +132,9 @@ const HUD = {
   enemyTint: 0xff5470,
   barBottomY: 486,
   barHeight: 54,
+  ammoRightX: ARENA.width - 24,
+  ammoBarWidth: 150,
+  weaponLabelGap: 10,
 } as const;
 
 // Top scoreboard bar geometry. Two ally tiles on the left, five enemy tiles on
@@ -1284,7 +1287,7 @@ export class SplitScene extends Phaser.Scene {
 
     // --- Bottom-right: ammo counter (mag | reserve) + weapon label ---
     this.add
-      .text(ARENA.width - 24, barTop + 8, 'PHANTOM', {
+      .text(HUD.ammoRightX - HUD.ammoBarWidth - HUD.weaponLabelGap, barTop + 8, 'PHANTOM', {
         color: '#ffe6a0',
         fontFamily: 'Consolas, "Courier New", monospace',
         fontSize: '11px',
@@ -1294,7 +1297,7 @@ export class SplitScene extends Phaser.Scene {
       .setDepth(811)
       .setScrollFactor(0);
     this.ammoReserveText = this.add
-      .text(ARENA.width - 24, midY + 6, '60', {
+      .text(HUD.ammoRightX, midY + 6, '60', {
         color: '#c7b06a',
         fontFamily: 'Consolas, "Courier New", monospace',
         fontSize: '20px',
@@ -1306,7 +1309,7 @@ export class SplitScene extends Phaser.Scene {
       .setDepth(812)
       .setScrollFactor(0);
     this.ammoMagText = this.add
-      .text(ARENA.width - 82, midY + 4, '30', {
+      .text(HUD.ammoRightX - 58, midY + 4, '30', {
         color: '#fff4d6',
         fontFamily: 'Consolas, "Courier New", monospace',
         fontSize: '34px',
@@ -1507,8 +1510,8 @@ export class SplitScene extends Phaser.Scene {
     this.ammoReserveText.setText(`| ${player.reserveRounds}`);
 
     // Segmented magazine bar (fills left→right) above the numbers.
-    const barW = 150;
-    const bx = ARENA.width - 24 - barW;
+    const barW = HUD.ammoBarWidth;
+    const bx = HUD.ammoRightX - barW;
     const by = barY + 8;
     const segH = 6;
     graphics.fillStyle(0x000000, 0.4);

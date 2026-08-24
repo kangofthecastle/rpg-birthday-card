@@ -253,10 +253,13 @@ describe('activityRegistry', () => {
       const panel = mount.querySelector<HTMLElement>('.activity-shell--fishing');
       const gameShell = mount.querySelector<HTMLElement>('.activity-shell__viewport');
       const host = mount.querySelector<HTMLElement>('[data-friendone-fishing-host]');
+      const controls = mount.querySelector<HTMLElement>('.activity-shell__controls');
 
       expect(panel).not.toBeNull();
       expect(gameShell).not.toBeNull();
       expect(host?.parentElement).toBe(gameShell);
+      expect(controls?.textContent).toContain('moving bar reaches the highlighted target');
+      expect(controls?.textContent).toContain('Four misses snap the line');
     } finally {
       fixture.remove();
     }

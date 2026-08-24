@@ -60,7 +60,7 @@ export function createFriendOneFishingActivity(
           <div class="activity-shell__viewport">
             <div class="friendone-fishing-game__host" data-friendone-fishing-host></div>
           </div>
-          <p class="activity-shell__controls">Hold Space, Enter, or click to lift the fish · Keep it inside the green bar · Esc to leave</p>
+          <p class="activity-shell__controls">Press Space, Enter, or click when the moving bar reaches the highlighted target · Four misses snap the line · Esc to leave</p>
           ${
             testMode
               ? '<div class="activity-shell__actions"><button type="button" data-friendone-fishing-test-complete>Complete fishing</button></div>'

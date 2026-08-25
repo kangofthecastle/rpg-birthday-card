@@ -2395,15 +2395,26 @@ body.ending-transition-active .collection-panel {
   margin: 0;
   max-width: min(86vw, 900px);
   max-height: 86vh;
-  padding: 14px 14px 20px;
+  padding: 14px 14px 34px;
   background: #fffdf6;
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+}
+
+/* Size real-photo paper to the displayed image rather than the caption's
+   longest line. The loaded image supplies its browser-resolved aspect ratio,
+   so portrait EXIF rotation is reflected here too. */
+.photo-wall__lightbox-figure--photo {
+  width: min(86vw, 900px, calc(70vh * var(--photo-aspect) + 28px));
 }
 
 .photo-wall__media--large {
   max-width: 100%;
   max-height: 70vh;
   width: auto;
+}
+
+.photo-wall__lightbox-figure--photo .photo-wall__media--large {
+  width: 100%;
 }
 
 .photo-wall__media--large.photo-wall__media--placeholder {

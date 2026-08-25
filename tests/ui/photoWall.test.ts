@@ -233,6 +233,34 @@ describe('showPhotoWall', () => {
     expect(document.querySelector('[data-photo-wall]')).toBeNull();
   });
 
+  it('sizes a focused real photo from its displayed orientation', async () => {
+    void showPhotoWall({
+      loadManifest: async () => ({
+        photos: [{ src: 'portrait.jpg', caption: 'portrait memory' }],
+      }),
+    });
+    await flush();
+    pressEscape();
+
+    document
+      .querySelector<HTMLImageElement>('img[src="/assets/photos/portrait.jpg"]')
+      ?.closest<HTMLButtonElement>('.photo-wall__frame')
+      ?.click();
+
+    const largePhoto = document.querySelector<HTMLImageElement>(
+      '.photo-wall__media--large',
+    );
+    Object.defineProperties(largePhoto, {
+      naturalWidth: { configurable: true, value: 1350 },
+      naturalHeight: { configurable: true, value: 1800 },
+    });
+    largePhoto?.dispatchEvent(new Event('load'));
+
+    const figure = document.querySelector<HTMLElement>('.photo-wall__lightbox-figure');
+    expect(figure?.classList.contains('photo-wall__lightbox-figure--photo')).toBe(true);
+    expect(figure?.style.getPropertyValue('--photo-aspect')).toBe('0.75');
+  });
+
   it('clicking the lightbox scrim closes just the lightbox', async () => {
     void showPhotoWall({ loadManifest: async () => ({ photos: [] }) });
     await flush();

@@ -659,7 +659,23 @@ export function showPhotoWall(options: PhotoWallOptions = {}): Promise<void> {
 
       const figure = document.createElement('figure');
       figure.className = 'photo-wall__lightbox-figure';
-      figure.append(buildMedia(item, true));
+      const media = buildMedia(item, true);
+      figure.append(media);
+      if (media instanceof HTMLImageElement) {
+        const syncPhotoAspect = (): void => {
+          if (media.naturalWidth <= 0 || media.naturalHeight <= 0) return;
+          figure.style.setProperty(
+            '--photo-aspect',
+            String(media.naturalWidth / media.naturalHeight),
+          );
+          figure.classList.add('photo-wall__lightbox-figure--photo');
+        };
+        if (media.complete) {
+          syncPhotoAspect();
+        } else {
+          media.addEventListener('load', syncPhotoAspect, { once: true });
+        }
+      }
       if (item.caption) {
         const cap = document.createElement('figcaption');
         cap.className = 'photo-wall__lightbox-caption';

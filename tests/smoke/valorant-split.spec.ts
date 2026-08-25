@@ -89,7 +89,7 @@ test('completes RETAKE.EXE at ____ house through test mode', async ({ page }) =>
   await page.getByRole('button', { name: 'Next' }).click();
   await expect(continuityLine).toHaveCount(0);
   await expect(page.getByText(/^Happy birthday ____!/)).toBeVisible();
-  await expect(page.getByText(/our greatest challenges are largely overcome alone/)).toBeVisible();
+  await expect(page.getByText(/example birthday message/)).toBeVisible();
   await page.getByRole('button', { name: 'Next' }).click();
   await expect(page.locator('.photo-letter-modal__photo-caption')).toHaveText(
     '',

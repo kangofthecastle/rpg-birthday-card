@@ -38,6 +38,10 @@ describe('violinActivity', () => {
         onCancel: vi.fn(),
       });
 
+      expect(mount.querySelector('.activity-shell__controls')?.textContent).toBe(
+        'Press Space to begin · play each note at the line · D F J K · score 60,000 to pass · Esc to leave',
+      );
+
       sceneCallbacks?.onComplete();
       sceneCallbacks?.onComplete();
 

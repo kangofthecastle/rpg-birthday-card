@@ -18,7 +18,7 @@ async function completeRetakeReplay(page: import('@playwright/test').Page): Prom
   await page.getByRole('button', { name: 'Defuse the spike' }).click();
 
   await expect(page.getByRole('dialog', { name: 'RETAKE.EXE' })).toHaveCount(0);
-  await expect(page.getByText(/For in-game continuity purposes/)).toHaveCount(0);
+  await expect(page.getByText(/For in-game continuity/)).toHaveCount(0);
   await expect(page.getByText('____?')).toHaveCount(0);
   await expect(page.locator('body')).toHaveAttribute('data-location-id', 'friend-b');
 }
@@ -83,7 +83,7 @@ test('completes RETAKE.EXE at ____ house through test mode', async ({ page }) =>
 
   await page.getByRole('button', { name: 'Defuse the spike' }).click();
 
-  const continuityLine = page.getByText(/For in-game continuity purposes/);
+  const continuityLine = page.getByText(/For in-game continuity/);
   await expect(continuityLine).toBeVisible();
   await expect(page.locator('.collection-panel')).not.toContainText('____’s Letter');
   await page.getByRole('button', { name: 'Next' }).click();

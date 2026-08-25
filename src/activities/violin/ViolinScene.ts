@@ -866,7 +866,7 @@ export class ViolinScene extends Phaser.Scene {
 
     if (state.phase === 'ready') {
       this.centreText.setText('Ready?').setAlpha(0.96);
-      this.subText.setText('Press Space or tap to begin').setAlpha(0.9);
+      this.subText.setText('Press Space to begin').setAlpha(0.9);
     } else if (state.phase === 'count-in') {
       const beatsLeft = Math.max(
         1,

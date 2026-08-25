@@ -68,7 +68,7 @@ export function createViolinActivity(
           <div class="activity-shell__viewport">
             <div class="violin-game__host" data-violin-host></div>
           </div>
-          <p class="activity-shell__controls">Space or tap to begin · play each note at the line · ${RHYTHM_KEY_HINT} · score ${VIOLIN_PASS_SCORE.toLocaleString()} to pass · Esc to leave</p>
+          <p class="activity-shell__controls">Press Space to begin · play each note at the line · ${RHYTHM_KEY_HINT} · score ${VIOLIN_PASS_SCORE.toLocaleString()} to pass · Esc to leave</p>
           ${
             testMode
               ? '<div class="activity-shell__actions"><button type="button" data-violin-test-complete>Finish the piece</button></div>'

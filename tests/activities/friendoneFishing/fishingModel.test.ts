@@ -30,6 +30,11 @@ describe('fishingModel', () => {
     expect(darter.timingSpeedPerSecond).toBeLessThan(koi.timingSpeedPerSecond);
     expect(drifter.timingVariability).toBeLessThan(darter.timingVariability);
     expect(darter.timingVariability).toBeLessThan(koi.timingVariability);
+    expect(darter.timingSpeedPerSecond).toBe(295);
+    expect(darter.timingVariability).toBe(0.68);
+    expect(darter.targetWindowHeights).toEqual([30, 21, 14]);
+    expect(koi.timingSpeedPerSecond).toBe(360);
+    expect(koi.timingVariability).toBe(0.8);
     expect(drifter.targetWindowHeights[2]).toBeGreaterThan(koi.targetWindowHeights[2]);
     expect(drifter.timingSpeedPerSecond).toBeGreaterThanOrEqual(215);
     expect(koi.timingSpeedPerSecond).toBeGreaterThanOrEqual(350);

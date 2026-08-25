@@ -74,8 +74,8 @@ export const FRIEND_ONE_FISH_SEQUENCE: readonly FishConfig[] = [
     label: 'Striped perch',
     isSpecial: false,
     speedPerSecond: 94,
-    timingSpeedPerSecond: 275,
-    timingVariability: 0.62,
+    timingSpeedPerSecond: 295,
+    timingVariability: 0.68,
     targetWindowHeights: [30, 21, 14],
   },
   {
@@ -83,8 +83,8 @@ export const FRIEND_ONE_FISH_SEQUENCE: readonly FishConfig[] = [
     label: 'Glowing koi',
     isSpecial: true,
     speedPerSecond: 120,
-    timingSpeedPerSecond: 350,
-    timingVariability: 0.82,
+    timingSpeedPerSecond: 360,
+    timingVariability: 0.8,
     targetWindowHeights: [24, 16, 9],
   },
 ] as const;

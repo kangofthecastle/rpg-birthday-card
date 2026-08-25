@@ -151,6 +151,150 @@ interface OverlayPiece {
   readonly quarter: number;
 }
 
+interface RgbMean {
+  readonly r: number;
+  readonly g: number;
+  readonly b: number;
+}
+
+function alphaWeightedRgbMean(pixels: Uint8ClampedArray): RgbMean | undefined {
+  let weight = 0;
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  for (let index = 0; index < pixels.length; index += 4) {
+    const alpha = pixels[index + 3] / 255;
+    if (alpha <= 0.05) continue;
+    weight += alpha;
+    r += pixels[index] * alpha;
+    g += pixels[index + 1] * alpha;
+    b += pixels[index + 2] * alpha;
+  }
+  return weight > 0 ? { r: r / weight, g: g / weight, b: b / weight } : undefined;
+}
+
+type TileEdge = 'north' | 'east' | 'south' | 'west';
+
+function edgeRgbMean(
+  pixels: Uint8ClampedArray,
+  width: number,
+  edge: TileEdge,
+): RgbMean | undefined {
+  const height = pixels.length / 4 / width;
+  const band = Math.max(1, Math.round(Math.min(width, height) * 0.095));
+  let weight = 0;
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const inBand =
+        (edge === 'north' && y < band) ||
+        (edge === 'east' && x >= width - band) ||
+        (edge === 'south' && y >= height - band) ||
+        (edge === 'west' && x < band);
+      if (!inBand) continue;
+      const index = (y * width + x) * 4;
+      const alpha = pixels[index + 3] / 255;
+      // Ignore a piece's barely-visible feather on closed sides; only genuine
+      // path mouths should participate in join matching.
+      if (alpha <= 0.2) continue;
+      weight += alpha;
+      r += pixels[index] * alpha;
+      g += pixels[index + 1] * alpha;
+      b += pixels[index + 2] * alpha;
+    }
+  }
+  return weight > band ? { r: r / weight, g: g / weight, b: b / weight } : undefined;
+}
+
+/**
+ * Matches a path piece's average dirt grading to the shared straight piece.
+ * Only RGB values move; alpha, geometry, feathering and authored details remain
+ * untouched. Exported so the pixel invariants can be covered without Phaser.
+ */
+export function matchPathPaletteMean(
+  targetPixels: Uint8ClampedArray,
+  referencePixels: Uint8ClampedArray,
+  width?: number,
+): Uint8ClampedArray {
+  const output = new Uint8ClampedArray(targetPixels);
+  const target = alphaWeightedRgbMean(targetPixels);
+  const reference = alphaWeightedRgbMean(referencePixels);
+  if (!target || !reference) return output;
+
+  const delta = [reference.r - target.r, reference.g - target.g, reference.b - target.b];
+  for (let index = 0; index < output.length; index += 4) {
+    if (output[index + 3] === 0) continue;
+    output[index] = Math.round(output[index] + delta[0]);
+    output[index + 1] = Math.round(output[index + 1] + delta[1]);
+    output[index + 2] = Math.round(output[index + 2] + delta[2]);
+  }
+
+  if (!width || width <= 0 || output.length % (width * 4) !== 0) return output;
+  const height = output.length / 4 / width;
+  const referenceNorth = edgeRgbMean(referencePixels, width, 'north');
+  const referenceSouth = edgeRgbMean(referencePixels, width, 'south');
+  if (!referenceNorth || !referenceSouth) return output;
+  const joinColor = {
+    r: (referenceNorth.r + referenceSouth.r) / 2,
+    g: (referenceNorth.g + referenceSouth.g) / 2,
+    b: (referenceNorth.b + referenceSouth.b) / 2,
+  };
+  const edges = (['north', 'east', 'south', 'west'] as const).flatMap((edge) => {
+    const mean = edgeRgbMean(output, width, edge);
+    if (!mean) return [];
+    const edgeDelta = [joinColor.r - mean.r, joinColor.g - mean.g, joinColor.b - mean.b];
+    return edgeDelta.some((value) => Math.abs(value) > 0.5)
+      ? [{ edge, delta: edgeDelta }]
+      : [];
+  });
+  const fade = Math.max(1, Math.round(Math.min(width, height) * 0.25));
+  // The connected mouth occupies only part of an edge strip; a small gain
+  // compensates for the darker transparent-side pixels included in its mean.
+  const edgeMatchGain = 1.27;
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const index = (y * width + x) * 4;
+      if (output[index + 3] === 0) continue;
+      const corrections: Array<{ weight: number; delta: readonly number[] }> = [];
+      for (const correction of edges) {
+        const distance =
+          correction.edge === 'north'
+            ? y
+            : correction.edge === 'east'
+              ? width - 1 - x
+              : correction.edge === 'south'
+                ? height - 1 - y
+                : x;
+        const weight = Math.max(0, 1 - distance / fade);
+        if (weight > 0) corrections.push({ weight, delta: correction.delta });
+      }
+      const totalWeight = corrections.reduce((sum, correction) => sum + correction.weight, 0);
+      if (totalWeight === 0) continue;
+      for (let channel = 0; channel < 3; channel += 1) {
+        const adjustment =
+          (corrections.reduce(
+            (sum, correction) => sum + correction.delta[channel] * correction.weight,
+            0,
+          ) /
+            totalWeight) *
+          edgeMatchGain;
+        output[index + channel] = Math.round(output[index + channel] + adjustment);
+      }
+    }
+  }
+  return output;
+}
+
+/** Full strength at a tile join, easing to transparent halfway into each cell. */
+export function pathJoinFeather(position: number, size: number): number {
+  if (size <= 1) return 1;
+  const half = (size - 1) / 2;
+  const normalizedDistance = Math.min(1, Math.abs(position - half) / half);
+  return Math.cos((normalizedDistance * Math.PI) / 2) ** 2;
+}
+
 // Picks the path overlay piece(s) for a cell from its 4-neighbour connectivity.
 // Base orientations: straight = vertical (N–S); corner joins S & E; T is open at
 // E,S,W (missing N); cap (dead-end) is open at S. Rotations are clockwise quarter
@@ -209,7 +353,8 @@ function buildPathLayer(scene: Phaser.Scene, opts: OutdoorGroundOptions): void {
       .setOrigin(0, 0)
       .setDepth(DEPTH_PATH);
     const draw = (key: string, quarter: number, px: number, py: number): void => {
-      rt.drawFrame(rotatedScaledKey(scene, key, quarter, tile), undefined, px, py);
+      const paletteMatchedKey = paletteMatchedPathKey(scene, key);
+      rt.drawFrame(rotatedScaledKey(scene, paletteMatchedKey, quarter, tile), undefined, px, py);
     };
     for (let index = 0; index < pathMask.length; index += 1) {
       if (!pathMask[index]) continue;
@@ -250,6 +395,35 @@ function buildPathLayer(scene: Phaser.Scene, opts: OutdoorGroundOptions): void {
         draw(piece.key, piece.quarter, column * tile, row * tile);
       }
     }
+
+    // A path piece's material texture is independent from its neighbours, so
+    // even palette-matched pieces can reveal a hard texture cut at the cell
+    // boundary. Feather the shared straight-path material across each join.
+    // The strip is fully opaque exactly at the join and fades away inside both
+    // cells, leaving corner/T geometry and outer grass feathering untouched.
+    for (let index = 0; index < pathMask.length; index += 1) {
+      if (!pathMask[index]) continue;
+      const column = index % cols;
+      const row = Math.floor(index / cols);
+      const eastConnected = column < cols - 1 && pathMask[index + 1];
+      const southConnected = row < rows - 1 && pathMask[index + cols];
+      if (eastConnected) {
+        rt.drawFrame(
+          pathJoinTextureKey(scene, 1, tile),
+          undefined,
+          column * tile + tile / 2,
+          row * tile,
+        );
+      }
+      if (southConnected) {
+        rt.drawFrame(
+          pathJoinTextureKey(scene, 0, tile),
+          undefined,
+          column * tile,
+          row * tile + tile / 2,
+        );
+      }
+    }
     return;
   }
 
@@ -265,6 +439,94 @@ function buildPathLayer(scene: Phaser.Scene, opts: OutdoorGroundOptions): void {
     stampSmoothPath(paths, center, target, opts.palette.path, tile * 0.27);
   }
   paths.setAlpha(0.72);
+}
+
+/**
+ * The four path overlays were authored independently, leaving the cap, corner
+ * and T a few RGB levels apart. At tile scale that small grading difference
+ * becomes a rectangular seam. Cache colour-normalized copies for rendering;
+ * the original PNG alpha and detail pixels remain the source of truth.
+ */
+function paletteMatchedPathKey(scene: Phaser.Scene, sourceKey: string): string {
+  const cacheKey = `og-palette-${sourceKey}`;
+  if (scene.textures.exists(cacheKey)) return cacheKey;
+
+  const sourceImage = scene.textures.get(sourceKey).getSourceImage() as
+    | HTMLImageElement
+    | HTMLCanvasElement;
+  const referenceImage = scene.textures.get(PATH_STRAIGHT_KEY).getSourceImage() as
+    | HTMLImageElement
+    | HTMLCanvasElement;
+  const canvasTexture = scene.textures.createCanvas(cacheKey, sourceImage.width, sourceImage.height);
+  if (!canvasTexture) return sourceKey;
+
+  try {
+    const context = canvasTexture.getContext();
+    context.drawImage(sourceImage, 0, 0);
+    const sourceData = context.getImageData(0, 0, sourceImage.width, sourceImage.height);
+
+    const referenceCanvas = document.createElement('canvas');
+    referenceCanvas.width = referenceImage.width;
+    referenceCanvas.height = referenceImage.height;
+    const referenceContext = referenceCanvas.getContext('2d');
+    if (!referenceContext) return sourceKey;
+    referenceContext.drawImage(referenceImage, 0, 0);
+    const referenceData = referenceContext.getImageData(
+      0,
+      0,
+      referenceImage.width,
+      referenceImage.height,
+    );
+
+    sourceData.data.set(
+      matchPathPaletteMean(sourceData.data, referenceData.data, sourceImage.width),
+    );
+    context.putImageData(sourceData, 0, 0);
+    canvasTexture.refresh();
+    return cacheKey;
+  } catch {
+    scene.textures.remove(cacheKey);
+    return sourceKey;
+  }
+}
+
+function pathJoinTextureKey(scene: Phaser.Scene, quarter: number, size: number): string {
+  const cacheKey = `og-path-join-${quarter}-${size}`;
+  if (scene.textures.exists(cacheKey)) return cacheKey;
+
+  const straightKey = rotatedScaledKey(
+    scene,
+    paletteMatchedPathKey(scene, PATH_STRAIGHT_KEY),
+    quarter,
+    size,
+  );
+  const straightImage = scene.textures.get(straightKey).getSourceImage() as
+    | HTMLImageElement
+    | HTMLCanvasElement;
+  const canvasTexture = scene.textures.createCanvas(
+    cacheKey,
+    straightImage.width,
+    straightImage.height,
+  );
+  if (!canvasTexture) return straightKey;
+
+  const context = canvasTexture.getContext();
+  context.drawImage(straightImage, 0, 0);
+  const imageData = context.getImageData(0, 0, straightImage.width, straightImage.height);
+  const horizontal = quarter % 2 === 1;
+  for (let y = 0; y < straightImage.height; y += 1) {
+    for (let x = 0; x < straightImage.width; x += 1) {
+      const index = (y * straightImage.width + x) * 4;
+      const alongJoin = horizontal ? x : y;
+      const joinSize = horizontal ? straightImage.width : straightImage.height;
+      imageData.data[index + 3] = Math.round(
+        imageData.data[index + 3] * pathJoinFeather(alongJoin, joinSize),
+      );
+    }
+  }
+  context.putImageData(imageData, 0, 0);
+  canvasTexture.refresh();
+  return cacheKey;
 }
 
 function routeTargets(

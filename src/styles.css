@@ -1199,6 +1199,21 @@ body.ending-transition-active:not(.ending-montage-mounted) #ui-root {
   gap: 18px;
 }
 
+.photo-letter-modal__page {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: 100%;
+  min-height: 0;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+}
+
+.photo-letter-modal__page--letter {
+  align-items: stretch;
+}
+
 .photo-letter-modal__photo-frame {
   position: relative;
   z-index: 1;
@@ -1230,8 +1245,21 @@ body.ending-transition-active:not(.ending-montage-mounted) #ui-root {
     #e9ddc8;
 }
 
+.photo-letter-modal__photo-caption {
+  width: 100%;
+  margin-top: 12px;
+  color: #754329;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(15px, 1.8vw, 19px);
+  font-style: italic;
+  line-height: 1.35;
+  text-align: center;
+}
+
 .photo-letter-modal__body {
   width: min(560px, 92%);
+  max-height: 100%;
+  margin: 0 auto;
   padding-bottom: 8px;
   text-align: left;
 }

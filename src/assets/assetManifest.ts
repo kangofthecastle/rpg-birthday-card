@@ -114,7 +114,7 @@ export const ASSET_MANIFEST: readonly GameAsset[] = [
     status: 'review',
     locationIds: ['friend-a'],
     notes:
-      'Generated portrait saved at public/assets/portraits/portrait-friendone.png and wired into the dialogue box.',
+      'Above-the-hip dialogue crop extracted from ____’s canonical front-facing sprite and saved at public/assets/portraits/portrait-friendone.png for exact in-world identity consistency and matching portrait framing.',
     qaChecks: ['identity consistency', 'dialogue scale readability'],
   },
   {

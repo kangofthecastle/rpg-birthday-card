@@ -222,6 +222,9 @@ export function showLettersScreen(
     // Note: the shared letter modal plays 'sfx-letter-open' itself (main has
     // advanced past this branch's base); no call here or it doubles up.
     const letter = letters[index];
+    // The post-ending computer is the letter archive only. Photographs live
+    // separately on ____'s photo wall; in-story rewards and galaxy stars use
+    // the paired two-page reader instead.
     await openLetter([
       {
         speaker: letter.showAuthorHeading === false ? undefined : letter.from,

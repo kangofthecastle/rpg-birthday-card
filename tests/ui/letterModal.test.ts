@@ -6,7 +6,11 @@ import {
   showLetterModal,
   showPhotoLetterModal,
 } from '../../src/ui/letterModal';
-import { FRIEND_TWO_BIRTHDAY_LETTER } from '../../src/content/letters';
+import {
+  FRIEND_TWO_BIRTHDAY_LETTER,
+  FRIEND_TWO_RETAKE_NOTE,
+  getFriendTwoRetakeLetter,
+} from '../../src/content/letters';
 
 beforeEach(() => {
   document.body.innerHTML = '<div id="ui-root"><aside class="collection-panel">Keepsakes</aside></div>';
@@ -88,26 +92,82 @@ describe('createPhotoLetterModal', () => {
 
     expect(modal?.getAttribute('aria-label')).toBe('Letter from ____');
     expect(modal?.querySelector('.letter-modal__speaker')).toBeNull();
-    expect(modal?.querySelector('.letter-modal__text')?.textContent).toMatch(/^Hey ____,/);
+    expect(modal?.querySelector('.letter-modal__text')?.textContent).toMatch(
+      /^Happy birthday ____!/,
+    );
+    expect(modal?.querySelector('.photo-letter-modal__photo')).toBeNull();
+    expect(modal?.querySelector('.letter-modal__action')?.textContent).toBe('Next');
+
+    modal?.querySelector<HTMLButtonElement>('.letter-modal__action')?.click();
+    expect(modal?.querySelector('.letter-modal__text')).toBeNull();
+    expect(
+      modal?.querySelector<HTMLImageElement>('.photo-letter-modal__photo')?.getAttribute('src'),
+    ).toBe('/assets/photos/friendtwo-cherry-blossoms.jpg');
+    expect(modal?.querySelector('.photo-letter-modal__photo-caption')?.textContent).toBe(
+      '',
+    );
+    expect(modal?.querySelector('.letter-modal__action')?.textContent).toBe('Continue');
 
     modal?.querySelector<HTMLButtonElement>('.letter-modal__action')?.click();
     await promise;
   });
 
-  it('renders an authored photograph and letter copy when supplied', () => {
+  it('shows the RETAKE continuity line before the real letter and photograph', async () => {
+    const promise = showPhotoLetterModal(getFriendTwoRetakeLetter());
+    const modal = document.querySelector<HTMLElement>('.photo-letter-modal');
+    const action = modal?.querySelector<HTMLButtonElement>('.letter-modal__action');
+
+    expect(modal?.querySelector('.letter-modal__text')?.textContent).toBe(
+      FRIEND_TWO_RETAKE_NOTE,
+    );
+    expect(modal?.querySelector('.letter-modal__speaker')).toBeNull();
+    expect(action?.textContent).toBe('Next');
+
+    action?.click();
+    expect(modal?.querySelector('.letter-modal__text')?.textContent).toMatch(
+      /^Happy birthday ____!/,
+    );
+    expect(modal?.querySelector('.photo-letter-modal__photo')).toBeNull();
+    expect(action?.textContent).toBe('Next');
+
+    action?.click();
+    expect(modal?.querySelector('.letter-modal__text')).toBeNull();
+    expect(modal?.querySelector('.photo-letter-modal__photo')).not.toBeNull();
+    expect(action?.textContent).toBe('Continue');
+
+    action?.click();
+    await promise;
+  });
+
+  it('shows authored copy first and its photograph with caption on page two', () => {
+    const onAction = vi.fn();
     const modal = createPhotoLetterModal({
       speaker: '____',
       text: 'For ____.',
       photoSrc: '/assets/photos/friendone-and-recipient.png',
       photoAlt: '____ and ____ together',
-      onAction: vi.fn(),
+      photoCaption: 'Spring Break together.',
+      onAction,
     });
-    const photo = modal.querySelector<HTMLImageElement>('.photo-letter-modal__photo');
 
     expect(modal.getAttribute('aria-label')).toBe('Letter from ____');
+    expect(modal.querySelector('.letter-modal__speaker')?.textContent).toBe('____');
+    expect(modal.querySelector('.letter-modal__text')?.textContent).toBe('For ____.');
+    expect(modal.querySelector('.photo-letter-modal__photo')).toBeNull();
+
+    modal.querySelector<HTMLButtonElement>('.letter-modal__action')?.click();
+    const photo = modal.querySelector<HTMLImageElement>('.photo-letter-modal__photo');
     expect(photo?.getAttribute('src')).toBe('/assets/photos/friendone-and-recipient.png');
     expect(photo?.getAttribute('alt')).toBe('____ and ____ together');
-    expect(modal.querySelector('.letter-modal__text')?.textContent).toBe('For ____.');
+    expect(modal.querySelector('.photo-letter-modal__photo-caption')?.textContent).toBe(
+      'Spring Break together.',
+    );
+    expect(modal.querySelector('.letter-modal__speaker')).toBeNull();
+    expect(modal.querySelector('.letter-modal__text')).toBeNull();
+    expect(onAction).not.toHaveBeenCalled();
+
+    modal.querySelector<HTMLButtonElement>('.letter-modal__action')?.click();
+    expect(onAction).toHaveBeenCalledOnce();
   });
 });
 

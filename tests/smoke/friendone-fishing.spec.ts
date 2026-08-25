@@ -24,10 +24,15 @@ test('completes ____ PC fishing activity through test mode', async ({ page }) =>
 
   // The letter is the immediate reward. Its paper must close before the bowl,
   // +1 KOI animation, and koi-arrival sound are allowed to fire.
-  await expect(page.getByText('____')).toBeVisible();
-  await expect(page.locator('.letter-modal__text')).toHaveText('');
+  await expect(page.locator('.letter-modal__speaker')).toHaveCount(0);
+  await expect(page.locator('.letter-modal__text')).toContainText('Happy Birthday ____!!!!!');
   await expect(page.locator('body')).not.toHaveAttribute('data-koi-transition');
   await expect(page.locator('.collection-panel')).not.toContainText('____’s Letter');
+  await page.getByRole('button', { name: 'Next' }).click();
+  await expect(page.locator('.photo-letter-modal__photo-caption')).toContainText(
+    '[Example caption]',
+  );
+  await expect(page.locator('body')).not.toHaveAttribute('data-koi-transition');
   await page.getByRole('button', { name: 'Continue' }).click();
 
   await expect(page.locator('body')).toHaveAttribute('data-friendone-fish-count', '2');

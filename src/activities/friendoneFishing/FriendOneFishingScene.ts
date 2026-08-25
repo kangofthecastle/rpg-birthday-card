@@ -25,6 +25,7 @@ import {
 } from './fishBehavior';
 import { fishSpriteFacing, fishSpriteFor } from './fishSprites';
 import { isImageUrl } from '../../game/assetProbe';
+import { playSfx } from '../../game/audio';
 
 export interface FriendOneFishingSceneCallbacks {
   readonly onComplete: () => void;
@@ -180,6 +181,7 @@ export class FriendOneFishingScene extends Phaser.Scene {
     this.updateHudText();
     void this.loadFishSprites();
     this.drawDynamicElements(0, false);
+    playSfx('sfx-fishing-cast', { volume: 0.5 });
   }
 
   // Probe the optional per-fish sprite PNGs and load any that exist, mirroring
@@ -255,7 +257,15 @@ export class FriendOneFishingScene extends Phaser.Scene {
         const attempt = attemptFishingTarget(this.round, this.currentFish);
         this.round = attempt.state;
 
-        if (attempt.outcome === 'line-break') {
+        if (attempt.outcome === 'hit') {
+          playSfx('sfx-fishing-hit', {
+            rate: 0.94 + attempt.state.targetIndex * 0.09,
+            volume: 0.7,
+          });
+        } else if (attempt.outcome === 'miss') {
+          playSfx('sfx-fishing-miss', { volume: 0.52 });
+        } else if (attempt.outcome === 'line-break') {
+          playSfx('sfx-fishing-line-break', { volume: 0.65 });
           this.restartCurrentFishAfterLineBreak();
         }
       }
@@ -268,6 +278,7 @@ export class FriendOneFishingScene extends Phaser.Scene {
     // Drive the in-water fish steering toward the player's bobber every frame
     // (including during the catch/next-fish transition, so a caught fish darts
     // away). The bobber the fish targets is the live, dipping player bobber.
+    const previousBehaviorPhase = this.behavior.phase;
     this.behavior = updateFishBehavior(
       this.behavior,
       {
@@ -279,6 +290,12 @@ export class FriendOneFishingScene extends Phaser.Scene {
       this.behaviorParams,
       modelDelta,
     );
+    if (this.behavior.phase === 'inspect' && previousBehaviorPhase !== 'inspect') {
+      playSfx('sfx-fishing-nibble', {
+        rate: 0.96 + this.currentFishIndex * 0.04,
+        volume: 0.42,
+      });
+    }
 
     this.updateWake(modelDelta);
     this.updateHudText();
@@ -791,6 +808,10 @@ export class FriendOneFishingScene extends Phaser.Scene {
       progress: 1,
     };
     this.caughtCount += 1;
+    playSfx('sfx-fishing-catch', {
+      rate: 0.96 + this.currentFishIndex * 0.055,
+      volume: 0.78,
+    });
     this.pointerHeld = false;
     this.pointerPressed = false;
     // The hooked fish is landed: it darts off the bobber.
@@ -821,6 +842,10 @@ export class FriendOneFishingScene extends Phaser.Scene {
     this.resetBehaviorForCurrentFish();
     this.isTransitioning = false;
     this.transitionText.setText('');
+    playSfx('sfx-fishing-cast', {
+      rate: 0.98 + this.currentFishIndex * 0.035,
+      volume: 0.45,
+    });
   }
 
   private completeActivity(): void {

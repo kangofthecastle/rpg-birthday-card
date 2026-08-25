@@ -179,7 +179,6 @@ const PICK_MARGIN = 24;
 // as drawn in drawLanternStage, centred on rollCentre(). Used for on-page pickup.
 const LANTERN_PAGE_W = 260;
 const LANTERN_PAGE_H = 150;
-
 // Optional drop-in paper textures, one per piece — the flat unfolded sheet
 // (straight-on, filling the frame edge-to-edge). When a file is present it
 // becomes the paper's fill in EVERY fold state, drawn to the fixed sheet frame
@@ -188,7 +187,7 @@ const LANTERN_PAGE_H = 150;
 // Piece → letter: hull = ____, sail = ____, lantern = ____'s sheet music.
 const PIECE_PAPER_FILES: Readonly<Record<string, string>> = {
   'paper:hull': `${ASSET_BASE}/paper-friendone.png`,
-  'paper:sail': `${ASSET_BASE}/paper-friendtwo.png`,
+  'paper:sail': `${ASSET_BASE}/paper-friendtwo.png?v=20260824-restored`,
   'paper:lantern': `${ASSET_BASE}/paper-sheetmusic-boatigami.png`,
 };
 

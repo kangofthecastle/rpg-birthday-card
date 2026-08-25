@@ -275,10 +275,13 @@ const OUTDOOR_AWAKEN_PRESETS: Record<string, OutdoorAwakenTune> = {
   // 16 sparse full-width motes, base peak alpha — used only for the BEFORE cap.
   before: { additiveLift: 0, moteCount: 16, motePeakAlpha: 0.4, ribbon: false },
   subtle: { additiveLift: 0.12, moteCount: 40, motePeakAlpha: 0.5, ribbon: true },
-  medium: { additiveLift: 0.2, moteCount: 56, motePeakAlpha: 0.62, ribbon: true },
+  medium: { additiveLift: 0.2, moteCount: 64, motePeakAlpha: 0.62, ribbon: true },
   strong: { additiveLift: 0.32, moteCount: 76, motePeakAlpha: 0.78, ribbon: true },
 };
 const OUTDOOR_AWAKEN_DEFAULT: OutdoorAwakenTune = OUTDOOR_AWAKEN_PRESETS.medium;
+// Fill the ribbon a little sooner after ____ steps outside without changing
+// how quickly any individual mote travels once it appears.
+const OUTDOOR_MOTE_INITIAL_DELAY_FRACTION = 0.8;
 
 function resolveOutdoorAwakenTune(): OutdoorAwakenTune {
   const override = (globalThis as { __awakenTune?: unknown }).__awakenTune;
@@ -3307,8 +3310,8 @@ export class LocationScene extends Phaser.Scene {
   // band down the central path — where the signpost and the south exit sit.
   // Every bulb ENTERS at the map's south edge and runs the whole path north,
   // so the stream visibly pours in from the bottom of the map (no mid-path
-  // pop-in); initial delays are staggered across a full cycle so the ribbon
-  // reads as a continuous flow. They glow ADDITIVELY so they pop as warm bulbs
+  // pop-in); initial delays are staggered across most of a cycle so the ribbon
+  // fills in slightly sooner. They glow ADDITIVELY so they pop as warm bulbs
   // even over the brightened ground. In base mode they stay a sparse,
   // full-width, normal-blend field (the original ambient look).
   private spawnBeckoningMote(rng: () => number, tune: OutdoorAwakenTune): void {
@@ -3342,7 +3345,7 @@ export class LocationScene extends Phaser.Scene {
       runMs = 6400 + rng() * 3600;
     }
     const sway = 12 + rng() * 20;
-    const delay = rng() * runMs;
+    const delay = rng() * runMs * OUTDOOR_MOTE_INITIAL_DELAY_FRACTION;
     const mote = this.add
       .image(x, startY, 'awaken-mote')
       .setDepth(startY + 6)
@@ -3421,7 +3424,7 @@ export class LocationScene extends Phaser.Scene {
     const runMs = travel / speed;
     const scale = 0.7 + rng() * 1.0;
     const sway = 12 + rng() * 20;
-    const delayMs = rng() * runMs;
+    const delayMs = rng() * runMs * OUTDOOR_MOTE_INITIAL_DELAY_FRACTION;
     const swayX = (rng() - 0.5) * sway * 2;
     const peakAlpha = motePeakAlpha + rng() * 0.25;
     return { startX, startY, endY, swayX, delayMs, runMs, scale, peakAlpha };
@@ -5665,6 +5668,8 @@ export class LocationScene extends Phaser.Scene {
         if (!replayingAfterEnding) {
           if (this.location.rewardSheetMusic) {
             await showSheetMusicModal(this.location.rewardSheetMusic);
+          } else if (this.location.rewardLetter) {
+            await showPhotoLetterModal(this.location.rewardLetter);
           } else if (
             this.location.rewardMessage &&
             this.location.rewardPresentation === 'letter'

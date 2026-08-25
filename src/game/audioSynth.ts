@@ -1823,6 +1823,189 @@ function sfxWaterLap(ctx: AudioContext, output: AudioNode, { rate, volume }: Sfx
   return 900;
 }
 
+function sfxFishingCast(
+  ctx: AudioContext,
+  output: AudioNode,
+  { rate, volume }: SfxSynthOptions,
+): number {
+  // A round little bobber plop: soft water, then one buoyant bubble.
+  const start = ctx.currentTime;
+  playNoiseBurst(ctx, output, {
+    seconds: 0.28,
+    filterType: 'lowpass',
+    filterFreq: 980 * rate,
+    filterQ: 0.8,
+    gain: 0.07 * volume,
+    attackMs: 5,
+    releaseMs: 220,
+    startAt: start,
+  });
+  playTone(ctx, output, {
+    type: 'sine',
+    frequency: 260 * rate,
+    endFrequency: 155 * rate,
+    gain: 0.14 * volume,
+    attackMs: 3,
+    holdMs: 18,
+    releaseMs: 150,
+    startAt: start,
+  });
+  const end = playTone(ctx, output, {
+    type: 'sine',
+    frequency: 540 * rate,
+    endFrequency: 720 * rate,
+    gain: 0.08 * volume,
+    attackMs: 3,
+    holdMs: 8,
+    releaseMs: 105,
+    startAt: start + 0.07,
+  });
+  return Math.max(280, (end - start) * 1000);
+}
+
+function sfxFishingNibble(
+  ctx: AudioContext,
+  output: AudioNode,
+  { rate, volume }: SfxSynthOptions,
+): number {
+  // Two tiny curious bubbles when a fish first noses up to the float.
+  const start = ctx.currentTime;
+  let latestEnd = start;
+  [760, 1040].forEach((frequency, index) => {
+    latestEnd = Math.max(latestEnd, playTone(ctx, output, {
+      type: 'sine',
+      frequency: frequency * rate,
+      endFrequency: frequency * 1.14 * rate,
+      gain: (0.09 - index * 0.018) * volume,
+      attackMs: 2,
+      holdMs: 7,
+      releaseMs: 90,
+      startAt: start + index * 0.065,
+    }));
+  });
+  return (latestEnd - start) * 1000;
+}
+
+function sfxFishingHit(
+  ctx: AudioContext,
+  output: AudioNode,
+  { rate, volume }: SfxSynthOptions,
+): number {
+  // Bright wooden plink. Callers raise `rate` across the three timing targets.
+  const start = ctx.currentTime;
+  const end = playTone(ctx, output, {
+    type: 'triangle',
+    frequency: 690 * rate,
+    gain: 0.2 * volume,
+    attackMs: 2,
+    holdMs: 18,
+    releaseMs: 190,
+    startAt: start,
+  });
+  playTone(ctx, output, {
+    type: 'sine',
+    frequency: 1380 * rate,
+    gain: 0.055 * volume,
+    attackMs: 2,
+    holdMs: 8,
+    releaseMs: 115,
+    startAt: start + 0.012,
+  });
+  return (end - start) * 1000;
+}
+
+function sfxFishingMiss(
+  ctx: AudioContext,
+  output: AudioNode,
+  { rate, volume }: SfxSynthOptions,
+): number {
+  // A forgiving hollow bloop: clear feedback without an arcade-error buzzer.
+  const start = ctx.currentTime;
+  playNoiseBurst(ctx, output, {
+    seconds: 0.16,
+    filterType: 'bandpass',
+    filterFreq: 720 * rate,
+    filterQ: 1.4,
+    gain: 0.035 * volume,
+    attackMs: 2,
+    releaseMs: 120,
+    startAt: start,
+  });
+  const end = playTone(ctx, output, {
+    type: 'triangle',
+    frequency: 350 * rate,
+    endFrequency: 225 * rate,
+    gain: 0.13 * volume,
+    attackMs: 3,
+    holdMs: 24,
+    releaseMs: 190,
+    startAt: start,
+  });
+  return (end - start) * 1000;
+}
+
+function sfxFishingLineBreak(
+  ctx: AudioContext,
+  output: AudioNode,
+  { rate, volume }: SfxSynthOptions,
+): number {
+  // Elastic twang plus a small fibre snap, kept softer than the catch sounds.
+  const start = ctx.currentTime;
+  playNoiseBurst(ctx, output, {
+    seconds: 0.2,
+    filterType: 'highpass',
+    filterFreq: 1700 * rate,
+    filterQ: 0.7,
+    gain: 0.075 * volume,
+    attackMs: 1,
+    releaseMs: 115,
+    startAt: start + 0.025,
+  });
+  const end = playTone(ctx, output, {
+    type: 'triangle',
+    frequency: 560 * rate,
+    endFrequency: 165 * rate,
+    gain: 0.15 * volume,
+    attackMs: 2,
+    holdMs: 12,
+    releaseMs: 270,
+    startAt: start,
+  });
+  return (end - start) * 1000;
+}
+
+function sfxFishingCatch(
+  ctx: AudioContext,
+  output: AudioNode,
+  { rate, volume }: SfxSynthOptions,
+): number {
+  // A small splash under a cheerful rising chime as the fish is landed.
+  const start = ctx.currentTime;
+  playNoiseBurst(ctx, output, {
+    seconds: 0.5,
+    filterType: 'lowpass',
+    filterFreq: 1550 * rate,
+    filterQ: 0.6,
+    gain: 0.085 * volume,
+    attackMs: 6,
+    releaseMs: 390,
+    startAt: start,
+  });
+  let latestEnd = start;
+  [587.33, 739.99, 880].forEach((frequency, index) => {
+    latestEnd = Math.max(latestEnd, playTone(ctx, output, {
+      type: index === 2 ? 'sine' : 'triangle',
+      frequency: frequency * rate,
+      gain: (0.14 - index * 0.02) * volume,
+      attackMs: 3,
+      holdMs: 38,
+      releaseMs: 260,
+      startAt: start + 0.06 + index * 0.075,
+    }));
+  });
+  return Math.max(500, (latestEnd - start) * 1000);
+}
+
 export const SFX_SYNTHS: Record<SfxKey, SfxSynthFactory> = {
   'sfx-interact': sfxInteract,
   'sfx-dialogue-advance': sfxDialogueAdvance,
@@ -1833,6 +2016,12 @@ export const SFX_SYNTHS: Record<SfxKey, SfxSynthFactory> = {
   'sfx-pc-ready': sfxPcReady,
   'sfx-phone-notification': sfxPhoneNotification,
   'sfx-koi-arrive': sfxKoiArrive,
+  'sfx-fishing-cast': sfxFishingCast,
+  'sfx-fishing-nibble': sfxFishingNibble,
+  'sfx-fishing-hit': sfxFishingHit,
+  'sfx-fishing-miss': sfxFishingMiss,
+  'sfx-fishing-line-break': sfxFishingLineBreak,
+  'sfx-fishing-catch': sfxFishingCatch,
   'sfx-omen-void': sfxOmenVoid,
   'sfx-photo-complete': sfxPhotoComplete,
   'sfx-shot': sfxShot,

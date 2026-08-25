@@ -18,7 +18,7 @@ async function completeRetakeReplay(page: import('@playwright/test').Page): Prom
   await page.getByRole('button', { name: 'Defuse the spike' }).click();
 
   await expect(page.getByRole('dialog', { name: 'RETAKE.EXE' })).toHaveCount(0);
-  await expect(page.getByText(/Sorry I had to bail before the round ended/)).toHaveCount(0);
+  await expect(page.getByText(/For in-game continuity purposes/)).toHaveCount(0);
   await expect(page.getByText('____?')).toHaveCount(0);
   await expect(page.locator('body')).toHaveAttribute('data-location-id', 'friend-b');
 }
@@ -83,8 +83,17 @@ test('completes RETAKE.EXE at ____ house through test mode', async ({ page }) =>
 
   await page.getByRole('button', { name: 'Defuse the spike' }).click();
 
-  await expect(page.getByText(/Sorry I had to bail before the round ended/)).toHaveCount(0);
-  await expect(page.getByText(/Please keep being you\./)).toBeVisible();
+  const continuityLine = page.getByText(/For in-game continuity purposes/);
+  await expect(continuityLine).toBeVisible();
+  await expect(page.locator('.collection-panel')).not.toContainText('____’s Letter');
+  await page.getByRole('button', { name: 'Next' }).click();
+  await expect(continuityLine).toHaveCount(0);
+  await expect(page.getByText(/^Happy birthday ____!/)).toBeVisible();
+  await expect(page.getByText(/our greatest challenges largely alone/)).toBeVisible();
+  await page.getByRole('button', { name: 'Next' }).click();
+  await expect(page.locator('.photo-letter-modal__photo-caption')).toHaveText(
+    '',
+  );
   await expect(page.locator('.collection-panel')).not.toContainText('____’s Letter');
   await page.getByRole('button', { name: 'Continue' }).click();
 

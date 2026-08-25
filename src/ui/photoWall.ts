@@ -268,14 +268,20 @@ function resolveItems(
   };
   const photos = manifest?.photos ?? [];
   if (photos.length > 0) {
+    const realPhotos: WallItem[] = photos.slice(0, 29).map((photo, index) => ({
+      caption: photo.caption ?? '',
+      src: photo.src.startsWith('/') || /^https?:/.test(photo.src)
+        ? photo.src
+        : `${PHOTO_BASE}${photo.src}`,
+      tone: (index + 1) % PLACEHOLDER_CAPTIONS.length,
+    }));
+    const remainingPlaceholders = Math.max(0, PLACEHOLDER_COUNT - realPhotos.length);
     return [
       camera,
-      ...photos.slice(0, 29).map((photo, index) => ({
-        caption: photo.caption ?? '',
-        src: photo.src.startsWith('/') || /^https?:/.test(photo.src)
-          ? photo.src
-          : `${PHOTO_BASE}${photo.src}`,
-        tone: (index + 1) % PLACEHOLDER_CAPTIONS.length,
+      ...realPhotos,
+      ...Array.from({ length: remainingPlaceholders }, (_unused, index) => ({
+        caption: PLACEHOLDER_CAPTIONS[(realPhotos.length + index) % PLACEHOLDER_CAPTIONS.length],
+        tone: (realPhotos.length + index) % PLACEHOLDER_CAPTIONS.length,
       })),
     ];
   }

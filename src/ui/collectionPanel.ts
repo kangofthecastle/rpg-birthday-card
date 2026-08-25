@@ -2,7 +2,7 @@ import { LOCATIONS } from '../content/locations';
 import type { Letter } from '../content/letters';
 import type { DialogueLine, SheetMusicReward } from '../content/types';
 import type { RunState } from '../game/runState';
-import { showLetterModal, showSheetMusicModal } from './letterModal';
+import { showLetterModal, showPhotoLetterModal, showSheetMusicModal } from './letterModal';
 
 /**
  * The in-world "Backpack" HUD. Every keepsake a friend gives ____ is a letter;
@@ -22,6 +22,8 @@ import { showLetterModal, showSheetMusicModal } from './letterModal';
 export interface CollectionPanelOptions {
   /** Opens a letter. Injectable for tests; defaults to the shared modal. */
   readonly onOpenLetter?: (lines: readonly DialogueLine[]) => Promise<void> | void;
+  /** Opens an authored letter with its photograph and caption. */
+  readonly onOpenPhotoLetter?: (letter: Letter) => Promise<void> | void;
   /** Reopens an illustrated score. Injectable so the world can freeze while it is open. */
   readonly onOpenSheetMusic?: (content: SheetMusicReward) => Promise<void> | void;
   /**
@@ -48,6 +50,10 @@ type LetterEntry =
       readonly lines: readonly DialogueLine[];
     })
   | (EntryBase & {
+      readonly kind: 'photo-letter';
+      readonly letter: Letter;
+    })
+  | (EntryBase & {
       readonly kind: 'sheet-music';
       readonly content: SheetMusicReward;
     });
@@ -67,6 +73,22 @@ function collectedLetters(state: RunState): LetterEntry[] {
           label: keepsake.label,
           iconAssetId: keepsake.iconAssetId,
           content: location.rewardSheetMusic,
+        },
+      ];
+    }
+    if (location.rewardLetter) {
+      // Delivery-only pages establish story continuity the first time a reward
+      // appears. Reopening the keepsake from the backpack starts at the actual
+      // letter instead.
+      const { deliveryPreface: _deliveryPreface, ...archivedLetter } =
+        location.rewardLetter;
+      return [
+        {
+          kind: 'photo-letter' as const,
+          keepsakeId: keepsake.id,
+          label: keepsake.label,
+          iconAssetId: keepsake.iconAssetId,
+          letter: archivedLetter,
         },
       ];
     }
@@ -93,6 +115,9 @@ function collectedLetters(state: RunState): LetterEntry[] {
 /** The friend-letter entries earned in this run, for the ending and PC archive. */
 export function getCollectedFriendLetters(state: RunState): readonly Letter[] {
   return collectedLetters(state).flatMap((entry): Letter[] => {
+    if (entry.kind === 'photo-letter') {
+      return [entry.letter];
+    }
     if (entry.kind !== 'letter') {
       return [];
     }
@@ -118,6 +143,8 @@ export function createCollectionPanel(
 ): CollectionPanelHandle {
   const onOpenLetter =
     options.onOpenLetter ?? ((lines) => showLetterModal(lines));
+  const onOpenPhotoLetter =
+    options.onOpenPhotoLetter ?? ((letter) => showPhotoLetterModal(letter));
   const onOpenSheetMusic =
     options.onOpenSheetMusic ?? ((content) => showSheetMusicModal(content));
   const canInteract = options.canInteract ?? (() => true);
@@ -207,6 +234,8 @@ export function createCollectionPanel(
       try {
         if (entry.kind === 'sheet-music') {
           await onOpenSheetMusic(entry.content);
+        } else if (entry.kind === 'photo-letter') {
+          await onOpenPhotoLetter(entry.letter);
         } else {
           await onOpenLetter(entry.lines);
         }

@@ -27,10 +27,11 @@ describe('showPhotoWall', () => {
     await flush();
 
     const frames = document.querySelectorAll<HTMLButtonElement>('.photo-wall__frame');
-    expect(frames).toHaveLength(2);
+    expect(frames).toHaveLength(9);
     expect(frames[0]?.hasAttribute('data-camera-photo')).toBe(true);
     expect(frames[0]?.querySelector('.photo-wall__camera-icon')).not.toBeNull();
     expect(frames[1]?.querySelector('img')?.getAttribute('src')).toBe('/assets/photos/01.png');
+    expect(document.querySelectorAll('.photo-wall__frame--placeholder')).toHaveLength(7);
     expect(document.querySelector('[data-photo-hero]')).not.toBeNull();
     expect(document.querySelector('.photo-wall__camera-cancel')).toBeNull();
   });
@@ -70,7 +71,7 @@ describe('showPhotoWall', () => {
     expect(document.querySelectorAll('.photo-wall__frame')).toHaveLength(9);
   });
 
-  it('renders real photos from the manifest, resolving bare filenames', async () => {
+  it('renders real photos from the manifest and keeps remaining empty frames', async () => {
     const manifest: PhotoManifest = {
       photos: [
         { src: '01.png', caption: 'the gold hour' },
@@ -84,7 +85,8 @@ describe('showPhotoWall', () => {
     expect(imgs).toHaveLength(2);
     expect(imgs[0].getAttribute('src')).toBe('/assets/photos/01.png');
     expect(imgs[1].getAttribute('src')).toBe('/assets/photos/boardwalk.jpg');
-    expect(document.querySelectorAll('.photo-wall__frame--placeholder')).toHaveLength(0);
+    expect(document.querySelectorAll('.photo-wall__frame')).toHaveLength(9);
+    expect(document.querySelectorAll('.photo-wall__frame--placeholder')).toHaveLength(6);
   });
 
   it('captures a webcam photo and transitions it into the camera frame', async () => {

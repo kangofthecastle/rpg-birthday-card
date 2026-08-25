@@ -146,6 +146,29 @@ describe('showLettersScreen', () => {
     expect(openLetter).toHaveBeenCalledWith([{ speaker: undefined, text: 'Hey ____,' }]);
   });
 
+  it('keeps photographs separate when reopening a letter from the house archive', async () => {
+    const letter: Letter = {
+      from: '____',
+      showAuthorHeading: false,
+      text: 'Happy Birthday!',
+      photoSrc: '/assets/photos/friendone-spring-break.jpg',
+      photoCaption: 'Spring Break together.',
+    };
+    const openLetter = vi.fn(() => Promise.resolve());
+    showLettersScreen({
+      mode: 'archive',
+      letters: [letter],
+      openLetter,
+    });
+
+    document.querySelector<HTMLButtonElement>('.letters-screen__letter')?.click();
+    await flush();
+
+    expect(openLetter).toHaveBeenCalledWith([
+      { speaker: undefined, text: 'Happy Birthday!' },
+    ]);
+  });
+
   it('reveals "happy birthday" only after the last unread letter closes', async () => {
     showLettersScreen({ letters: LETTERS, openLetter: () => Promise.resolve() });
 

@@ -1,4 +1,5 @@
 import type { PlayerFacing } from '../assets/recipientSpriteConfig';
+import type { Letter } from './letters';
 
 export type LocationKind = 'outdoor' | 'friend' | 'final' | 'home';
 /**
@@ -154,6 +155,8 @@ export interface LocationDefinition {
   readonly activityId?: string;
   readonly rewardPresentation?: RewardPresentation;
   readonly rewardMessage?: readonly DialogueLine[];
+  /** Authored photo letter shown on acquisition and retained for rereading. */
+  readonly rewardLetter?: Letter;
   /** Illustrated score shown on first acquisition before ____'s recognition dialogue. */
   readonly rewardSheetMusic?: SheetMusicReward;
   readonly keepsake?: KeepsakeDefinition;

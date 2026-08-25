@@ -18,7 +18,15 @@ vi.mock('../../src/content/locations', () => ({
         iconAssetId: 'keepsake-glowing-koi-scale',
       },
       rewardPresentation: 'letter',
-      rewardMessage: [{ speaker: '____', text: '' }],
+      rewardLetter: {
+        from: '____',
+        showAuthorHeading: false,
+        deliveryPreface: 'A delivery-only continuity page.',
+        text: 'Happy Birthday ____!!!!!',
+        photoSrc: '/assets/photos/friendone-spring-break.jpg',
+        photoAlt: '____ and ____ together',
+        photoCaption: 'Spring Break together.',
+      },
     },
     {
       id: 'friend-b',
@@ -124,16 +132,38 @@ describe('createCollectionPanel', () => {
     expect(items[1]?.style.getPropertyValue('--i')).toBe('1');
   });
 
-  it('opens the letter through the reader on click, using the reward message', async () => {
+  it('opens an authored photo letter through the photo reader', async () => {
     const onOpenLetter = vi.fn().mockResolvedValue(undefined);
+    const onOpenPhotoLetter = vi.fn().mockResolvedValue(undefined);
     const { element } = createCollectionPanel(stateWith(['glowing-koi-scale']), {
       onOpenLetter,
+      onOpenPhotoLetter,
     });
 
     element.querySelector<HTMLButtonElement>('.letter-stack__item')?.click();
 
-    expect(onOpenLetter).toHaveBeenCalledOnce();
-    expect(onOpenLetter).toHaveBeenCalledWith([{ speaker: '____', text: '' }]);
+    expect(onOpenLetter).not.toHaveBeenCalled();
+    expect(onOpenPhotoLetter).toHaveBeenCalledWith({
+      from: '____',
+      showAuthorHeading: false,
+      text: 'Happy Birthday ____!!!!!',
+      photoSrc: '/assets/photos/friendone-spring-break.jpg',
+      photoAlt: '____ and ____ together',
+      photoCaption: 'Spring Break together.',
+    });
+  });
+
+  it('omits delivery-only prefaces when a letter is reopened from the backpack', async () => {
+    const onOpenPhotoLetter = vi.fn().mockResolvedValue(undefined);
+    const { element } = createCollectionPanel(stateWith(['glowing-koi-scale']), {
+      onOpenPhotoLetter,
+    });
+
+    element.querySelector<HTMLButtonElement>('.letter-stack__item')?.click();
+
+    expect(onOpenPhotoLetter).toHaveBeenCalledWith(
+      expect.not.objectContaining({ deliveryPreface: expect.anything() }),
+    );
   });
 
   it('falls back to the keepsake description when there is no reward message', () => {
@@ -153,7 +183,14 @@ describe('createCollectionPanel', () => {
         stateWith(['glowing-koi-scale', 'friend-b-keepsake', 'recipient-sheet-music']),
       ),
     ).toEqual([
-      { from: '____', text: '' },
+      {
+        from: '____',
+        showAuthorHeading: false,
+        text: 'Happy Birthday ____!!!!!',
+        photoSrc: '/assets/photos/friendone-spring-break.jpg',
+        photoAlt: '____ and ____ together',
+        photoCaption: 'Spring Break together.',
+      },
       { from: '____', text: '____’s existing reward copy.' },
     ]);
   });
@@ -189,16 +226,16 @@ describe('createCollectionPanel', () => {
   });
 
   it('does not leave the stack focused open after pointer activation', async () => {
-    const onOpenLetter = vi.fn().mockResolvedValue(undefined);
+    const onOpenPhotoLetter = vi.fn().mockResolvedValue(undefined);
     const { element } = createCollectionPanel(stateWith(['glowing-koi-scale']), {
-      onOpenLetter,
+      onOpenPhotoLetter,
     });
     document.body.append(element);
     const item = element.querySelector<HTMLButtonElement>('.letter-stack__item')!;
 
     item.focus();
     item.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
-    await vi.waitFor(() => expect(onOpenLetter).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(onOpenPhotoLetter).toHaveBeenCalledOnce());
     await Promise.resolve();
 
     expect(document.activeElement).not.toBe(item);

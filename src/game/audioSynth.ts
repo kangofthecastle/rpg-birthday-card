@@ -441,90 +441,11 @@ function createPathBed(ctx: AudioContext, output: AudioNode): SynthMusicHandle {
   return createPadBed(ctx, output, PATH_PAD_PRESET);
 }
 
-// music-friendone: watery soft pluck loop — randomized pentatonic plucks with a
-// quiet octave-up shimmer partner, through a resonant lowpass filter.
-const FRIEND_ONE_PENTATONIC_HZ = [392.0, 440.0, 523.25, 587.33, 659.25];
-const FRIEND_ONE_PLUCK_MIN_GAP_MS = 1200;
-const FRIEND_ONE_PLUCK_MAX_GAP_MS = 2800;
-
+// music-friendone normally resolves to the bundled CC0 fishing track. If that file
+// cannot be decoded, fall back to the same sustained outdoor texture as the
+// path rather than introducing short notes that resemble gameplay cues.
 function createFriendOneBed(ctx: AudioContext, output: AudioNode): SynthMusicHandle {
-  const filter = ctx.createBiquadFilter();
-  filter.type = 'lowpass';
-  filter.frequency.value = 2400;
-  filter.Q.value = 1.2;
-  filter.connect(output);
-
-  let disposed = false;
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
-  const activeVoiceCleanups = new Set<() => void>();
-
-  const playPluck = (frequency: number) => {
-    const osc = ctx.createOscillator();
-    osc.type = 'sine';
-    osc.frequency.value = frequency;
-    const shimmer = ctx.createOscillator();
-    shimmer.type = 'sine';
-    shimmer.frequency.value = frequency * 2;
-
-    const voiceGain = ctx.createGain();
-    voiceGain.gain.value = 0;
-    const shimmerGain = ctx.createGain();
-    shimmerGain.gain.value = 0;
-
-    osc.connect(voiceGain);
-    shimmer.connect(shimmerGain);
-    voiceGain.connect(filter);
-    shimmerGain.connect(filter);
-
-    const start = ctx.currentTime;
-    voiceGain.gain.setValueAtTime(0, start);
-    voiceGain.gain.linearRampToValueAtTime(0.1, start + 0.02);
-    voiceGain.gain.linearRampToValueAtTime(0.0001, start + 1.4);
-    shimmerGain.gain.setValueAtTime(0, start);
-    shimmerGain.gain.linearRampToValueAtTime(0.02, start + 0.02);
-    shimmerGain.gain.linearRampToValueAtTime(0.0001, start + 1.0);
-
-    osc.start(start);
-    shimmer.start(start);
-    osc.stop(start + 1.5);
-    shimmer.stop(start + 1.1);
-
-    const cleanup = () => {
-      osc.disconnect();
-      shimmer.disconnect();
-      voiceGain.disconnect();
-      shimmerGain.disconnect();
-      activeVoiceCleanups.delete(cleanup);
-    };
-    osc.onended = cleanup;
-    activeVoiceCleanups.add(cleanup);
-  };
-
-  const scheduleNext = () => {
-    if (disposed) {
-      return;
-    }
-    const frequency = FRIEND_ONE_PENTATONIC_HZ[Math.floor(Math.random() * FRIEND_ONE_PENTATONIC_HZ.length)];
-    playPluck(frequency);
-    const gapMs = FRIEND_ONE_PLUCK_MIN_GAP_MS + Math.random() * (FRIEND_ONE_PLUCK_MAX_GAP_MS - FRIEND_ONE_PLUCK_MIN_GAP_MS);
-    timeoutId = setTimeout(scheduleNext, gapMs);
-  };
-
-  scheduleNext();
-
-  return {
-    dispose: () => {
-      if (disposed) {
-        return;
-      }
-      disposed = true;
-      if (timeoutId !== undefined) {
-        clearTimeout(timeoutId);
-      }
-      filter.disconnect();
-      activeVoiceCleanups.forEach((cleanup) => cleanup());
-    },
-  };
+  return createPathBed(ctx, output);
 }
 
 // music-split: low tense pulse, sparse — a soft sub-bass drone that

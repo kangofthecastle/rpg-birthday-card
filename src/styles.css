@@ -127,6 +127,33 @@ body {
   pointer-events: none;
 }
 
+/* World interaction caption. Its appearance intentionally mirrors the original
+ * plain Phaser prompt; only the renderer changed so Scale.FIT cannot resample
+ * the letters into crunchy pixels. */
+.interaction-prompt {
+  position: absolute;
+  bottom: max(26px, env(safe-area-inset-bottom));
+  left: 50%;
+  z-index: 140;
+  max-width: calc(100% - 32px);
+  padding: 8px 12px;
+  overflow: hidden;
+  color: #fff7e8;
+  background: #1b1f1f;
+  font-family: "Courier New", ui-monospace, monospace;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+  translate: -50% 0;
+}
+
+.interaction-prompt[hidden] {
+  display: none;
+}
+
 /* Boatigami restarts the Phaser scene before mounting the ending montage. Keep
  * the montage's first frame behind #ui-root during that short handoff so the
  * destination galaxy can never flash through before the dark-water opening is
@@ -1004,14 +1031,10 @@ body.ending-transition-active:not(.ending-montage-mounted) #ui-root {
     inset 0 0 0 4px rgba(255, 238, 185, 0.14);
 }
 
-.dialogue-box__content::before,
-.dialogue-box__content::after {
+.dialogue-box__content::before {
   position: absolute;
   content: '';
   pointer-events: none;
-}
-
-.dialogue-box__content::before {
   top: -12px;
   right: -14px;
   width: 34px;
@@ -1019,16 +1042,6 @@ body.ending-transition-active:not(.ending-montage-mounted) #ui-root {
   border-top: 2px solid #f3c56d;
   border-right: 2px solid #f3c56d;
   border-radius: 0 14px 0 0;
-}
-
-.dialogue-box__content::after {
-  bottom: -8px;
-  left: -8px;
-  width: 22px;
-  height: 16px;
-  border-bottom: 2px solid #f3c56d;
-  border-left: 2px solid #f3c56d;
-  border-radius: 0 0 0 10px;
 }
 
 .dialogue-box__speaker {

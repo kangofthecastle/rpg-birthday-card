@@ -1603,7 +1603,7 @@ export class SplitScene extends Phaser.Scene {
     this.input.setDefaultCursor('default');
     this.crosshair.setVisible(false);
     this.promptText.setVisible(false);
-    this.showPopup('CLUTCH.', '#2ee6c4');
+    this.showPopup('CLUTCH', '#2ee6c4');
     this.cameras.main.flash(400, 46, 230, 196);
     this.playSfx('clutch');
     this.time.delayedCall(CLUTCH_DELAY_MS, () => this.complete());

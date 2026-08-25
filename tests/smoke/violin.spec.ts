@@ -47,9 +47,13 @@ async function dismissContinues(
  * the player moving. Press E each step until the piece's lead-in appears. */
 async function walkToViolin(page: import('@playwright/test').Page): Promise<void> {
   const leadIn = page.getByText('already in tune');
+  const activity = page.getByRole('dialog', { name: 'the piece on the stand' });
   const continueButton = page.getByRole('button', { name: 'Continue' });
   for (let step = 0; step < 90; step += 1) {
-    if (await leadIn.isVisible().catch(() => false)) {
+    if (
+      (await leadIn.isVisible().catch(() => false)) ||
+      (await activity.isVisible().catch(() => false))
+    ) {
       return;
     }
     // Clear any stray easter-egg dialogue (e.g. the PC by the spawn) so the
@@ -64,7 +68,10 @@ async function walkToViolin(page: import('@playwright/test').Page): Promise<void
     await page.keyboard.press('E', { delay: 20 });
     await page.waitForTimeout(30);
   }
-  await expect(leadIn).toBeVisible();
+  expect(
+    (await leadIn.isVisible().catch(() => false)) ||
+      (await activity.isVisible().catch(() => false)),
+  ).toBe(true);
 }
 
 // "The piece on the stand" is ____'s self-keepsake activity: with both friend

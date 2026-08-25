@@ -17,7 +17,9 @@ async function dismissDialogue(page: import('@playwright/test').Page): Promise<v
 // A fresh load (no testMode) plays the cold-open boot overlay, then drops ____
 // into her room. Verifies the intro beat, an easter egg, and the PC/text inciting beat.
 test('cold open plays, then lands in ____’s room with the unpowered PC and ____ text', async ({ page }) => {
-  await page.goto('/');
+  // Keep the real cold-open flow while exposing map-space coordinates so the
+  // furniture navigation below can steer from observed state.
+  await page.goto('/?dressDebug=1');
 
   // The boot overlay is up and the game canvas has not been created yet.
   const bootScreen = page.locator('.boot-screen');
@@ -113,42 +115,38 @@ test('cold open plays, then lands in ____’s room with the unpowered PC and ___
   const eggPhrases = ['photographs', 'One frame is left empty', 'Mango sticky rice'];
   const dialogueText = page.locator('.dialogue-box__text');
 
-  // Hold Up+Right continuously and poll, rather than pulsing short taps: under
-  // full-suite load the frame rate starves and a 90ms tap can move the player
-  // barely at all, silently eating the whole step budget. Skip E for the first
-  // few polls so we walk clear of the desk rect.
+  // Steer from the observed map-space position. A fixed diagonal hold can drift
+  // into furniture under full-suite load and miss the wall entirely.
   let easterEggShown = false;
-  await page.keyboard.down('ArrowUp');
-  await page.keyboard.down('ArrowRight');
-  for (let step = 0; step < 40 && !easterEggShown; step += 1) {
-    await page.waitForTimeout(120);
-    if (step < 4) {
+  let lastPos = '';
+  for (let step = 0; step < 100 && !easterEggShown; step += 1) {
+    const continueButton = page.getByRole('button', { name: 'Continue' });
+    if (await continueButton.isVisible().catch(() => false)) {
+      const text = (await dialogueText.textContent().catch(() => '')) ?? '';
+      if (eggPhrases.some((phrase) => text.includes(phrase))) {
+        easterEggShown = true;
+        break;
+      }
+      await continueButton.click().catch(() => undefined);
+      await page.waitForTimeout(60);
       continue;
     }
-    await page.keyboard.press('E', { delay: 25 });
 
-    if (!(await dialogueText.isVisible().catch(() => false))) {
-      continue;
+    const pos = (await page.locator('body').getAttribute('data-player-pos')) ?? '';
+    const [x = 704, y = 768] = pos.split(',').map(Number);
+    const wedged = pos !== '' && pos === lastPos;
+    lastPos = pos;
+    let key = x < 600 ? 'ArrowRight' : 'ArrowUp';
+    if (wedged) {
+      key = key === 'ArrowUp' ? 'ArrowRight' : 'ArrowUp';
     }
-
-    const text = (await dialogueText.textContent().catch(() => '')) ?? '';
-    if (eggPhrases.some((phrase) => text.includes(phrase))) {
-      easterEggShown = true;
-      break;
+    await page.keyboard.down(key);
+    await page.waitForTimeout(90);
+    await page.keyboard.up(key);
+    if (y < 220) {
+      await page.keyboard.press('E', { delay: 25 });
     }
-
-    // A stray beat while still on the desk rect — dismiss it,
-    // re-focus the canvas, and re-hold the walk keys (the dialogue overlay
-    // steals focus, dropping the held arrows).
-    await page.keyboard.up('ArrowRight');
-    await page.keyboard.up('ArrowUp');
-    await dismissDialogue(page);
-    await canvas.click();
-    await page.keyboard.down('ArrowUp');
-    await page.keyboard.down('ArrowRight');
   }
-  await page.keyboard.up('ArrowRight');
-  await page.keyboard.up('ArrowUp');
   expect(easterEggShown).toBe(true);
 });
 

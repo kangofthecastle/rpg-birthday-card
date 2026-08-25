@@ -221,21 +221,23 @@ describe('music synth beds', () => {
     expect(fakeCtx.oscillators.length).toBe(finalOscillatorCount);
   });
 
-  it('music-friendone schedules further plucks over time and dispose() halts scheduling', () => {
+  it('music-friendone fallback stays sustained instead of scheduling cue-like notes', () => {
     vi.useFakeTimers();
     const { ctx, fakeCtx, output } = createFakeGraph();
     const handle = MUSIC_SYNTHS['music-friendone'](ctx, output as unknown as AudioNode);
 
-    const initialCount = fakeCtx.oscillators.length;
-    expect(initialCount).toBeGreaterThan(0);
+    // Three sustained chord voices and the slow filter LFO used by music-path.
+    expect(fakeCtx.oscillators).toHaveLength(4);
+    expect(fakeCtx.bufferSources).toHaveLength(1);
+    expect(fakeCtx.bufferSources[0].loop).toBe(true);
 
-    vi.advanceTimersByTime(10000);
-    const countAfterTicking = fakeCtx.oscillators.length;
-    expect(countAfterTicking).toBeGreaterThan(initialCount);
+    vi.advanceTimersByTime(7_000);
+    expect(fakeCtx.oscillators).toHaveLength(4);
 
+    const countAtDispose = fakeCtx.oscillators.length;
     handle.dispose();
-    vi.advanceTimersByTime(10000);
-    expect(fakeCtx.oscillators.length).toBe(countAfterTicking);
+    vi.advanceTimersByTime(30_000);
+    expect(fakeCtx.oscillators).toHaveLength(countAtDispose);
   });
 
   it('music-split schedules sparse tension ticks over time and dispose() halts scheduling', () => {

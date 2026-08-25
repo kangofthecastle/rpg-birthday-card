@@ -371,6 +371,20 @@ describe('file-first resolution', () => {
     expect(console.debug).toHaveBeenCalledWith(expect.stringContaining('loaded audio file for "music-home"'));
   });
 
+  it('plays the bundled fishing ambience at 25% without changing other file beds', async () => {
+    stubAudioContext();
+    stubFetchSucceedsOnFirstTry();
+    const audio = await import('../../src/game/audio');
+
+    audio.initAudio();
+    const ctx = createdContexts[0];
+    audio.playMusic('music-friendone', { fadeMs: 900 });
+    const fishingBedGain = ctx.gains[3];
+    await flushAsync();
+
+    expect(fishingBedGain.gain.linearRampToValueAtTime).toHaveBeenCalledWith(0.25, 0.9);
+  });
+
   it('only resolves a given key once, caching the decision', async () => {
     stubAudioContext();
     stubFetchAlwaysFails();

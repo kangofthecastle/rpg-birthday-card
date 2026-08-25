@@ -1,3 +1,5 @@
+import type { MapEdge } from './edgeTransitions';
+
 export interface TrailPoint {
   readonly x: number;
   readonly y: number;
@@ -32,6 +34,30 @@ const DEFAULT_CONFIG: FollowerTrailConfig = {
   sampleDistance: 4,
   maxHistory: 96,
 };
+
+/**
+ * Places a newly loaded follower behind the direction ____ is entering from.
+ * Without the arrival edge, retain the legacy left-side start used by doors and
+ * direct scene loads.
+ */
+export function followerStartBehindLeader(
+  leader: TrailPoint,
+  arrivalEdge?: MapEdge,
+  distance = 64,
+): TrailPoint {
+  switch (arrivalEdge) {
+    case 'west':
+      return { x: leader.x - distance, y: leader.y };
+    case 'east':
+      return { x: leader.x + distance, y: leader.y };
+    case 'north':
+      return { x: leader.x, y: leader.y - distance };
+    case 'south':
+      return { x: leader.x, y: leader.y + distance };
+    default:
+      return { x: leader.x - distance, y: leader.y };
+  }
+}
 
 export function createFollowerTrail(
   initial: TrailPoint,

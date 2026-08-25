@@ -30,7 +30,7 @@ One file per row, named exactly as shown (`.mp3` or `.ogg`):
 | --- | --- |
 | `music-home.mp3` | ____'s bedroom — warm, cozy, safe. A gentle major-key pad, unhurried. |
 | `music-path.mp3` | The outdoor path between houses — open, airy, a little breezy. Not sad, not tense. |
-| `music-friendone.mp3` | ____'s fishing minigame — soft, watery, a little playful. Think calm pond, light plucked notes. |
+| `music-friendone.mp3` | ____'s fishing minigame — a long, gentle river-wave ambience with no birds, beat, or foreground melody. |
 | `music-split.mp3` | SPLIT.EXE (the shooter minigame) — low, tense, but not aggressive or harsh. Sparse and focused, like held breath. |
 | `music-ending.mp3` | The water-to-galaxy ending — a warm four-chord swell with a sparse answering melody. It should keep opening up without becoming a fixed drone. |
 | `music-letters.mp3` | The post-ending letters screen — a softer, quieter cousin of the home theme. Warm and settled. |
@@ -85,3 +85,8 @@ of whatever the game happens to pick), the same commands above will use
 your file automatically — there's no separate "test the synth version"
 toggle, since the whole point is that you shouldn't need to think about
 which one is playing.
+
+## Bundled third-party audio
+
+See [`THIRD_PARTY.md`](./THIRD_PARTY.md) for the source and license of audio
+files currently shipped with the game.

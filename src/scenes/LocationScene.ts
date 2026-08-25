@@ -103,6 +103,7 @@ import {
   edgeSpawnPoint,
   isBodyAtEdge,
   type BodyRect,
+  type MapEdge,
   type MapDims,
 } from '../game/edgeTransitions';
 import {
@@ -158,6 +159,7 @@ import {
 import {
   advanceFollowerTrail,
   createFollowerTrail,
+  followerStartBehindLeader,
   type FollowerFacing,
   type FollowerTrailState,
 } from '../game/followerTrail';
@@ -226,6 +228,10 @@ import {
 } from '../ui/collectionPanel';
 import { showDialogue, type ShowDialogueOptions } from '../ui/dialogueBox';
 import { clearUiRoot, getUiRoot } from '../ui/domRoot';
+import {
+  createInteractionPrompt,
+  type InteractionPromptHandle,
+} from '../ui/interactionPrompt';
 import {
   showGalaxyLettersHud,
   type GalaxyLettersHudHandle,
@@ -317,6 +323,8 @@ interface LocationSceneData {
   readonly spawnY?: number;
   /** True when arriving via an edge transition, so a re-trigger grace applies. */
   readonly arrivedViaEdge?: boolean;
+  /** Destination edge crossed on arrival, used to keep a follower behind ____. */
+  readonly arrivalEdge?: MapEdge;
   readonly state?: RunState;
   /**
    * When set, the scene auto-starts this activity on arrival after a brief settle
@@ -644,6 +652,9 @@ export class LocationScene extends Phaser.Scene {
   // over another overlay.
   private set canMove(value: boolean) {
     this._canMove = value;
+    if (!value) {
+      this.interactionPrompt?.setLabel('');
+    }
     this.collectionPanel?.element.classList.toggle(
       'collection-panel--inert',
       !value,
@@ -652,7 +663,7 @@ export class LocationScene extends Phaser.Scene {
   private exits: RectObject[] = [];
   private interactions: RectObject[] = [];
   private interactKey?: Phaser.Input.Keyboard.Key;
-  private promptText?: Phaser.GameObjects.Text;
+  private interactionPrompt?: InteractionPromptHandle;
   private activeObject?: RectObject;
   private walls?: Phaser.Tilemaps.TilemapLayer;
   private projection?: Projection;
@@ -709,6 +720,7 @@ export class LocationScene extends Phaser.Scene {
   private spawnOverride?: { x: number; y: number };
   private autoStartActivityId?: string;
   private arrivedViaEdge = false;
+  private arrivalEdge?: MapEdge;
   private edgeCooldownUntil = 0;
   private edgeTriggerBusy = false;
   private interiorAwakened = false;
@@ -733,6 +745,7 @@ export class LocationScene extends Phaser.Scene {
         ? { x: data.spawnX, y: data.spawnY }
         : undefined;
     this.arrivedViaEdge = data.arrivedViaEdge ?? false;
+    this.arrivalEdge = data.arrivalEdge;
     this.autoStartActivityId = data.autoStartActivityId;
     this.edgeTriggerBusy = false;
     this.edgeCooldownUntil = 0;
@@ -765,6 +778,7 @@ export class LocationScene extends Phaser.Scene {
     this.finaleReveal = createFinaleReveal(this.state.endingCompleted);
     this.galaxyLetterEnding = undefined;
     this.collectionPanel = undefined;
+    this.interactionPrompt = undefined;
   }
 
   create(): void {
@@ -813,20 +827,7 @@ export class LocationScene extends Phaser.Scene {
     this.startStoryAudioCues();
 
     this.interactKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.E);
-    this.promptText = this.add
-      .text(this.fixedScreenX(this.scale.width / 2), this.fixedScreenY(this.scale.height - 64), '', {
-        color: '#fff7e8',
-        backgroundColor: '#1b1f1f',
-        padding: { x: 12, y: 8 },
-        fontSize: '18px',
-      })
-      .setOrigin(0.5, 0)
-      .setScrollFactor(0)
-      .setScale(1 / this.cameraZoom)
-      .setDepth(1000)
-      // Hidden while empty: an empty Text still paints its background padding as a
-      // small dark box in the corner, so visibility must track the caption content.
-      .setVisible(false);
+    this.interactionPrompt = createInteractionPrompt();
 
     if (this.arrivedViaEdge) {
       this.edgeCooldownUntil = this.time.now + EDGE_ARRIVAL_COOLDOWN_MS;
@@ -1112,17 +1113,17 @@ export class LocationScene extends Phaser.Scene {
     }
 
     this.activeObject = this.findActiveObject();
-    this.setPrompt(this.activeObject ? `E - ${this.getObjectLabel(this.activeObject)}` : '');
+    this.setPrompt(this.activeObject ? this.getObjectLabel(this.activeObject) : '');
 
     if (this.activeObject && this.interactKey && Phaser.Input.Keyboard.JustDown(this.interactKey)) {
       void this.activateObject(this.activeObject);
     }
   }
 
-  // Sets the interaction-prompt caption, hiding the object entirely when empty so
-  // its padded background never lingers as a small dark box in the corner.
-  private setPrompt(text: string): void {
-    this.promptText?.setText(text).setVisible(text.length > 0);
+  // Updates the viewport-aligned DOM prompt. The handle avoids rewriting the DOM
+  // each frame when ____ remains within the same interaction zone.
+  private setPrompt(label: string): void {
+    this.interactionPrompt?.setLabel(label);
   }
 
   // Auto edge-to-edge transitions: when the player's body reaches an open world
@@ -1186,6 +1187,7 @@ export class LocationScene extends Phaser.Scene {
       spawnX: spawn.x,
       spawnY: spawn.y,
       arrivedViaEdge: true,
+      arrivalEdge: edgeExit.destinationEdge,
       state: this.state,
     } satisfies LocationSceneData);
   }
@@ -2487,9 +2489,10 @@ export class LocationScene extends Phaser.Scene {
 
     this.createFriendOneFollowerAnimations();
     const walkingToPc = this.location.id === 'friend-b';
+    const leader = { x: this.player.x, y: this.player.y };
     const start = walkingToPc
-      ? createFriendTwoRoomFriendOneRoute({ x: this.player.x, y: this.player.y }).position
-      : { x: this.player.x - 64, y: this.player.y };
+      ? createFriendTwoRoomFriendOneRoute(leader).position
+      : followerStartBehindLeader(leader, this.arrivalEdge);
     if (walkingToPc) {
       this.friendoneFollowerRoute = createFriendTwoRoomFriendOneRoute({ x: this.player.x, y: this.player.y });
     } else {

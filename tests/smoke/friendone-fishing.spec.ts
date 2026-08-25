@@ -10,6 +10,10 @@ test('completes ____ PC fishing activity through test mode', async ({ page }) =>
   await expect(page.locator('.collection-panel')).toContainText('Backpack');
   await expect(page.locator('body')).toHaveAttribute('data-friendone-pc-ready', 'true');
   await expect(page.locator('body')).toHaveAttribute('data-friendone-pc-cue', 'glass-shine');
+  const interactionPrompt = page.locator('[data-interaction-prompt]');
+  await expect(interactionPrompt).toBeVisible();
+  await expect(interactionPrompt).toContainText('E');
+  await expect(interactionPrompt).toContainText('Enter the fishing game');
 
   await canvas.click();
   await page.keyboard.down('E');
@@ -17,6 +21,7 @@ test('completes ____ PC fishing activity through test mode', async ({ page }) =>
   await page.keyboard.up('E');
 
   await expect(page.getByText('The PC monitor warms into a soft pond scene.')).toBeVisible();
+  await expect(interactionPrompt).toBeHidden();
   await page.getByRole('button', { name: 'Continue' }).click();
 
   await expect(page.getByRole('dialog', { name: '____ Fishing' })).toBeVisible();

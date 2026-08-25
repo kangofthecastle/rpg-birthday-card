@@ -7,7 +7,7 @@ test('walks off the west edge of main-outside into ____’s block', async ({ pag
   // Spawn mid-height (just outside ____'s door) so the straight-west walk has
   // plenty of vertical margin away from the open south edge.
   await page.goto(
-    '/?testMode=1&locationId=main-outside&spawnId=from-recipient-house&seedKeepsakes=glowing-koi-scale',
+    '/?testMode=1&dressDebug=1&locationId=main-outside&spawnId=from-recipient-house&seedKeepsakes=glowing-koi-scale',
   );
 
   const canvas = page.locator('canvas');
@@ -40,7 +40,17 @@ test('walks off the west edge of main-outside into ____’s block', async ({ pag
   }
 
   expect(arrived).toBe(true);
-  await expect(page.locator('body')).toHaveAttribute('data-location-id', 'friendtwo-yard');
+  const body = page.locator('body');
+  await expect(body).toHaveAttribute('data-location-id', 'friendtwo-yard');
+
+  // ____ entered ____'s block through its east edge while moving left, so
+  // ____ must initialize to the east (behind her), never ahead on the left.
+  await expect(body).toHaveAttribute('data-friendone-mode', 'following');
+  await expect(body).toHaveAttribute('data-player-pos', /\d+,-?\d+/);
+  await expect(body).toHaveAttribute('data-friendone-pos', /\d+,-?\d+/);
+  const playerX = Number((await body.getAttribute('data-player-pos'))?.split(',')[0]);
+  const friendoneX = Number((await body.getAttribute('data-friendone-pos'))?.split(',')[0]);
+  expect(friendoneX).toBeGreaterThan(playerX);
 });
 
 test('the south path into the clearing is open before any papers are collected', async ({ page }) => {

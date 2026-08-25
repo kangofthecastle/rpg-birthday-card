@@ -109,6 +109,10 @@ const FILE_EXTENSIONS = ['mp3', 'ogg'] as const;
 const MUSIC_BUS_LEVEL_DB = -14;
 const SFX_BUS_LEVEL_DB = -3;
 
+const MUSIC_FILE_GAIN_BY_KEY: Readonly<Partial<Record<MusicKey, number>>> = {
+  'music-friendone': 0.25,
+};
+
 const DEFAULT_MUSIC_FADE_MS = 1200;
 const MUTE_FADE_MS = 150;
 const SFX_CLEANUP_SLACK_MS = 60;
@@ -278,7 +282,8 @@ export function playMusic(key: MusicKey, options: PlayMusicOptions = {}): void {
       bedInstance.dispose = () => handle.dispose();
     }
 
-    fadeGainTo(ctx, bedGain.gain, bedGain.gain.value, 1, fadeMs);
+    const fileGain = resolution.type === 'file' ? (MUSIC_FILE_GAIN_BY_KEY[key] ?? 1) : 1;
+    fadeGainTo(ctx, bedGain.gain, bedGain.gain.value, fileGain, fadeMs);
   });
 
   if (previousBed) {

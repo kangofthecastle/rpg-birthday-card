@@ -2,12 +2,23 @@ import { describe, expect, it } from 'vitest';
 import {
   advanceFollowerTrail,
   createFollowerTrail,
+  followerStartBehindLeader,
   type TrailPoint,
 } from '../../src/game/followerTrail';
 
 const point = (x: number, y: number): TrailPoint => ({ x, y });
 
 describe('followerTrail', () => {
+  it('starts behind ____ for every edge-arrival direction', () => {
+    const recipient = point(100, 200);
+
+    expect(followerStartBehindLeader(recipient, 'west')).toEqual(point(36, 200));
+    expect(followerStartBehindLeader(recipient, 'east')).toEqual(point(164, 200));
+    expect(followerStartBehindLeader(recipient, 'north')).toEqual(point(100, 136));
+    expect(followerStartBehindLeader(recipient, 'south')).toEqual(point(100, 264));
+    expect(followerStartBehindLeader(recipient)).toEqual(point(36, 200));
+  });
+
   it('keeps a bounded history of distinct leader positions', () => {
     let state = createFollowerTrail(point(0, 0), { maxHistory: 4 });
 

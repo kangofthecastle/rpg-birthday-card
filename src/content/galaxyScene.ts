@@ -54,25 +54,25 @@ export const GALAXY_STAR_VARIANTS = [
   {
     key: 'galaxy-star-flare-1',
     url: '/assets/ending/stars/star-flare-1.png',
-    displaySize: 82,
+    displaySize: 90,
     angle: 0,
   },
   {
     key: 'galaxy-star-flare-2',
     url: '/assets/ending/stars/star-flare-2.png',
-    displaySize: 86,
+    displaySize: 95,
     angle: 0,
   },
   {
     key: 'galaxy-star-flare-3',
     url: '/assets/ending/stars/star-flare-3.png',
-    displaySize: 86,
+    displaySize: 95,
     angle: 0,
   },
   {
     key: 'galaxy-star-flare-4',
     url: '/assets/ending/stars/star-flare-4.png',
-    displaySize: 80,
+    displaySize: 88,
     angle: 45,
   },
 ] as const;

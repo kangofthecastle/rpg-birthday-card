@@ -437,6 +437,8 @@ function addWindowShaftSet(
 // Awakened doormat shine: a clearly pulsing additive glow warped onto the mat's
 // floor quad, plus a highlight glint that sweeps across the mat and repeats —
 // an unmistakable "go this way" without shouting.
+export const AWAKENED_DOORMAT_GLOW_EXPAND = 1;
+
 function addDoormatAwakening(
   scene: Phaser.Scene,
   dressing: RoomDressing,
@@ -446,7 +448,14 @@ function addDoormatAwakening(
 ): void {
   const idSuffix = `awaken-${Math.round(exit.x)}-${Math.round(exit.y)}`;
   const glowSrc = buildDoormatGlowTexture(scene, dressing);
-  const glow = warpTextureToFloorQuad(scene, glowSrc, `${glowSrc}-${idSuffix}`, exit, origin, 0.45);
+  const glow = warpTextureToFloorQuad(
+    scene,
+    glowSrc,
+    `${glowSrc}-${idSuffix}`,
+    exit,
+    origin,
+    AWAKENED_DOORMAT_GLOW_EXPAND,
+  );
   if (glow) {
     glow.setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.22);
     scene.tweens.add({

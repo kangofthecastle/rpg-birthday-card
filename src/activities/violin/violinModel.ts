@@ -57,9 +57,9 @@ export const RHYTHM_LANES: readonly RhythmLane[] = [
 ] as const;
 export const RHYTHM_KEY_HINT = RHYTHM_LANES.map((lane) => lane.key).join(' ');
 
-/** The passage begins at 80 BPM, then eases into a 75 BPM closing phrase. */
-export const RHYTHM_START_BPM = 80;
-export const RHYTHM_FINAL_BPM = 75;
+/** The passage begins at 82 BPM, then eases into a 77 BPM closing phrase. */
+export const RHYTHM_START_BPM = 82;
+export const RHYTHM_FINAL_BPM = 77;
 export const RHYTHM_FINAL_TEMPO_NOTES = 4;
 export const RHYTHM_TEMPO_RAMP_NOTES = 8;
 export const RHYTHM_TIME_SCALE = 100 / RHYTHM_START_BPM;
@@ -69,7 +69,7 @@ export const RHYTHM_LEAD_IN_MS = RHYTHM_BEAT_MS * 3;
 export const RHYTHM_NOTE_APPROACH_MS = 2100;
 /** The displayed note 31 has room to ring before the next phrase continues. */
 export const RHYTHM_MID_HOLD_NOTE_NUMBER = 31;
-export const RHYTHM_MID_HOLD_EXTENSION_MS = 500;
+export const RHYTHM_MID_HOLD_EXTENSION_MS = 250;
 export const RHYTHM_FINAL_NOTE_DURATION_MS = 2000;
 export const VIOLIN_HOLD_TICK_MS = 200;
 export const VIOLIN_HOLD_POINTS_PER_TICK = 100;

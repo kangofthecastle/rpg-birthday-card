@@ -144,9 +144,10 @@ describe('violinModel — chart', () => {
     }
   });
 
-  it('extends displayed note 31 by one second and marks only it and the finale sustained', () => {
+  it('extends displayed note 31 by 250ms and marks only it and the finale sustained', () => {
     const note31 = RHYTHM_CHART[RHYTHM_MID_HOLD_NOTE_NUMBER - 1];
     const source = VIOLIN_FINALE_PHRASES[note31.phraseIndex].notes[note31.noteIndex];
+    expect(RHYTHM_MID_HOLD_EXTENSION_MS).toBe(250);
     expect(note31.durationMs).toBe(
       Math.round(source.durationMs * rhythmTimeScaleForNote(note31.index)) +
         RHYTHM_MID_HOLD_EXTENSION_MS,
@@ -164,7 +165,7 @@ describe('violinModel — chart', () => {
     expect(awardViolinHoldTicks(playing, 0.8)).toBe(playing);
   });
 
-  it('uses four broad lanes and begins the passage at 80 BPM', () => {
+  it('uses four broad lanes and begins the passage at 82 BPM', () => {
     expect(RHYTHM_LANES.map((lane) => lane.key)).toEqual(['D', 'F', 'J', 'K']);
     expect(RHYTHM_TIME_SCALE).toBeCloseTo(100 / RHYTHM_START_BPM);
     expect(new Set(RHYTHM_CHART.map((note) => note.laneIndex))).toEqual(
@@ -172,7 +173,7 @@ describe('violinModel — chart', () => {
     );
   });
 
-  it('ramps down smoothly before holding the final four notes at 75 BPM', () => {
+  it('ramps down smoothly before holding the final four notes at 77 BPM', () => {
     const finalStart = RHYTHM_CHART.length - RHYTHM_FINAL_TEMPO_NOTES;
     const rampStart = finalStart - RHYTHM_TEMPO_RAMP_NOTES;
     expect(rhythmTempoBpmForNote(0)).toBe(RHYTHM_START_BPM);

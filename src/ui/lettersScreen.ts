@@ -231,7 +231,9 @@ export function showLettersScreen(
     // the paired two-page reader instead.
     await openLetter([
       {
-        speaker: letter.showAuthorHeading === false ? undefined : letter.from,
+        // The sender is already printed on the archive card. Keep the repeated
+        // author heading exclusive to the galaxy-star reader.
+        speaker: undefined,
         text: letter.text,
       },
     ]);

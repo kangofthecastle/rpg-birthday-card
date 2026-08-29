@@ -129,24 +129,26 @@ describe('showLettersScreen', () => {
     first?.click();
     await flush();
 
-    expect(openLetter).toHaveBeenCalledWith([{ speaker: '____', text: 'first' }]);
+    expect(openLetter).toHaveBeenCalledWith([{ speaker: undefined, text: 'first' }]);
     expect(first?.classList.contains('letters-screen__letter--read')).toBe(true);
     // Not all read yet — the quiet line stays hidden.
     expect(document.querySelector('.letters-screen__birthday')?.hasAttribute('hidden')).toBe(true);
   });
 
-  it('keeps an intentionally hidden author heading hidden when re-reading', async () => {
+  it('omits author headings from every archived letter', async () => {
     const openLetter = vi.fn(() => Promise.resolve());
     showLettersScreen({
       mode: 'archive',
-      letters: [{ from: '____', text: 'Hey ____,', showAuthorHeading: false }],
+      letters: [{ from: '____', text: 'Happy Birthday!' }],
       openLetter,
     });
 
     document.querySelector<HTMLButtonElement>('.letters-screen__letter')?.click();
     await flush();
 
-    expect(openLetter).toHaveBeenCalledWith([{ speaker: undefined, text: 'Hey ____,' }]);
+    expect(openLetter).toHaveBeenCalledWith([
+      { speaker: undefined, text: 'Happy Birthday!' },
+    ]);
   });
 
   it('keeps photographs separate when reopening a letter from the house archive', async () => {

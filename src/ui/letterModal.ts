@@ -241,12 +241,11 @@ export function createPhotoLetterModal(options: PhotoLetterModalOptions): HTMLEl
   const paper = document.createElement('div');
   paper.className = 'letter-modal__paper photo-letter-modal__paper';
 
-  const page = document.createElement('div');
-  page.className = 'photo-letter-modal__page';
+  type PageKind = 'preface' | 'letter' | 'photo';
   const hasPrefacePage = Boolean(options.prefaceText);
   const hasLetterPage = Boolean(options.speaker || options.text);
   const hasPhotoPage = Boolean(options.photoSrc || options.photoCaption);
-  let currentPage: 'preface' | 'letter' | 'photo' = hasPrefacePage
+  let currentPage: PageKind = hasPrefacePage
     ? 'preface'
     : hasLetterPage
       ? 'letter'
@@ -256,68 +255,89 @@ export function createPhotoLetterModal(options: PhotoLetterModalOptions): HTMLEl
   action.type = 'button';
   action.className = 'letter-modal__action photo-letter-modal__action';
 
-  const renderPage = (): void => {
-    page.replaceChildren();
-    page.className = `photo-letter-modal__page photo-letter-modal__page--${currentPage}`;
-    paper.dataset.photoLetterPage = currentPage;
-
-    if (currentPage === 'preface' || currentPage === 'letter') {
-      const body = document.createElement('div');
-      body.className = 'letter-modal__body photo-letter-modal__body';
-      if (currentPage === 'letter' && options.speaker) {
-        const speaker = document.createElement('strong');
-        speaker.className = 'letter-modal__speaker';
-        speaker.textContent = options.speaker;
-        body.append(speaker);
-      }
-      const pageText = currentPage === 'preface' ? options.prefaceText : options.text;
-      if (pageText) {
-        const text = document.createElement('p');
-        text.className = 'letter-modal__text';
-        text.textContent = pageText;
-        body.append(text);
-      }
-      page.append(body);
-    } else {
-      const photoFrame = document.createElement('figure');
-      photoFrame.className = 'photo-letter-modal__photo-frame';
-      if (options.photoSrc) {
-        const photo = document.createElement('img');
-        photo.className = 'photo-letter-modal__photo';
-        photo.src = options.photoSrc;
-        photo.alt = options.photoAlt ?? '';
-        const syncPhotoAspect = (): void => {
-          if (photo.naturalWidth <= 0 || photo.naturalHeight <= 0) return;
-          const aspect = photo.naturalWidth / photo.naturalHeight;
-          photoFrame.style.setProperty(
-            '--photo-aspect',
-            String(aspect),
-          );
-          photoFrame.style.setProperty('--photo-width-px', `${480 * aspect}px`);
-          photoFrame.style.setProperty('--photo-width-vh', `${52 * aspect}vh`);
-          photoFrame.classList.add('photo-letter-modal__photo-frame--ready');
-        };
-        photo.addEventListener('load', syncPhotoAspect, { once: true });
-        if (photo.complete) {
-          syncPhotoAspect();
-        }
-        photoFrame.append(photo);
-      } else {
-        const placeholder = document.createElement('div');
-        placeholder.className = 'photo-letter-modal__photo-placeholder';
-        placeholder.setAttribute('role', 'img');
-        placeholder.setAttribute('aria-label', 'Photo placeholder');
-        photoFrame.append(placeholder);
-      }
-      if (options.photoCaption) {
-        photoFrame.classList.add('photo-letter-modal__photo-frame--captioned');
-        const caption = document.createElement('figcaption');
-        caption.className = 'photo-letter-modal__photo-caption';
-        caption.textContent = options.photoCaption;
-        photoFrame.append(caption);
-      }
-      page.append(photoFrame);
+  const createTextPage = (kind: 'preface' | 'letter'): HTMLElement => {
+    const textPage = document.createElement('div');
+    textPage.className = `photo-letter-modal__page photo-letter-modal__page--${kind}`;
+    const body = document.createElement('div');
+    body.className = 'letter-modal__body photo-letter-modal__body';
+    if (kind === 'letter' && options.speaker) {
+      const speaker = document.createElement('strong');
+      speaker.className = 'letter-modal__speaker';
+      speaker.textContent = options.speaker;
+      body.append(speaker);
     }
+    const pageText = kind === 'preface' ? options.prefaceText : options.text;
+    if (pageText) {
+      const text = document.createElement('p');
+      text.className = 'letter-modal__text';
+      text.textContent = pageText;
+      body.append(text);
+    }
+    textPage.append(body);
+    return textPage;
+  };
+
+  const createPhotoPage = (): HTMLElement => {
+    const photoPage = document.createElement('div');
+    photoPage.className = 'photo-letter-modal__page photo-letter-modal__page--photo';
+    const photoFrame = document.createElement('figure');
+    photoFrame.className = 'photo-letter-modal__photo-frame';
+    if (options.photoSrc) {
+      const photo = document.createElement('img');
+      photo.className = 'photo-letter-modal__photo';
+      photo.alt = options.photoAlt ?? '';
+      photo.loading = 'eager';
+      photo.decoding = 'async';
+      const syncPhotoAspect = (): void => {
+        if (photo.naturalWidth <= 0 || photo.naturalHeight <= 0) return;
+        const aspect = photo.naturalWidth / photo.naturalHeight;
+        photoFrame.style.setProperty('--photo-aspect', String(aspect));
+        photoFrame.style.setProperty('--photo-width-px', `${480 * aspect}px`);
+        photoFrame.style.setProperty('--photo-width-vh', `${52 * aspect}vh`);
+        photoFrame.classList.add('photo-letter-modal__photo-frame--ready');
+      };
+      photo.addEventListener('load', syncPhotoAspect, { once: true });
+      photo.src = options.photoSrc;
+      if (photo.complete) {
+        syncPhotoAspect();
+      } else if (typeof photo.decode === 'function') {
+        // Begin decoding while the player is still reading the letter page.
+        // The detached, fully prepared photo page can then replace the whole
+        // text page atomically instead of recycling a painted surface that may
+        // retain a frame from the previous letter.
+        void photo.decode().then(syncPhotoAspect).catch(() => undefined);
+      }
+      photoFrame.append(photo);
+    } else {
+      const placeholder = document.createElement('div');
+      placeholder.className = 'photo-letter-modal__photo-placeholder';
+      placeholder.setAttribute('role', 'img');
+      placeholder.setAttribute('aria-label', 'Photo placeholder');
+      photoFrame.append(placeholder);
+    }
+    if (options.photoCaption) {
+      photoFrame.classList.add('photo-letter-modal__photo-frame--captioned');
+      const caption = document.createElement('figcaption');
+      caption.className = 'photo-letter-modal__photo-caption';
+      caption.textContent = options.photoCaption;
+      photoFrame.append(caption);
+    }
+    photoPage.append(photoFrame);
+    return photoPage;
+  };
+
+  // Build each page once. In particular, the photograph starts loading and
+  // decoding behind the letter instead of being created only after Next.
+  const photoPage = createPhotoPage();
+  const pages: Record<PageKind, HTMLElement | undefined> = {
+    preface: hasPrefacePage ? createTextPage('preface') : undefined,
+    letter: hasLetterPage ? createTextPage('letter') : undefined,
+    photo: photoPage,
+  };
+  let page: HTMLElement = pages[currentPage] ?? photoPage;
+
+  const syncAction = (): void => {
+    paper.dataset.photoLetterPage = currentPage;
 
     const hasNextPage = currentPage === 'preface'
       ? hasLetterPage || hasPhotoPage
@@ -325,24 +345,31 @@ export function createPhotoLetterModal(options: PhotoLetterModalOptions): HTMLEl
     action.textContent = hasNextPage ? 'Next' : options.actionLabel ?? 'Continue';
   };
 
+  const showPage = (kind: PageKind): void => {
+    const nextPage = pages[kind];
+    if (!nextPage || nextPage === page) return;
+    page.replaceWith(nextPage);
+    page = nextPage;
+    currentPage = kind;
+    syncAction();
+  };
+
   action.addEventListener('click', (event) => {
     event.stopPropagation();
     if (currentPage === 'preface' && (hasLetterPage || hasPhotoPage)) {
-      currentPage = hasLetterPage ? 'letter' : 'photo';
-      renderPage();
+      showPage(hasLetterPage ? 'letter' : 'photo');
       action.focus({ preventScroll: true });
       return;
     }
     if (currentPage === 'letter' && hasPhotoPage) {
-      currentPage = 'photo';
-      renderPage();
+      showPage('photo');
       action.focus({ preventScroll: true });
       return;
     }
     options.onAction();
   });
 
-  renderPage();
+  syncAction();
   paper.append(page, action);
   modal.append(paper);
   return modal;

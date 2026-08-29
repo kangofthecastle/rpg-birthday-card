@@ -84,4 +84,48 @@ describe('violinActivity', () => {
       fixture.remove();
     }
   });
+
+  it.each([
+    ['the shell close button', (mount: HTMLElement, _callbacks: ViolinSceneCallbacks) => {
+      mount.querySelector<HTMLButtonElement>('[data-violin-cancel]')?.click();
+    }],
+    ['the rhythm scene Escape path', (_mount: HTMLElement, callbacks: ViolinSceneCallbacks) => {
+      callbacks.onCancel();
+    }],
+  ])('awards the sheet music when leaving through %s', async (_label, leave) => {
+    let sceneCallbacks: ViolinSceneCallbacks | undefined;
+    const destroy = vi.fn();
+    const activity = createViolinActivity((_parent, callbacks) => {
+      sceneCallbacks = callbacks;
+      return { destroy };
+    });
+    const onComplete = vi.fn();
+    const onCancel = vi.fn();
+    const { fixture, mount } = mountFixture();
+
+    try {
+      await activity.start({
+        state: createInitialRunState('recipient-house'),
+        mount,
+        onComplete,
+        onCancel,
+      });
+
+      if (!sceneCallbacks) {
+        throw new Error('Violin scene callbacks were not registered.');
+      }
+      leave(mount, sceneCallbacks);
+
+      expect(onComplete).toHaveBeenCalledWith({
+        locationId: 'recipient-house',
+        activityId: 'recipient-violin-piece',
+        keepsakeId: 'recipient-sheet-music',
+      });
+      expect(onComplete).toHaveBeenCalledTimes(1);
+      expect(onCancel).not.toHaveBeenCalled();
+      expect(destroy).toHaveBeenCalledTimes(1);
+    } finally {
+      fixture.remove();
+    }
+  });
 });

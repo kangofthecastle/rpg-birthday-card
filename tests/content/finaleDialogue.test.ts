@@ -14,7 +14,15 @@ describe('finale dialogue', () => {
       { speaker: '____', text: 'I know you went through a lot this year.' },
       {
         speaker: '____',
-        text: 'I just wanted to do something that’d make you smile today.',
+        text: 'You’re one of my favorite people on the planet, y’know?',
+      },
+      {
+        speaker: '____',
+        text: 'And I just wanted to do something that’d make you smile today…',
+      },
+      {
+        speaker: undefined,
+        text: '…and hopefully for a few more days after that.',
       },
       {
         speaker: '____',

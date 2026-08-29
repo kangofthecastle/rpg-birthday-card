@@ -154,8 +154,10 @@ describe('createPhotoLetterModal', () => {
     expect(modal.querySelector('.letter-modal__speaker')?.textContent).toBe('____');
     expect(modal.querySelector('.letter-modal__text')?.textContent).toBe('For ____.');
     expect(modal.querySelector('.photo-letter-modal__photo')).toBeNull();
+    const letterPage = modal.querySelector('.photo-letter-modal__page');
 
     modal.querySelector<HTMLButtonElement>('.letter-modal__action')?.click();
+    expect(modal.querySelector('.photo-letter-modal__page')).not.toBe(letterPage);
     const photo = modal.querySelector<HTMLImageElement>('.photo-letter-modal__photo');
     expect(photo?.getAttribute('src')).toBe('/assets/photos/friendone-and-recipient.png');
     expect(photo?.getAttribute('alt')).toBe('____ and ____ together');

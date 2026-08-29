@@ -123,15 +123,20 @@ export function createViolinActivity(
             keepsakeId: 'recipient-sheet-music',
           }),
         );
-      const cancelPiece = (): void => finish(onCancel);
+      // This is ____'s required home keepsake, not an optional score chase.
+      // Leaving through either the shell X or the rhythm scene's Escape path
+      // should still hand the sheet music back to the room. Otherwise the
+      // player can close the game after hearing the piece but before its result
+      // callback and silently lose the item needed to continue the story.
+      const leavePiece = (): void => completePiece();
       const sceneCallbacks: ViolinSceneCallbacks = {
         onComplete: completePiece,
-        onCancel: cancelPiece,
+        onCancel: leavePiece,
       };
 
       section.append(
         createActivityCloseButton({
-          onClose: cancelPiece,
+          onClose: leavePiece,
           dataAttr: 'data-violin-cancel',
           artUrl: CLOSE_ART_URL,
         }),
@@ -158,7 +163,7 @@ export function createViolinActivity(
 
         game = createdGame;
       } catch {
-        cancelPiece();
+        onCancel();
       }
     },
   };

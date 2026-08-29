@@ -63,7 +63,16 @@ export const FINALE_CONVERSATION: readonly DialogueLine[] = [
   },
   {
     speaker: '____',
-    text: 'I just wanted to do something that’d make you smile today.',
+    text: 'You’re one of my favorite people on the planet, y’know?',
+    portraitId: 'portrait-friend-b',
+  },
+  {
+    speaker: '____',
+    text: 'And I just wanted to do something that’d make you smile today…',
+    portraitId: 'portrait-friend-b',
+  },
+  {
+    text: '…and hopefully for a few more days after that.',
     portraitId: 'portrait-friend-b',
   },
   {

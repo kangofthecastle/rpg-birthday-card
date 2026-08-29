@@ -660,11 +660,11 @@ body.ending-transition-active:not(.ending-montage-mounted) #ui-root {
 }
 
 .letters-screen__grid {
-  display: grid;
+  display: flex;
   width: 100%;
   max-width: 572px;
-  grid-template-columns: repeat(auto-fit, minmax(122px, 1fr));
-  justify-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: clamp(14px, 3vw, 28px);
   margin: 0 auto;
   padding: 0;

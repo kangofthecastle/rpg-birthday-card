@@ -26,6 +26,7 @@ export interface PhotoLetterModalOptions {
   readonly photoSrc?: string;
   readonly photoAlt?: string;
   readonly photoCaption?: string;
+  readonly photoCropTop?: number;
   readonly actionLabel?: string;
   readonly onAction: () => void;
 }
@@ -150,6 +151,7 @@ export function showPhotoLetterModal(letter: Letter): Promise<void> {
         photoSrc: letter.photoSrc,
         photoAlt: letter.photoAlt,
         photoCaption: letter.photoCaption,
+        photoCropTop: letter.photoCropTop,
         onAction: finish,
       }),
     );
@@ -282,6 +284,11 @@ export function createPhotoLetterModal(options: PhotoLetterModalOptions): HTMLEl
     photoPage.className = 'photo-letter-modal__page photo-letter-modal__page--photo';
     const photoFrame = document.createElement('figure');
     photoFrame.className = 'photo-letter-modal__photo-frame';
+    const photoCropTop = Math.max(0, options.photoCropTop ?? 0);
+    if (photoCropTop > 0) {
+      photoFrame.classList.add('photo-letter-modal__photo-frame--crop-top');
+      photoFrame.style.setProperty('--photo-crop-top', `${photoCropTop}px`);
+    }
     if (options.photoSrc) {
       const photo = document.createElement('img');
       photo.className = 'photo-letter-modal__photo';

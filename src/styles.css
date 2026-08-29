@@ -1246,7 +1246,7 @@ body.ending-transition-active:not(.ending-montage-mounted) #ui-root {
   min-height: 300px;
   margin: 0;
   place-items: center;
-  padding: 14px 14px 45px;
+  padding: 24px 14px 45px;
   background: #f5ead2;
   box-shadow:
     3px 5px 0 rgba(91, 53, 33, 0.28),
@@ -1262,7 +1262,7 @@ body.ending-transition-active:not(.ending-montage-mounted) #ui-root {
 .photo-letter-modal__photo-frame--captioned {
   /* The caption occupies the traditional deeper Polaroid bottom border. Keep
      only the standard paper inset beneath it, especially when it wraps. */
-  padding-bottom: 14px;
+  padding-bottom: 24px;
 }
 
 .photo-letter-modal__photo {
@@ -1272,6 +1272,11 @@ body.ending-transition-active:not(.ending-montage-mounted) #ui-root {
   /* Submitted photos keep their complete composition. The surrounding paper
      now contracts to the rendered image instead of imposing a landscape box. */
   object-fit: contain;
+}
+
+.photo-letter-modal__photo-frame--crop-top .photo-letter-modal__photo {
+  clip-path: inset(var(--photo-crop-top) 0 0);
+  margin-top: calc(-1 * var(--photo-crop-top));
 }
 
 .photo-letter-modal__photo-placeholder {

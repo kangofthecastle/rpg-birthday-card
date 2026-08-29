@@ -646,18 +646,27 @@ body.ending-transition-active:not(.ending-montage-mounted) #ui-root {
 }
 
 .letters-screen__subtitle {
-  margin: 0.4em 0 1.6em;
+  margin: 0.4em 0 0.3em;
   color: #8a5a34;
-  font-size: clamp(13px, 2vw, 17px);
+  font-size: 22px;
   letter-spacing: 0.08em;
 }
 
+.letters-screen__date {
+  margin: 0 0 1.8em;
+  color: rgba(111, 61, 39, 0.58);
+  font-size: clamp(10px, 1.4vw, 12px);
+  letter-spacing: 0.09em;
+}
+
 .letters-screen__grid {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
+  display: grid;
+  width: 100%;
+  max-width: 572px;
+  grid-template-columns: repeat(auto-fit, minmax(122px, 1fr));
+  justify-items: center;
   gap: clamp(14px, 3vw, 28px);
-  margin: 0;
+  margin: 0 auto;
   padding: 0;
   list-style: none;
 }
@@ -1235,7 +1244,7 @@ body.ending-transition-active:not(.ending-montage-mounted) #ui-root {
   min-height: 300px;
   margin: 0;
   place-items: center;
-  padding: 14px 14px 42px;
+  padding: 14px 14px 45px;
   background: #f5ead2;
   box-shadow:
     3px 5px 0 rgba(91, 53, 33, 0.28),
@@ -1243,14 +1252,29 @@ body.ending-transition-active:not(.ending-montage-mounted) #ui-root {
   transform: rotate(-0.6deg);
 }
 
-.photo-letter-modal__photo,
-.photo-letter-modal__photo-placeholder {
+.photo-letter-modal__photo-frame--ready {
+  width: min(560px, 92%, var(--photo-width-px), var(--photo-width-vh));
+  min-height: 0;
+}
+
+.photo-letter-modal__photo-frame--captioned {
+  /* The caption occupies the traditional deeper Polaroid bottom border. Keep
+     only the standard paper inset beneath it, especially when it wraps. */
+  padding-bottom: 14px;
+}
+
+.photo-letter-modal__photo {
   width: 100%;
-  height: min(330px, 42vh);
-  object-fit: cover;
+  height: auto;
+  max-height: min(480px, 52vh);
+  /* Submitted photos keep their complete composition. The surrounding paper
+     now contracts to the rendered image instead of imposing a landscape box. */
+  object-fit: contain;
 }
 
 .photo-letter-modal__photo-placeholder {
+  width: 100%;
+  height: min(330px, 42vh);
   border: 2px dashed rgba(104, 74, 53, 0.2);
   background:
     linear-gradient(135deg, rgba(119, 91, 71, 0.035) 25%, transparent 25%) 0 0 / 18px 18px,
@@ -1263,7 +1287,7 @@ body.ending-transition-active:not(.ending-montage-mounted) #ui-root {
   margin-top: 12px;
   color: #754329;
   font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(15px, 1.8vw, 19px);
+  font-size: 17px;
   font-style: italic;
   line-height: 1.35;
   text-align: center;
@@ -2232,7 +2256,7 @@ body.ending-transition-active .collection-panel {
   display: block;
   flex: 0 0 clamp(180px, 24vw, 280px);
   margin: 0;
-  padding: 10px 10px 34px;
+  padding: 10px 10px 45px;
   border: 0;
   background: #fffdf6;
   box-shadow:
@@ -2241,6 +2265,12 @@ body.ending-transition-active .collection-panel {
   cursor: pointer;
   transform: rotate(var(--rot, 0deg));
   transition: transform 200ms ease, box-shadow 200ms ease;
+}
+
+.photo-wall__frame--captioned {
+  /* Caption text supplies the bottom apron; only the normal frame inset needs
+     to remain beneath it. Uncaptioned frames keep the full 45px apron. */
+  padding-bottom: 10px;
 }
 
 .photo-wall__camera-slot {
@@ -2359,6 +2389,7 @@ body.ending-transition-active .collection-panel {
 
 .photo-wall__caption {
   display: block;
+  min-height: 25px;
   margin-top: 10px;
   color: #7a5433;
   font-family: "Georgia", serif;
@@ -2395,9 +2426,15 @@ body.ending-transition-active .collection-panel {
   margin: 0;
   max-width: min(86vw, 900px);
   max-height: 86vh;
-  padding: 14px 14px 34px;
+  padding: 14px 14px 45px;
   background: #fffdf6;
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+}
+
+.photo-wall__lightbox-figure--captioned {
+  /* Match the reward-letter rule: wrapped captions grow the apron instead of
+     receiving another fixed block of whitespace below them. */
+  padding-bottom: 14px;
 }
 
 /* Size real-photo paper to the displayed image rather than the caption's

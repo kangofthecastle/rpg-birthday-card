@@ -124,6 +124,10 @@ export function showLettersScreen(
   subtitle.className = 'letters-screen__subtitle';
   subtitle.textContent = 'Happy Birthday!';
 
+  const date = document.createElement('p');
+  date.className = 'letters-screen__date';
+  date.textContent = 'Saturday August 29, 2026';
+
   const grid = document.createElement('ul');
   grid.className = 'letters-screen__grid';
 
@@ -191,7 +195,7 @@ export function showLettersScreen(
     });
   }
 
-  crt.append(title, subtitle, grid, birthday, goHome);
+  crt.append(title, subtitle, date, grid, birthday, goHome);
   overlay.append(crt);
 
   const setSelected = (index: number): void => {

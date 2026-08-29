@@ -286,6 +286,21 @@ export function createPhotoLetterModal(options: PhotoLetterModalOptions): HTMLEl
         photo.className = 'photo-letter-modal__photo';
         photo.src = options.photoSrc;
         photo.alt = options.photoAlt ?? '';
+        const syncPhotoAspect = (): void => {
+          if (photo.naturalWidth <= 0 || photo.naturalHeight <= 0) return;
+          const aspect = photo.naturalWidth / photo.naturalHeight;
+          photoFrame.style.setProperty(
+            '--photo-aspect',
+            String(aspect),
+          );
+          photoFrame.style.setProperty('--photo-width-px', `${480 * aspect}px`);
+          photoFrame.style.setProperty('--photo-width-vh', `${52 * aspect}vh`);
+          photoFrame.classList.add('photo-letter-modal__photo-frame--ready');
+        };
+        photo.addEventListener('load', syncPhotoAspect, { once: true });
+        if (photo.complete) {
+          syncPhotoAspect();
+        }
         photoFrame.append(photo);
       } else {
         const placeholder = document.createElement('div');
@@ -295,6 +310,7 @@ export function createPhotoLetterModal(options: PhotoLetterModalOptions): HTMLEl
         photoFrame.append(placeholder);
       }
       if (options.photoCaption) {
+        photoFrame.classList.add('photo-letter-modal__photo-frame--captioned');
         const caption = document.createElement('figcaption');
         caption.className = 'photo-letter-modal__photo-caption';
         caption.textContent = options.photoCaption;

@@ -110,6 +110,9 @@ describe('showLettersScreen', () => {
   it('renders one letter icon per entry with from-name labels', () => {
     showLettersScreen({ letters: LETTERS, openLetter: () => Promise.resolve() });
 
+    expect(document.querySelector('.letters-screen__date')?.textContent).toBe(
+      'Saturday August 29, 2026',
+    );
     const buttons = document.querySelectorAll('.letters-screen__letter');
     expect(buttons).toHaveLength(2);
     expect(

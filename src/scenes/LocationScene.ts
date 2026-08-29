@@ -10,8 +10,11 @@ import {
   FRIEND_TWO_SPRITE,
 } from '../content/galaxyScene';
 import { HOME_HOST_NPCS, FRIEND_ONE_SPRITE, resolveHomeNpcPosition } from '../content/homeNpcs';
-import { GALAXY_ENDING_LETTERS } from '../content/galaxyLetters';
-import { mergeLetterArchive, type Letter } from '../content/letters';
+import {
+  buildPostEndingLetterArchive,
+  GALAXY_ENDING_LETTERS,
+} from '../content/galaxyLetters';
+import type { Letter } from '../content/letters';
 import {
   getActivityCompletionStory,
   resolveRecipientPcStory,
@@ -5159,7 +5162,7 @@ export class LocationScene extends Phaser.Scene {
       this.canMove = false;
       const archive = showLettersScreen({
         mode: 'archive',
-        letters: mergeLetterArchive(getCollectedFriendLetters(this.state)),
+        letters: buildPostEndingLetterArchive(getCollectedFriendLetters(this.state)),
         onGoHome: () => this.goHome(),
       });
       await archive.closed;

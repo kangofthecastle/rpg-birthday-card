@@ -677,6 +677,7 @@ export function showPhotoWall(options: PhotoWallOptions = {}): Promise<void> {
         }
       }
       if (item.caption) {
+        figure.classList.add('photo-wall__lightbox-figure--captioned');
         const cap = document.createElement('figcaption');
         cap.className = 'photo-wall__lightbox-caption';
         cap.textContent = item.caption;
@@ -769,6 +770,7 @@ export function showPhotoWall(options: PhotoWallOptions = {}): Promise<void> {
         const media = buildMedia(item, false);
         frame.append(tape, media);
         if (item.caption) {
+          frame.classList.add('photo-wall__frame--captioned');
           const caption = document.createElement('span');
           caption.className = 'photo-wall__caption';
           caption.textContent = item.caption;

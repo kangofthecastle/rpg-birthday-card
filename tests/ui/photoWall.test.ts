@@ -85,6 +85,12 @@ describe('showPhotoWall', () => {
     expect(imgs).toHaveLength(2);
     expect(imgs[0].getAttribute('src')).toBe('/assets/photos/01.png');
     expect(imgs[1].getAttribute('src')).toBe('/assets/photos/boardwalk.jpg');
+    expect(imgs[0].closest('.photo-wall__frame')?.classList).toContain(
+      'photo-wall__frame--captioned',
+    );
+    expect(imgs[1].closest('.photo-wall__frame')?.classList).not.toContain(
+      'photo-wall__frame--captioned',
+    );
     expect(document.querySelectorAll('.photo-wall__frame')).toHaveLength(9);
     expect(document.querySelectorAll('.photo-wall__frame--placeholder')).toHaveLength(6);
   });
@@ -258,6 +264,7 @@ describe('showPhotoWall', () => {
 
     const figure = document.querySelector<HTMLElement>('.photo-wall__lightbox-figure');
     expect(figure?.classList.contains('photo-wall__lightbox-figure--photo')).toBe(true);
+    expect(figure?.classList.contains('photo-wall__lightbox-figure--captioned')).toBe(true);
     expect(figure?.style.getPropertyValue('--photo-aspect')).toBe('0.75');
   });
 

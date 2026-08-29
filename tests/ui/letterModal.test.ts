@@ -159,6 +159,17 @@ describe('createPhotoLetterModal', () => {
     const photo = modal.querySelector<HTMLImageElement>('.photo-letter-modal__photo');
     expect(photo?.getAttribute('src')).toBe('/assets/photos/friendone-and-recipient.png');
     expect(photo?.getAttribute('alt')).toBe('____ and ____ together');
+    Object.defineProperties(photo, {
+      naturalWidth: { value: 1200 },
+      naturalHeight: { value: 1600 },
+    });
+    photo?.dispatchEvent(new Event('load'));
+    const photoFrame = modal.querySelector<HTMLElement>('.photo-letter-modal__photo-frame');
+    expect(photoFrame?.classList.contains('photo-letter-modal__photo-frame--ready')).toBe(true);
+    expect(photoFrame?.classList.contains('photo-letter-modal__photo-frame--captioned')).toBe(true);
+    expect(photoFrame?.style.getPropertyValue('--photo-aspect')).toBe('0.75');
+    expect(photoFrame?.style.getPropertyValue('--photo-width-px')).toBe('360px');
+    expect(photoFrame?.style.getPropertyValue('--photo-width-vh')).toBe('39vh');
     expect(modal.querySelector('.photo-letter-modal__photo-caption')?.textContent).toBe(
       'Spring Break together.',
     );

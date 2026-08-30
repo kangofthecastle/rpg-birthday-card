@@ -1,7 +1,7 @@
 // A-Game Electron wrapper. Serves the vite `dist/` bundle over a privileged
 // app:// scheme so the game's absolute-path fetch()es (/maps/*.tmj, /audio/*)
 // work exactly as they do against the dev server. No preload, no IPC.
-const { app, protocol, BrowserWindow, net } = require('electron');
+const { app, protocol, BrowserWindow, net, session } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const { pathToFileURL } = require('node:url');
@@ -20,30 +20,50 @@ protocol.registerSchemesAsPrivileged([
   { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
 ]);
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   protocol.handle('app', (request) => {
     let pathname;
     try {
       pathname = decodeURIComponent(new URL(request.url).pathname);
     } catch {
-      return new Response('Bad Request', { status: 400 });
+      return new Response('Bad Request', {
+        status: 400,
+        headers: { 'Cache-Control': 'no-store' },
+      });
     }
     if (pathname === '/' || pathname === '') pathname = '/index.html';
     // Resolve within DIST and reject traversal that escapes it.
     const filePath = path.join(DIST, pathname);
     const rel = path.relative(DIST, filePath);
     if (rel.startsWith('..') || path.isAbsolute(rel)) {
-      return new Response('Forbidden', { status: 403 });
+      return new Response('Forbidden', {
+        status: 403,
+        headers: { 'Cache-Control': 'no-store' },
+      });
     }
     if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
       // The game probes optional audio and treats 404 as "use synth fallback".
-      return new Response('Not Found', { status: 404 });
+      return new Response('Not Found', {
+        status: 404,
+        headers: { 'Cache-Control': 'no-store' },
+      });
     }
     const type = MIME[path.extname(filePath).toLowerCase()] || 'application/octet-stream';
     return net.fetch(pathToFileURL(filePath).toString()).then((res) => {
-      return new Response(res.body, { status: 200, headers: { 'Content-Type': type } });
+      return new Response(res.body, {
+        status: 200,
+        headers: {
+          'Content-Type': type,
+          'Cache-Control': 'no-store',
+        },
+      });
     });
   });
+
+  // Every packaged release uses the same app://bundle URLs and profile. Clear
+  // responses cached by an older build before the first window loads; this
+  // does not touch localStorage, IndexedDB, or the player's saved game.
+  await session.defaultSession.clearCache();
 
   const win = new BrowserWindow({
     width: 1280,

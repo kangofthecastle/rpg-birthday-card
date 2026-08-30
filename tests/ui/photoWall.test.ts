@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  loadSavedGamePhoto,
   showPhotoWall,
   type PhotoManifest,
 } from '../../src/ui/photoWall';
@@ -20,6 +21,24 @@ beforeEach(() => {
 });
 
 describe('showPhotoWall', () => {
+  it('loads the bundled camera photo when running from a packaged app', async () => {
+    const request = vi.fn(async (input: RequestInfo | URL) =>
+      new Response(null, {
+        status: String(input) === '/assets/photos/photo-wall-camera.jpg' ? 200 : 404,
+      }),
+    );
+
+    await expect(loadSavedGamePhoto('app:', request)).resolves.toBe(
+      '/assets/photos/photo-wall-camera.jpg',
+    );
+    expect(request).toHaveBeenNthCalledWith(1, '/__dev/photo-wall-photo', {
+      cache: 'no-cache',
+    });
+    expect(request).toHaveBeenNthCalledWith(2, '/assets/photos/photo-wall-camera.jpg', {
+      cache: 'no-cache',
+    });
+  });
+
   it('keeps the first frame as a camera slot and never injects the boat photo', async () => {
     void showPhotoWall({
       loadManifest: async () => ({ photos: [{ src: '01.png', caption: 'later' }] }),

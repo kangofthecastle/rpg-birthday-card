@@ -145,12 +145,25 @@ function clearCapturedPhoto(): void {
   }
 }
 
-async function loadSavedGamePhoto(): Promise<string | undefined> {
+export async function loadSavedGamePhoto(
+  protocol = window.location.protocol,
+  request: typeof fetch = fetch,
+): Promise<string | undefined> {
   try {
-    const response = await fetch(PHOTO_WALL_PHOTO_ROUTE, { cache: 'no-cache' });
-    if (!response.ok) return undefined;
-    const result = (await response.json()) as { exists?: boolean; src?: string };
-    return result.exists && typeof result.src === 'string' ? result.src : undefined;
+    const response = await request(PHOTO_WALL_PHOTO_ROUTE, { cache: 'no-cache' });
+    if (response.ok) {
+      const result = (await response.json()) as { exists?: boolean; src?: string };
+      if (result.exists && typeof result.src === 'string') return result.src;
+    }
+  } catch {
+    // Packaged builds do not expose the Vite-only save route.
+  }
+
+  if (protocol !== 'app:') return undefined;
+
+  try {
+    const response = await request(SAVED_PHOTO_URL, { cache: 'no-cache' });
+    return response.ok ? SAVED_PHOTO_URL : undefined;
   } catch {
     return undefined;
   }

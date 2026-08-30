@@ -238,6 +238,25 @@ describe('showPhotoWall', () => {
     );
   });
 
+  it('prefers the bundled packaged photo over a stale webcam draft', async () => {
+    void showPhotoWall({
+      loadManifest: async () => ({ photos: [] }),
+      loadCapturedPhoto: () => 'data:image/jpeg;base64,stale-webcam-photo',
+      loadSavedGamePhoto: async () => '/assets/photos/photo-wall-camera.jpg',
+    });
+    await flush();
+
+    expect(
+      document.querySelector<HTMLImageElement>('[data-camera-photo] img')?.getAttribute('src'),
+    ).toBe('/assets/photos/photo-wall-camera.jpg');
+    expect(document.querySelector<HTMLButtonElement>('.photo-wall__file-save')?.disabled).toBe(
+      true,
+    );
+    expect(document.querySelector('.photo-wall__file-status')?.textContent).toBe(
+      'saved in game files',
+    );
+  });
+
   it('opens a lightbox on click and Esc closes only it, then the wall', async () => {
     const closed = showPhotoWall({ loadManifest: async () => ({ photos: [] }) });
     await flush();

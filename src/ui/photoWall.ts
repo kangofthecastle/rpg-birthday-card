@@ -269,15 +269,22 @@ function resolveItems(
   capturedPhoto: string | undefined,
   savedGamePhoto: string | undefined,
 ): WallItem[] {
-  const cameraPhoto = capturedPhoto ?? savedGamePhoto;
+  // The packaged fallback is the canonical game asset. Prefer it over a stale
+  // webcam data URL left in localStorage so the read-only build does not offer
+  // to save a photo that is already bundled inside the app.
+  const bundledGamePhoto = savedGamePhoto === SAVED_PHOTO_URL;
+  const cameraPhoto = bundledGamePhoto
+    ? savedGamePhoto
+    : capturedPhoto ?? savedGamePhoto;
   const camera: WallItem = {
     caption: cameraPhoto ? 'today' : 'take a photo',
     src: cameraPhoto,
     tone: 0,
     camera: true,
     savedToGame:
-      Boolean(savedGamePhoto) &&
-      (!capturedPhoto || capturedPhoto.startsWith(SAVED_PHOTO_URL)),
+      bundledGamePhoto ||
+      (Boolean(savedGamePhoto) &&
+        (!capturedPhoto || capturedPhoto.startsWith(SAVED_PHOTO_URL))),
   };
   const photos = manifest?.photos ?? [];
   if (photos.length > 0) {

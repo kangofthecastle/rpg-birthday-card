@@ -121,6 +121,24 @@ describe('showLettersScreen', () => {
     expect(document.querySelector('.letters-screen__birthday')?.hasAttribute('hidden')).toBe(true);
   });
 
+  it('keeps ____ and ____ together on the first sender-name row', () => {
+    showLettersScreen({
+      letters: [{ from: '____, ____, and ____', text: 'Happy birthday!' }],
+      openLetter: () => Promise.resolve(),
+    });
+
+    const from = document.querySelector('.letters-screen__from');
+    const lines = from?.querySelectorAll('.letters-screen__from-line');
+    expect(from?.classList).toContain('letters-screen__from--compact');
+    expect([...(lines ?? [])].map((line) => line.textContent)).toEqual([
+      '____, ____,',
+      'and ____',
+    ]);
+    expect(
+      document.querySelector('.letters-screen__letter')?.getAttribute('aria-label'),
+    ).toBe('Letter from ____, ____, and ____');
+  });
+
   it('opens a letter through the modal and marks it read', async () => {
     const openLetter = vi.fn(() => Promise.resolve());
     showLettersScreen({ letters: LETTERS, openLetter });

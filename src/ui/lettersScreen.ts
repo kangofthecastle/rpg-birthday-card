@@ -152,7 +152,18 @@ export function showLettersScreen(
 
     const from = document.createElement('span');
     from.className = 'letters-screen__from';
-    from.textContent = letter.from;
+    if (letter.from === '____, ____, and ____') {
+      from.classList.add('letters-screen__from--compact');
+      const firstLine = document.createElement('span');
+      firstLine.className = 'letters-screen__from-line';
+      firstLine.textContent = '____, ____,';
+      const secondLine = document.createElement('span');
+      secondLine.className = 'letters-screen__from-line';
+      secondLine.textContent = 'and ____';
+      from.append(firstLine, secondLine);
+    } else {
+      from.textContent = letter.from;
+    }
 
     button.append(icon, from);
     button.addEventListener('click', () => {

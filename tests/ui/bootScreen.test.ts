@@ -31,7 +31,7 @@ afterEach(() => {
 
 describe('runBootScreen', () => {
   it('exposes the approved cold-open lines', () => {
-    expect(DEFAULT_BOOT_LINES).toContain('FOR RECIPIENT — v1.72');
+    expect(DEFAULT_BOOT_LINES).toContain('FOR RECIPIENT — v1.73');
     expect(DEFAULT_BOOT_LINES.some((line) => line.includes('may cause smiling'))).toBe(true);
   });
 

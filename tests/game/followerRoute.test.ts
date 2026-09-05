@@ -27,6 +27,14 @@ describe('followerRoute', () => {
   });
 
   describe('facingForScreenDeltaWithHysteresis', () => {
+    it.each([30, 60, 144, 240, 360])('turns on small projected steps at %i Hz', (hz) => {
+      const dt = 1000 / hz;
+      // A 90 px/s vertical movement falls below half a pixel per frame at 240 Hz.
+      expect(facingForScreenDeltaWithHysteresis(
+        point(0, 0), point(0, -90 / hz), 'right', 1.3, dt,
+      )).toBe('up');
+    });
+
     it('faces up for straight-north screen movement regardless of starting facing', () => {
       expect(facingForScreenDeltaWithHysteresis(point(100, 100), point(100, 40), 'down')).toBe('up');
       expect(facingForScreenDeltaWithHysteresis(point(100, 100), point(100, 40), 'right')).toBe('up');

@@ -132,12 +132,15 @@ function facingFor(dx: number, dy: number, fallback: FollowerFacing): FollowerFa
  * axis' magnitude beats the other axis by at least `bias`. This stops flappy
  * flips on diagonals (a perfect 45° keeps `current`) while still turning
  * corners within a frame or two once one axis clearly dominates.
+ * deltaMs scales the dead zone to elapsed time, retaining the original 60 Hz
+ * threshold without suppressing legitimate small steps on faster displays.
  */
 export function facingForScreenDeltaWithHysteresis(
   from: RoutePoint,
   to: RoutePoint,
   current: FollowerFacing,
   bias = 1.3,
+  deltaMs = 1000 / 60,
 ): FollowerFacing {
   const dx = to.x - from.x;
   const dy = to.y - from.y;
@@ -145,7 +148,8 @@ export function facingForScreenDeltaWithHysteresis(
   const ay = Math.abs(dy);
 
   // Dead zone: barely any movement, keep whatever we were showing.
-  if (ax < 0.5 && ay < 0.5) return current;
+  const deadZone = 0.5 * Math.max(0, deltaMs) / (1000 / 60);
+  if ((ax === 0 && ay === 0) || (ax < deadZone && ay < deadZone)) return current;
 
   const candidate = facingFor(dx, dy, current);
   if (candidate === current) return current;

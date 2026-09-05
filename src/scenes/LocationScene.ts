@@ -2586,7 +2586,7 @@ export class LocationScene extends Phaser.Scene {
       const projected = projection.project(next.position.x, next.position.y);
       sprite.setPosition(projected.x, projected.y).setDepth(projected.y);
       const facing = next.moving
-        ? facingForScreenDeltaWithHysteresis(previousProjected, projected, this.friendoneFollowerFacing)
+        ? facingForScreenDeltaWithHysteresis(previousProjected, projected, this.friendoneFollowerFacing, 1.3, deltaMs)
         : this.friendoneFollowerFacing;
       this.friendoneFollowerFacing = facing;
       sprite.setFlipX(facing === 'right');
@@ -2610,7 +2610,7 @@ export class LocationScene extends Phaser.Scene {
     // projection) with hysteresis so it stays steady on diagonals; the trail's
     // own map-space facing is only a fallback when idle.
     const facing = next.moving
-      ? facingForScreenDeltaWithHysteresis(previousProjected, projected, this.friendoneFollowerFacing)
+      ? facingForScreenDeltaWithHysteresis(previousProjected, projected, this.friendoneFollowerFacing, 1.3, deltaMs)
       : this.friendoneFollowerFacing;
     this.friendoneFollowerFacing = facing;
     sprite.setFlipX(facing === 'right');

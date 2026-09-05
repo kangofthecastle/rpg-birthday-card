@@ -22,6 +22,8 @@ export interface FollowerTrailState {
   readonly history: readonly TrailPoint[];
   readonly facing: FollowerFacing;
   readonly moving: boolean;
+  /** Time actually stationary; preserves the walk clip between physics steps. */
+  readonly idleElapsedMs: number;
   readonly caughtUp: boolean;
   readonly config: FollowerTrailConfig;
 }
@@ -34,6 +36,8 @@ const DEFAULT_CONFIG: FollowerTrailConfig = {
   sampleDistance: 4,
   maxHistory: 96,
 };
+
+const WALK_SETTLE_MS = 80;
 
 /**
  * Places a newly loaded follower behind the direction ____ is entering from.
@@ -69,6 +73,7 @@ export function createFollowerTrail(
     history: [{ ...initial }],
     facing: 'down',
     moving: false,
+    idleElapsedMs: 0,
     caughtUp: false,
     config: { ...DEFAULT_CONFIG, ...config },
   };
@@ -90,6 +95,7 @@ export function advanceFollowerTrail(
       position: target,
       target,
       moving: false,
+      idleElapsedMs: 0,
       caughtUp: true,
     };
   }
@@ -97,29 +103,39 @@ export function advanceFollowerTrail(
   const dx = target.x - state.position.x;
   const dy = target.y - state.position.y;
   const remaining = Math.hypot(dx, dy);
+  const elapsed = Math.max(0, deltaMs);
+  const step = Math.min(remaining, state.config.speed * elapsed / 1000);
+  const ratio = remaining > 0 ? step / remaining : 0;
+  // Even the final few pixels obey the speed limit. Snapping across the idle
+  // radius can otherwise exceed a high-refresh frame's movement allowance.
+  const position = step >= remaining ? target : {
+    x: state.position.x + dx * ratio,
+    y: state.position.y + dy * ratio,
+  };
   if (remaining <= state.config.idleDistance) {
+    // ____'s physics runs at 60 Hz; render frames between those steps can
+    // have an unchanged target. Only settle after a short elapsed-time pause,
+    // so they cannot repeatedly restart ____'s walking animation.
+    const idleElapsedMs = step > 0.001 ? 0 : state.idleElapsedMs + elapsed;
     return {
       ...state,
       history,
-      position: target,
+      position,
       target,
-      moving: false,
+      moving: state.moving && idleElapsedMs < WALK_SETTLE_MS,
+      idleElapsedMs,
       caughtUp: false,
     };
   }
 
-  const step = Math.min(remaining, state.config.speed * Math.max(0, deltaMs) / 1000);
-  const ratio = remaining > 0 ? step / remaining : 0;
   return {
     ...state,
     history,
-    position: {
-      x: state.position.x + dx * ratio,
-      y: state.position.y + dy * ratio,
-    },
+    position,
     target,
     facing: facingFor(dx, dy, state.facing),
     moving: true,
+    idleElapsedMs: 0,
     caughtUp: false,
   };
 }

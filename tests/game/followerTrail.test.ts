@@ -9,6 +9,36 @@ import {
 const point = (x: number, y: number): TrailPoint => ({ x, y });
 
 describe('followerTrail', () => {
+  it.each([30, 50, 60, 75, 120, 144, 165, 240, 360])(
+    'keeps walking between 60 Hz physics steps at %i Hz and settles after stopping',
+    (hz) => {
+      const dt = 1000 / hz;
+      let state = createFollowerTrail(point(-64, 0), { speed: 246, trailDistance: 104 });
+      let leader = point(0, 0);
+      for (let frame = 1; frame <= hz * 5; frame += 1) {
+        // Arcade physics advances ____ at 60 Hz, including frames with no step.
+        leader = point(Math.floor(frame * 60 / hz + 1e-8) * 250 / 60, 0);
+        const previous = state.position;
+        state = advanceFollowerTrail(state, leader, dt);
+        expect(Math.hypot(state.position.x - previous.x, state.position.y - previous.y))
+          .toBeLessThanOrEqual(246 * dt / 1000 + 1e-8);
+        if (frame > hz) expect(state.moving).toBe(true);
+      }
+      for (let frame = 0; frame < hz; frame += 1) {
+        state = advanceFollowerTrail(state, leader, dt);
+      }
+      expect(state.moving).toBe(false);
+      expect(state.position).toEqual(state.target);
+      const stopped = state.position;
+      state = advanceFollowerTrail(state, leader, dt);
+      expect(state.position).toEqual(stopped);
+      expect(state.moving).toBe(false);
+      // A fresh physics step starts walking again without a start delay.
+      state = advanceFollowerTrail(state, point(leader.x + 250 / 60, 0), dt);
+      expect(state.moving).toBe(true);
+    },
+  );
+
   it('starts behind ____ for every edge-arrival direction', () => {
     const recipient = point(100, 200);
 
@@ -17,6 +47,21 @@ describe('followerTrail', () => {
     expect(followerStartBehindLeader(recipient, 'north')).toEqual(point(100, 136));
     expect(followerStartBehindLeader(recipient, 'south')).toEqual(point(100, 264));
     expect(followerStartBehindLeader(recipient)).toEqual(point(36, 200));
+  });
+
+  it('settles after 80 ms of rest, regardless of the number of render frames', () => {
+    let state = createFollowerTrail(point(0, 0), { trailDistance: 0, speed: 100 });
+    const leader = point(10, 0);
+    state = advanceFollowerTrail(state, leader, 100);
+    expect(state.position).toEqual(leader);
+    expect(state.moving).toBe(true);
+    for (const dt of [4, 7, 0, 16, 32, 20]) {
+      state = advanceFollowerTrail(state, leader, dt);
+      expect(state.position).toEqual(leader);
+      expect(state.moving).toBe(true);
+    }
+    state = advanceFollowerTrail(state, leader, 1);
+    expect(state.moving).toBe(false);
   });
 
   it('keeps a bounded history of distinct leader positions', () => {

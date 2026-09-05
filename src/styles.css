@@ -101,8 +101,11 @@ body {
 }
 
 #game-root {
-  width: 100%;
-  height: 100%;
+  /* As the window grows past the authored size, spend part of the new space
+     on the monitor casing. The screen remains centered and never exceeds 125%. */
+  position: absolute;
+  inset: clamp(0px, calc((100vh - 720px) * 0.36), 136px)
+    clamp(0px, calc((100vw - 1280px) * 0.3), 148px);
   /* Let the grid item shrink after a large/fullscreen canvas. Its intrinsic
      size (including Phaser's centering margins) must not hold the window open. */
   min-width: 0;
@@ -123,6 +126,103 @@ body {
   position: absolute;
   inset: 0;
   pointer-events: none;
+}
+
+/* A decorative vintage monitor in the spare space around the capped canvas.
+   No glass overlay, scanlines, or distortion touches the game or its UI. */
+#app[data-monitor='framed'] {
+  background:
+    radial-gradient(ellipse at 50% 44%, #756a5a 0%, #3c3832 58%, #242320 100%);
+}
+
+.monitor-shell {
+  position: absolute;
+  inset: calc(-1 * var(--bezel-top)) calc(-1 * var(--bezel-side)) calc(-1 * var(--bezel-bottom));
+  border-style: solid;
+  border-width: var(--bezel-top) var(--bezel-side) var(--bezel-bottom);
+  border-color: #e9dfc8 #e0d3b7 #d9cbae #e0d3b7;
+  border-radius: 44px;
+  pointer-events: none;
+  box-shadow:
+    0 3px 0 3px #a99c80,
+    0 8px 0 5px #746954,
+    0 30px 42px -8px #0009,
+    0 50px 90px -20px #000a;
+}
+
+.monitor-shell::before {
+  content: '';
+  position: absolute;
+  inset: -20px;
+  border: 20px solid;
+  border-color: #81745e #aa9c7f #b7a88a #aa9c7f;
+  border-radius: 26px;
+  box-shadow: 0 0 0 1px #f3ead4, inset 0 0 0 2px #28251f;
+}
+
+.monitor-shell::after {
+  content: '';
+  position: absolute;
+  bottom: calc(-1 * var(--bezel-bottom) + 22px);
+  left: 16px;
+  width: 160px;
+  height: 11px;
+  border-radius: 2px;
+  background: repeating-linear-gradient(90deg, #93856d 0 2px, #ecdfc5 2px 3px, transparent 3px 7px);
+}
+
+.monitor-shell__badge,
+.monitor-shell__power {
+  position: absolute;
+  bottom: calc(-1 * var(--bezel-bottom) + 46px);
+  color: #796d57;
+  font: 600 11px/1 Arial, sans-serif;
+  letter-spacing: 0.2em;
+  text-shadow: 0 1px #fff8;
+  white-space: nowrap;
+}
+
+.monitor-shell__badge {
+  left: 16px;
+  font-family: "Courier New", monospace;
+  letter-spacing: 0.05em;
+}
+
+.monitor-shell__power {
+  right: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.monitor-shell__controls {
+  position: absolute;
+  right: 146px;
+  bottom: calc(-1 * var(--bezel-bottom) + 38px);
+  display: flex;
+  gap: 18px;
+}
+
+.monitor-shell__controls i {
+  width: 24px;
+  height: 24px;
+  border: 2px solid #a49474;
+  border-radius: 50%;
+  background: linear-gradient(90deg, #d6c6a6 43%, #8e8067 44% 51%, #efe3cb 52%);
+  box-shadow: 0 2px 0 2px #b4a484, 0 3px 5px #75674966;
+}
+
+.monitor-shell__power i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #91ba67;
+  box-shadow: 0 0 0 2px #776f55, 0 0 7px #a9ce7470, inset 0 1px #e7fac3;
+}
+
+.monitor-shell[data-details='hidden']::after,
+.monitor-shell[data-details='hidden'] span {
+  display: none;
 }
 
 #ui-root {

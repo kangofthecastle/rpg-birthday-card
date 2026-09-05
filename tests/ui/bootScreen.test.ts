@@ -32,7 +32,7 @@ afterEach(() => {
 
 describe('runBootScreen', () => {
   it('exposes the approved cold-open lines', () => {
-    expect(DEFAULT_BOOT_LINES).toContain('FOR RECIPIENT — v1.76');
+    expect(DEFAULT_BOOT_LINES).toContain('FOR RECIPIENT — v1.77');
     expect(DEFAULT_BOOT_LINES[0]).toBe(`FOR RECIPIENT — v${version.replace(/\.0$/, '')}`);
     expect(DEFAULT_BOOT_LINES.some((line) => line.includes('may cause smiling'))).toBe(true);
   });

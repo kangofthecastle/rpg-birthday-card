@@ -8,6 +8,7 @@ import type Phaser from 'phaser';
 export function syncViewportFrame(game: Phaser.Game): void {
   const frame = document.querySelector<HTMLElement>('#viewport-frame');
   const app = document.querySelector<HTMLElement>('#app');
+  const monitor = frame?.querySelector<HTMLElement>('.monitor-shell');
 
   if (!frame || !app) {
     return;
@@ -31,6 +32,19 @@ export function syncViewportFrame(game: Phaser.Game): void {
     frame.style.top = `${Math.round(canvasRect.top - appRect.top)}px`;
     frame.style.width = `${Math.round(canvasRect.width)}px`;
     frame.style.height = `${Math.round(canvasRect.height)}px`;
+
+    // Decorate only the spare space; never shrink or cover the authored frame.
+    const horizontalGap = Math.min(canvasRect.left - appRect.left, appRect.right - canvasRect.right);
+    const verticalGap = Math.min(canvasRect.top - appRect.top, appRect.bottom - canvasRect.bottom);
+    const framed = horizontalGap >= 32 && verticalGap >= 32;
+    app.dataset.monitor = framed ? 'framed' : 'compact';
+    if (monitor) {
+      monitor.hidden = !framed;
+      monitor.style.setProperty('--bezel-side', `${Math.min(148, Math.max(0, horizontalGap - 12))}px`);
+      monitor.style.setProperty('--bezel-top', `${Math.min(110, Math.max(0, verticalGap - 12))}px`);
+      monitor.style.setProperty('--bezel-bottom', `${Math.min(160, Math.max(0, verticalGap - 12))}px`);
+      monitor.dataset.details = verticalGap >= 66 ? 'visible' : 'hidden';
+    }
   };
 
   // Phaser mutates the canvas size on the next tick after a resize event, so

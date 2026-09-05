@@ -11,6 +11,11 @@
       <!-- Tracks the letterboxed canvas box (synced in main.ts) so all DOM UI
            and the mute button compose within the game frame, not the window. -->
       <div id="viewport-frame">
+        <div class="monitor-shell" aria-hidden="true" hidden>
+          <span class="monitor-shell__badge">/password: pewpew</span>
+          <span class="monitor-shell__controls"><i></i><i></i></span>
+          <span class="monitor-shell__power">POWER <i></i></span>
+        </div>
         <div id="ui-root"></div>
       </div>
     </main>

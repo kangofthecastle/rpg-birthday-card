@@ -236,6 +236,13 @@ describe('showPhotoWall', () => {
     expect(document.querySelector('.photo-wall__file-status')?.textContent).toBe(
       'saved in game files',
     );
+    expect(document.querySelector('[data-camera-photo] .photo-wall__caption')?.textContent)
+      .toBe('August 29, 2026');
+    document.querySelector<HTMLButtonElement>('[data-camera-photo]')?.click();
+    expect(document.querySelector('.photo-wall__camera-status')?.textContent)
+      .toBe('August 29, 2026');
+    expect(document.querySelector('.photo-wall__camera-trigger')?.getAttribute('aria-label'))
+      .toBe('Retake photo with webcam');
   });
 
   it('prefers the bundled packaged photo over a stale webcam draft', async () => {

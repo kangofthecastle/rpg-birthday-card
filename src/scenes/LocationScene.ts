@@ -3528,17 +3528,19 @@ export class LocationScene extends Phaser.Scene {
   }
 
   private createLocationLabel(): void {
-    this.add
+    const label = this.add
       .text(this.fixedScreenX(24), this.fixedScreenY(24), this.location.title, {
         color: '#fff7e8',
         backgroundColor: '#1b1f1f',
         padding: { x: 14, y: 10 },
         fontSize: '20px',
         fontStyle: '700',
+        resolution: 3,
       })
       .setScrollFactor(0)
       .setScale(1 / this.cameraZoom)
       .setDepth(1000);
+    label.texture.setFilter(Phaser.Textures.FilterMode.LINEAR);
   }
 
   private createWorldMarkers(): void {
@@ -3870,9 +3872,14 @@ export class LocationScene extends Phaser.Scene {
           fontSize: '16px',
           fontStyle: '800',
           fontFamily: 'Georgia, "Times New Roman", serif',
+          // Rasterize the lettering with extra detail before fitting it onto
+          // the board. Smooth only this text texture, preserving pixel-art
+          // sampling on the signboard and character sprites.
+          resolution: 3,
         })
         .setOrigin(0.5, 0.5)
         .setDepth(anchor.y + 0.1);
+      caption.texture.setFilter(Phaser.Textures.FilterMode.LINEAR);
       const placed = placeSignpostCaption(
         geom,
         scale,

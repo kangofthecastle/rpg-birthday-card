@@ -103,6 +103,10 @@ body {
 #game-root {
   width: 100%;
   height: 100%;
+  /* Let the grid item shrink after a large/fullscreen canvas. Its intrinsic
+     size (including Phaser's centering margins) must not hold the window open. */
+  min-width: 0;
+  min-height: 0;
 }
 
 #game-root canvas {
@@ -2093,7 +2097,7 @@ body.ending-transition-active .collection-panel {
 
 .photo-wall__camera-hero {
   position: absolute;
-  top: 7vh;
+  top: 7%;
   left: 50%;
   z-index: 6;
   display: flex;
@@ -2441,15 +2445,19 @@ body.ending-transition-active .collection-panel {
   z-index: 4;
   display: grid;
   place-items: center;
-  padding: clamp(20px, 5vw, 64px);
+  padding: 24px;
+  /* Size against the capped game area, not the physical browser window. */
+  container-type: size;
   background: rgba(28, 16, 6, 0.72);
   animation: photo-wall-in 220ms ease both;
 }
 
 .photo-wall__lightbox-figure {
   margin: 0;
-  max-width: min(86vw, 900px);
-  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  max-width: min(100cqw, 900px);
+  max-height: 100cqh;
   padding: 14px 14px 45px;
   background: #fffdf6;
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
@@ -2465,7 +2473,7 @@ body.ending-transition-active .collection-panel {
    longest line. The loaded image supplies its browser-resolved aspect ratio,
    so portrait EXIF rotation is reflected here too. */
 .photo-wall__lightbox-figure--photo {
-  width: min(86vw, 900px, calc(70vh * var(--photo-aspect) + 28px));
+  width: min(100cqw, 900px, calc(70cqh * var(--photo-aspect) + 28px));
 }
 
 .photo-wall__media--large {
@@ -2476,6 +2484,9 @@ body.ending-transition-active .collection-panel {
 
 .photo-wall__lightbox-figure--photo .photo-wall__media--large {
   width: 100%;
+  min-height: 0;
+  max-height: 70cqh;
+  object-fit: contain;
 }
 
 .photo-wall__media--large.photo-wall__media--placeholder {
@@ -2483,6 +2494,9 @@ body.ending-transition-active .collection-panel {
 }
 
 .photo-wall__lightbox-caption {
+  flex-shrink: 0;
+  max-height: 40cqh;
+  overflow: auto;
   margin-top: 12px;
   color: #7a5433;
   font-family: "Georgia", serif;

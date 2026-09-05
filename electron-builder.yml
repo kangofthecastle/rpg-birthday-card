@@ -9,8 +9,8 @@ files:
 win:
   target: portable
   icon: electron/icon.png
-  artifactName: A-Game.exe
+  artifactName: A-Game-v${version}.exe
 mac:
   target: dmg
   icon: electron/icon.png
-  artifactName: A-Game.dmg
+  artifactName: A-Game-v${version}-${arch}.dmg

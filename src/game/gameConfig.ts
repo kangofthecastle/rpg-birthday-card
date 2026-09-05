@@ -11,13 +11,12 @@ export function createGameConfig(parent: HTMLElement): Phaser.Types.Core.GameCon
     backgroundColor: '#1f2a2a',
     pixelArt: true,
     scale: {
-      // Fixed 1280x720 logical resolution, letterboxed and centered in the
-      // window. FIT keeps the whole 16:9 frame visible at any window size; the
-      // page background around it is the deliberate letterbox color. Per-map
-      // camera zoom (see LocationScene.applyCameraBounds) then covers the frame
-      // so no map is left pinned to a corner with dead-space around it.
+      // Fit smaller windows, but stop enlarging at 125% of the authored size.
+      // Phaser owns both sizing and centering so input coordinates and the
+      // viewport-aligned DOM UI stay correct, including in fullscreen.
       mode: Phaser.Scale.FIT,
       autoCenter: Phaser.Scale.CENTER_BOTH,
+      max: { width: 1600, height: 900 },
     },
     physics: {
       default: 'arcade',

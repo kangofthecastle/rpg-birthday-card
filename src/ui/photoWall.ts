@@ -19,6 +19,7 @@ const PLACEHOLDER_COUNT = 8;
 const CAPTURED_PHOTO_STORAGE_KEY = 'a-game:photo-wall:webcam-photo';
 const PHOTO_WALL_PHOTO_ROUTE = '/__dev/photo-wall-photo';
 const SAVED_PHOTO_URL = '/assets/photos/photo-wall-camera.jpg';
+const SAVED_PHOTO_CAPTION = 'August 29, 2026';
 // The one frame left empty on the wall, "labelled in careful handwriting" — kept
 // waiting for the next good day.
 const EMPTY_FRAME_CAPTION = 'for the next good day';
@@ -277,7 +278,7 @@ function resolveItems(
     ? savedGamePhoto
     : capturedPhoto ?? savedGamePhoto;
   const camera: WallItem = {
-    caption: cameraPhoto ? 'today' : 'take a photo',
+    caption: cameraPhoto ? SAVED_PHOTO_CAPTION : 'take a photo',
     src: cameraPhoto,
     tone: 0,
     camera: true,
@@ -435,7 +436,7 @@ export function showPhotoWall(options: PhotoWallOptions = {}): Promise<void> {
       }
       frame.setAttribute(
         'aria-label',
-        item.src ? 'Retake photo with webcam' : 'Take photo with webcam',
+        item.src ? `Enlarge photo: ${item.caption}` : 'Take photo with webcam',
       );
       return media;
     };
@@ -559,7 +560,7 @@ export function showPhotoWall(options: PhotoWallOptions = {}): Promise<void> {
           'aria-label',
           item.src ? 'Retake photo with webcam' : 'Open webcam',
         );
-        status.textContent = item.src ? 'retake this photo' : 'take a photo';
+        status.textContent = item.src ? item.caption : 'take a photo';
         actions.replaceChildren();
       };
 
@@ -764,7 +765,7 @@ export function showPhotoWall(options: PhotoWallOptions = {}): Promise<void> {
           frame.dataset.cameraPhoto = '';
           frame.setAttribute(
             'aria-label',
-            item.src ? 'Retake photo with webcam' : 'Take photo with webcam',
+            item.src ? `Enlarge photo: ${item.caption}` : 'Take photo with webcam',
           );
           cameraItem = item;
           cameraFrame = frame;

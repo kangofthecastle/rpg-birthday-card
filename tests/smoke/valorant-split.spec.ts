@@ -18,7 +18,7 @@ async function completeRetakeReplay(page: import('@playwright/test').Page): Prom
   await page.getByRole('button', { name: 'Defuse the spike' }).click();
 
   await expect(page.getByRole('dialog', { name: 'RETAKE.EXE' })).toHaveCount(0);
-  await expect(page.getByText(/For in-game continuity/)).toHaveCount(0);
+  await expect(page.getByText(/I’m finishing your gift/)).toHaveCount(0);
   await expect(page.getByText('____?')).toHaveCount(0);
   await expect(page.locator('body')).toHaveAttribute('data-location-id', 'friend-b');
 }
@@ -83,18 +83,14 @@ test('completes RETAKE.EXE at ____ house through test mode', async ({ page }) =>
 
   await page.getByRole('button', { name: 'Defuse the spike' }).click();
 
-  const continuityLine = page.getByText(/For in-game continuity/);
+  const continuityLine = page.getByText(/I’m finishing your gift/);
   await expect(continuityLine).toBeVisible();
-  await expect(page.locator('.collection-panel')).not.toContainText('____’s Letter');
+  await expect(page.locator('.collection-panel')).toContainText('1 of 3 collected');
   await page.getByRole('button', { name: 'Next' }).click();
   await expect(continuityLine).toHaveCount(0);
-  await expect(page.getByText(/^Happy birthday ____!/)).toBeVisible();
-  await expect(page.getByText(/example birthday message/)).toBeVisible();
-  await page.getByRole('button', { name: 'Next' }).click();
-  await expect(page.locator('.photo-letter-modal__photo-caption')).toHaveText(
-    '',
-  );
-  await expect(page.locator('.collection-panel')).not.toContainText('____’s Letter');
+  await expect(page.locator('.letter-modal__text')).toHaveText('[Write your second friend’s birthday letter here.]');
+  await expect(page.locator('.photo-letter-modal__photo')).toHaveCount(0);
+  await expect(page.locator('.collection-panel')).toContainText('1 of 3 collected');
   await page.getByRole('button', { name: 'Continue' }).click();
 
   await expect(page.getByText('____?')).toBeVisible();
@@ -102,5 +98,5 @@ test('completes RETAKE.EXE at ____ house through test mode', async ({ page }) =>
     await page.getByRole('button', { name: 'Continue' }).click();
   }
 
-  await expect(page.locator('.collection-panel')).toContainText('____’s Letter');
+  await expect(page.locator('.collection-panel')).toContainText('2 of 3 collected');
 });

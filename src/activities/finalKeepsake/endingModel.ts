@@ -18,7 +18,7 @@ export const ENDING_KEEPSAKE_ID = 'ending-light';
 export const FINAL_ENDING_LETTERS: readonly (readonly DialogueLine[])[] = [];
 
 /** The quiet line that fades in once every letter has been read. Lowercase. */
-export const HAPPY_BIRTHDAY_LINE = 'happy birthday, recipient.';
+export const HAPPY_BIRTHDAY_LINE = 'happy birthday, ____.';
 
 // ---------------------------------------------------------------------------
 // Letters read-tracking (post-ending screen)
@@ -53,7 +53,7 @@ export function unreadCount(model: LettersReadModel): number {
 }
 
 /**
- * True once every letter has been opened. Drives the "happy birthday, recipient."
+ * True once every letter has been opened. Drives the "happy birthday, ____."
  * line, which appears after the last unread letter closes. An empty screen
  * (no letters) never triggers it.
  */

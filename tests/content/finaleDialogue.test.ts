@@ -33,7 +33,7 @@ describe('finale dialogue', () => {
 
   it('keeps the portrait assignment aligned with each speaker', () => {
     for (const line of FINALE_CONVERSATION) {
-      expect(line.portraitId).toBe(line.speaker === '____' ? 'portrait-recipient' : 'portrait-friend-b');
+      expect(['portrait-recipient', 'portrait-friend-b']).toContain(line.portraitId);
     }
   });
 });

@@ -17,8 +17,6 @@ function readPngDimensions(relativePath: string): { width: number; height: numbe
 
 describe('Boatigami paper textures', () => {
   it.each([
-    ['____ letter', 'public/assets/activities/fold-the-letters/paper-friendone.png', 512, 640],
-    ['____ letter', 'public/assets/activities/fold-the-letters/paper-friendtwo.png', 512, 640],
     [
       'sheet music',
       'public/assets/activities/fold-the-letters/paper-sheetmusic-boatigami.png',

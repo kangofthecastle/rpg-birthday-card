@@ -25,7 +25,7 @@ vi.mock('../../src/content/locations', () => ({
         text: 'Happy Birthday ____!!!!!',
         photoSrc: '/assets/photos/friendone-spring-break.jpg',
         photoAlt: '____ and ____ together',
-        photoCaption: 'Spring Break together.',
+        photoCaption: 'An example memory.',
       },
     },
     {
@@ -149,7 +149,7 @@ describe('createCollectionPanel', () => {
       text: 'Happy Birthday ____!!!!!',
       photoSrc: '/assets/photos/friendone-spring-break.jpg',
       photoAlt: '____ and ____ together',
-      photoCaption: 'Spring Break together.',
+      photoCaption: 'An example memory.',
     });
   });
 
@@ -189,7 +189,7 @@ describe('createCollectionPanel', () => {
         text: 'Happy Birthday ____!!!!!',
         photoSrc: '/assets/photos/friendone-spring-break.jpg',
         photoAlt: '____ and ____ together',
-        photoCaption: 'Spring Break together.',
+        photoCaption: 'An example memory.',
       },
       { from: '____', text: '____’s existing reward copy.' },
     ]);

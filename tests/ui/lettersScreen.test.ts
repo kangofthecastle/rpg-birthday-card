@@ -175,7 +175,7 @@ describe('showLettersScreen', () => {
       showAuthorHeading: false,
       text: 'Happy Birthday!',
       photoSrc: '/assets/photos/friendone-spring-break.jpg',
-      photoCaption: 'Spring Break together.',
+      photoCaption: 'An example memory.',
     };
     const openLetter = vi.fn(() => Promise.resolve());
     showLettersScreen({
@@ -205,7 +205,7 @@ describe('showLettersScreen', () => {
 
     const birthday = document.querySelector('.letters-screen__birthday');
     expect(birthday?.hasAttribute('hidden')).toBe(false);
-    expect(birthday?.textContent).toBe('happy birthday, recipient.');
+    expect(birthday?.textContent).toBe('happy birthday, ____.');
   });
 
   it('reveals a "go back" affordance once all letters are read and calls back', async () => {

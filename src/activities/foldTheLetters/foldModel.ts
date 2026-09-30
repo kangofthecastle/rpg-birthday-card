@@ -95,7 +95,7 @@ export const HULL_CREASES: readonly HullCrease[] = [
   {
     id: 'hull-1',
     hint: 'Drag the top edge down onto the bottom',
-    snippet: '',
+    snippet: '____',
     line: 'horizontal',
     dragAxis: 'vertical',
     toward: 'down',
@@ -106,7 +106,7 @@ export const HULL_CREASES: readonly HullCrease[] = [
   {
     id: 'hull-2',
     hint: 'Fold the top corners into the centre',
-    snippet: '',
+    snippet: '____',
     line: 'diagonal',
     dragAxis: 'horizontal',
     toward: 'down',
@@ -117,7 +117,7 @@ export const HULL_CREASES: readonly HullCrease[] = [
   {
     id: 'hull-3',
     hint: 'Pull it open from the sides',
-    snippet: '',
+    snippet: '____',
     line: 'vertical',
     dragAxis: 'horizontal',
     toward: 'right',
@@ -132,7 +132,7 @@ export const HULL_CREASES: readonly HullCrease[] = [
 export const SAIL_FOLD_CREASE: HullCrease = {
   id: 'sail-fold',
   hint: 'Fold a triangle',
-  snippet: '',
+  snippet: '____',
   line: 'diagonal',
   dragAxis: 'diagonal',
   toward: 'up',
@@ -140,12 +140,7 @@ export const SAIL_FOLD_CREASE: HullCrease = {
 };
 
 /** Lines of ____'s letter that flutter across the sail face while hoisting. */
-export const SAIL_FACE_LINES: readonly string[] = [
-  '',
-  '',
-  '',
-  '',
-];
+export const SAIL_FACE_LINES: readonly string[] = ['____', '____'];
 
 /** ____'s sheet music — the piece she just played. These are the note letters
  * that ring out (plucked) one by one as the page rolls into the lantern. */

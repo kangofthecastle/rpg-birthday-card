@@ -1,5 +1,5 @@
-appId: com.friendtwo.a-game
-productName: A-Game
+appId: com.rpgbirthdaycard.game
+productName: RPG Birthday Card
 directories:
   output: dist-electron
 files:
@@ -9,8 +9,8 @@ files:
 win:
   target: portable
   icon: electron/icon.png
-  artifactName: A-Game-v${version}.exe
+  artifactName: RPG Birthday Card-v${version}.exe
 mac:
   target: dmg
   icon: electron/icon.png
-  artifactName: A-Game-v${version}-${arch}.dmg
+  artifactName: RPG Birthday Card-v${version}-${arch}.dmg

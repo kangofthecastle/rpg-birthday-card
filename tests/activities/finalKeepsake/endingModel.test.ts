@@ -20,7 +20,7 @@ describe('ending copy', () => {
   });
 
   it('keeps the happy-birthday line lowercase and quiet', () => {
-    expect(HAPPY_BIRTHDAY_LINE).toBe('happy birthday, recipient.');
+    expect(HAPPY_BIRTHDAY_LINE).toBe('happy birthday, ____.');
   });
 });
 

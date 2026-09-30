@@ -77,21 +77,12 @@ describe('keepsake ritual model — components & verbs', () => {
       'Fold the top corners into the centre',
       'Pull it open from the sides',
     ]);
-    expect(HULL_CREASES.map((crease) => crease.snippet)).toEqual([
-      '',
-      '',
-      '',
-    ]);
+    expect(HULL_CREASES.map((crease) => crease.snippet)).toEqual(['____', '____', '____']);
     expect(FOLD_COMPONENTS[0].label).toBe("____'s letter, the hull");
     expect(FOLD_COMPONENTS[0].assembledLine).toBe('The hull is complete');
     expect(SAIL_FOLD_CREASE.hint).toBe('Fold a triangle');
-    expect(SAIL_FOLD_CREASE.snippet).toBe('');
-    expect(SAIL_FACE_LINES).toEqual([
-      '',
-      '',
-      '',
-      '',
-    ]);
+    expect(SAIL_FOLD_CREASE.snippet).toBe('____');
+    expect(SAIL_FACE_LINES).toEqual(['____', '____']);
     expect(FOLD_COMPONENTS[1].label).toBe("____'s letter, the sail");
     expect(FOLD_COMPONENTS[1].assembledLine).toBe('The sail catches wind.');
     expect(LANTERN_STAVES).toEqual([

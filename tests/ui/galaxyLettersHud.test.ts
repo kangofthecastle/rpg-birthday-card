@@ -32,7 +32,7 @@ describe('showGalaxyLettersHud', () => {
     hud.setComplete();
     expect(hud.element.dataset.phase).toBe('complete');
     expect(hud.element.hidden).toBe(false);
-    expect(hud.element.textContent).toContain('happy birthday, recipient.');
+    expect(hud.element.textContent).toContain('happy birthday, ____.');
     expect(goHome?.hidden).toBe(false);
 
     goHome?.click();

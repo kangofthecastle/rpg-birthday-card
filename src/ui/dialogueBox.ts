@@ -27,9 +27,6 @@ const PORTRAIT_URL_BY_ID: Readonly<Record<string, string>> = {
 };
 
 const PORTRAIT_ID_BY_SPEAKER: Readonly<Record<string, string>> = {
-  ____: 'portrait-recipient',
-  ____: 'portrait-friendone',
-  ____: 'portrait-friend-b',
   Omen: 'portrait-omen',
 };
 

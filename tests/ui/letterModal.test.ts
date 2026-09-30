@@ -86,55 +86,24 @@ describe('createPhotoLetterModal', () => {
     expect(modal.querySelector('.letter-modal__text')).toBeNull();
   });
 
-  it('opens ____’s birthday letter at its salutation without a redundant sender heading', async () => {
+  it('opens the template letter without a photograph or redundant sender heading', async () => {
     const promise = showPhotoLetterModal(FRIEND_TWO_BIRTHDAY_LETTER);
     const modal = document.querySelector<HTMLElement>('.photo-letter-modal');
-
-    expect(modal?.getAttribute('aria-label')).toBe('Letter from ____');
     expect(modal?.querySelector('.letter-modal__speaker')).toBeNull();
-    expect(modal?.querySelector('.letter-modal__text')?.textContent).toMatch(
-      /^Happy birthday ____!/,
-    );
+    expect(modal?.querySelector('.letter-modal__text')?.textContent).toBe(FRIEND_TWO_BIRTHDAY_LETTER.text);
     expect(modal?.querySelector('.photo-letter-modal__photo')).toBeNull();
-    expect(modal?.querySelector('.letter-modal__action')?.textContent).toBe('Next');
-
-    modal?.querySelector<HTMLButtonElement>('.letter-modal__action')?.click();
-    expect(modal?.querySelector('.letter-modal__text')).toBeNull();
-    expect(
-      modal?.querySelector<HTMLImageElement>('.photo-letter-modal__photo')?.getAttribute('src'),
-    ).toBe('/assets/photos/friendtwo-cherry-blossoms.jpg');
-    expect(modal?.querySelector('.photo-letter-modal__photo-caption')?.textContent).toBe(
-      '',
-    );
-    expect(modal?.querySelector('.letter-modal__action')?.textContent).toBe('Continue');
-
     modal?.querySelector<HTMLButtonElement>('.letter-modal__action')?.click();
     await promise;
   });
 
-  it('shows the RETAKE continuity line before the real letter and photograph', async () => {
+  it('shows the continuity page before the placeholder letter', async () => {
     const promise = showPhotoLetterModal(getFriendTwoRetakeLetter());
     const modal = document.querySelector<HTMLElement>('.photo-letter-modal');
     const action = modal?.querySelector<HTMLButtonElement>('.letter-modal__action');
-
-    expect(modal?.querySelector('.letter-modal__text')?.textContent).toBe(
-      FRIEND_TWO_RETAKE_NOTE,
-    );
-    expect(modal?.querySelector('.letter-modal__speaker')).toBeNull();
-    expect(action?.textContent).toBe('Next');
-
+    expect(modal?.querySelector('.letter-modal__text')?.textContent).toBe(FRIEND_TWO_RETAKE_NOTE);
     action?.click();
-    expect(modal?.querySelector('.letter-modal__text')?.textContent).toMatch(
-      /^Happy birthday ____!/,
-    );
+    expect(modal?.querySelector('.letter-modal__text')?.textContent).toBe(FRIEND_TWO_BIRTHDAY_LETTER.text);
     expect(modal?.querySelector('.photo-letter-modal__photo')).toBeNull();
-    expect(action?.textContent).toBe('Next');
-
-    action?.click();
-    expect(modal?.querySelector('.letter-modal__text')).toBeNull();
-    expect(modal?.querySelector('.photo-letter-modal__photo')).not.toBeNull();
-    expect(action?.textContent).toBe('Continue');
-
     action?.click();
     await promise;
   });
@@ -146,7 +115,7 @@ describe('createPhotoLetterModal', () => {
       text: 'For ____.',
       photoSrc: '/assets/photos/friendone-and-recipient.png',
       photoAlt: '____ and ____ together',
-      photoCaption: 'Spring Break together.',
+      photoCaption: 'An example memory.',
       photoCropTop: 10,
       onAction,
     });
@@ -176,7 +145,7 @@ describe('createPhotoLetterModal', () => {
     expect(photoFrame?.style.getPropertyValue('--photo-width-px')).toBe('360px');
     expect(photoFrame?.style.getPropertyValue('--photo-width-vh')).toBe('39vh');
     expect(modal.querySelector('.photo-letter-modal__photo-caption')?.textContent).toBe(
-      'Spring Break together.',
+      'An example memory.',
     );
     expect(modal.querySelector('.letter-modal__speaker')).toBeNull();
     expect(modal.querySelector('.letter-modal__text')).toBeNull();
@@ -192,7 +161,7 @@ describe('showLetterModal', () => {
     const promise = showLetterModal([
       {
         speaker: '____',
-        text: '',
+        text: 'A sample birthday message.',
       },
     ]);
 
@@ -201,7 +170,7 @@ describe('showLetterModal', () => {
     expect(root?.querySelector('[data-ui-layer="letter"]')).not.toBeNull();
     expect(root?.querySelector('.letter-modal__speaker')?.textContent).toBe('____');
     expect(root?.querySelector('.letter-modal__text')?.textContent).toBe(
-      '',
+      'A sample birthday message.',
     );
 
     root?.querySelector<HTMLButtonElement>('.letter-modal__action')?.click();
